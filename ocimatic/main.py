@@ -154,8 +154,6 @@ def main():
             os.environ['OCIMATIC_PHASE'] = val
         elif key == '--timeout':
             ocimatic.config['timeout'] = float(val)
-            os.environ['timeout'] = val
-            OPTS['timeout'] = val
 
     # Select mode
     # try:

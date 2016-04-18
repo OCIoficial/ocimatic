@@ -13,7 +13,7 @@ from ocimatic.filesystem import FilePath, Directory
 
 class Contest(object):
     """This class represent a contest. A contest is conformed by a list of
-    tasks and a titlepage. In ocimatic a contest is always associated to
+    tasks and a titlepage. In ocimatic, a contest is always associated to
     a directory in the filesystem.
     """
     def __init__(self, directory):
@@ -21,17 +21,16 @@ class Contest(object):
         Args:
             directory (Directory): Directory where the contest reside.
         """
-        self._tasks = []
         self._directory = directory
-        i = 1
-        for d in directory.lsdir():
-            if d.find_file('.ocimatic_task'):
-                self._tasks.append(Task(d, i))
-                i += 1
+        dirs = [d for d in directory.lsdir() if d.find_file('.ocimatic_task')]
+        self._tasks = [Task(d,i) for (i,d) in enumerate(dirs)]
+        self._titlepage = FilePath(directory, 'titlepage.tex')
+        self._compiler = LatexCompiler()
 
     @staticmethod
     def create_layout(contest_path):
-        """
+        """Copy contest skeleton to contest_path.
+
         Args:
             contest_path (str)
         """
@@ -41,18 +40,36 @@ class Contest(object):
 
     @property
     def tasks(self):
+        """List[Task]"""
         return self._tasks
 
     @ui.workgroup('Generating Problemset')
     def build_problemset(self):
+        """It builds titlepage and statement of all tasks. Then it merges all pdfs
+        in a single file.
+        """
+        self.compile_titlepage()
         for task in self._tasks:
             task.build_statement()
-        self.merge_statements()
+        self.merge_pdfs()
+
+    @ui.work('PDF', 'titlepage.tex')
+    def compile_titlepage(self):
+        """Compile title page latex
+        Returns:
+            (bool, msg): Returns status and result message
+        """
+        st = self._compiler(self._titlepage)
+        return (st, 'OK' if st else 'FAILED')
 
     @ui.work('MERGE', 'problemset.pdf')
-    def merge_statements(self):
+    def merge_pdfs(self):
+        """Merge statements and title page in a single file """
         pdfs = ' '.join('"%s"' % t.statement.pdf for t in self._tasks
                         if t.statement.pdf)
+        titlepage = FilePath(self._directory, 'titlepage.pdf')
+        if titlepage:
+            pdfs = '"%s" %s' % (titlepage, pdfs)
 
         cmd = ('gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite'
                ' -dPDFSETTINGS=/prepress -sOutputFile=%s %s') % (
@@ -70,11 +87,15 @@ class Contest(object):
             st = complete.returncode == 0
             return (st, 'OK' if st else 'FAILED')
 
-
-
     def find_task(self, name):
+        """find task with given name.
+        Args:
+            name (str): Name of the tasks
+        Returns:
+            Optional[Task]: The task with the given name or None if
+                no task with that name is present.
+        """
         return next((p for p in self._tasks if p.name == name), None)
-
 
 
 class Task(object):
@@ -83,11 +104,17 @@ class Task(object):
     always associated to a directory in the filesystem.
 
     """
+    @staticmethod
+    def create_layout(task_path):
+        ocimatic_dir = os.path.dirname(__file__)
+        shutil.copytree(os.path.join(ocimatic_dir, "resources/task-skel"),
+                        task_path)
+
     def __init__(self, directory, num):
         """
         Args:
             directory (Directory): Directory where the task reside.
-            num (int): Position of the task in the problemset.
+            num (int): Position of the task in the problemset starting from 0.
         """
         self._directory = directory
 
@@ -109,17 +136,13 @@ class Task(object):
 
     @ui.work('ZIP')
     def compress_dataset(self):
+        """Compress dataset in a single file data.zip"""
         st = self._dataset.compress()
         return (st, 'OK' if st else 'FAILED')
 
-    @staticmethod
-    def create_layout(task_path):
-        ocimatic_dir = os.path.dirname(__file__)
-        shutil.copytree(os.path.join(ocimatic_dir, "resources/task-skel"),
-                        task_path)
-
     @property
     def name(self):
+        """str: Name of the task"""
         return self._directory.basename
 
     def __str__(self):
@@ -127,10 +150,16 @@ class Task(object):
 
     @property
     def statement(self):
+        """Statement"""
         return self._statement
 
     @ui.task('Running solutions')
     def run_solutions(self, partial=False):
+        """Run all solutions and report outcome and running time
+
+        Args:
+            partial (bool): If true it runs partial solutions as well.
+        """
         solutions = self._correct
         if partial:
             solutions.extend(self._partial)
@@ -140,21 +169,29 @@ class Task(object):
 
     @ui.task('Checking dataset')
     def check_dataset(self):
+        """Check if dataset input/output is correct by running all correct
+        solutions.
+        """
         for sol in self._correct:
             sol.run(self._dataset, self._checker, check=True, sample=True)
 
     @ui.task('Building solutions')
     def build_solutions(self):
+        """Force a rebuilding of all solutions, both partial and corrects."""
         for sol in self._correct + self._partial:
             sol.build()
 
     @ui.task('Generating expected output')
     def gen_expected(self, sample=False):
+        """Generate expected outputs files for dataset by running one of the
+        correct solutions.
+        """
         if not self._correct:
             ui.fatal_error('No correct solution.')
         self._correct[0].gen_expected(self._dataset, sample=sample)
 
     def build_statement(self):
+        """Generate pdf for the statement"""
         return self._statement.build()
 
 
@@ -182,23 +219,44 @@ class Solution(object):
 
     @ui.workgroup()
     def run(self, dataset, checker, check=False, sample=False):
+        """Run this solution for all test in a dataset.
+        Args:
+            dataset (Dataset)
+            checker (Checker): Checker to compute outcome.
+            check  (bool): If true this only report if expected output
+                correspond to solution output.
+            sample (bool): If true run solution with sample test data from
+                statement.
+        """
         dataset.run(self.binary, checker, check=check, sample=sample)
 
     @ui.workgroup()
     def gen_expected(self, dataset, sample=False):
+        """Generate expected output files for all test cases in the dataset
+        running this solution.
+        Args:
+            dataset (Dataset)
+            sample (bool): If true expected output file for are generated for
+                sample test data from statement.
+        """
         dataset.gen_expected(self.binary, sample=sample)
 
     @ui.work('Build')
     def build(self):
+        """Build solution.
+        Returns:
+            (bool, str): A tuple containing status and result message.
+        """
         st = self._build()
         msg = 'OK' if st else 'FAILED'
         return (st, msg)
 
     @property
     def binary(self):
-        # TODO what happens if building fails?
+        """Optional[Binary]: Binary file of this solution"""
         if self._bin_path.mtime() < self._source.mtime():
-            self.build()
+            if not self.build():
+                return None
         return Binary(self._bin_path)
 
 
@@ -224,6 +282,9 @@ class CppSolution(Solution):
         return self._source.path
 
     def _build(self):
+        """Compile solution with a CppCompiler. Solutions is compiled with a
+        grader if present.
+        """
         sources = [self._source]
         if self._grader:
             sources.append(self._grader)
@@ -239,11 +300,14 @@ class CppCompiler(object):
         self._cmd_template = 'g++ %s -o %%s %%s' % ' '.join(flags)
 
     def __call__(self, sources, out):
-        """Compiles a list of sources
+        """Compiles a list of C++ sources.
 
         Args:
             sources (List[FilePath]|FilePath): Source or list of sources.
-            out (FilePath):
+            out (FilePath): Output path for binary
+
+        Returns:
+            bool: True if compilations succeed, False otherwise.
         """
         out = '"%s"' % out
         sources = [sources] if isinstance(sources, FilePath) else sources
@@ -263,14 +327,25 @@ class DataSet(object):
     def __init__(self, directory, statement):
         """
         Args:
-            directory (Directory)
+            directory (Directory): dataset directory.
+            statement (Statement): statement to look for sample test data.
         """
         self._directory = directory
         self._tests = [Test(f) for f in directory.lsfile('*/*.in')]
         self._samples = statement.io_samples();
 
-    # TODO documentation and error handling
+    # TODO error handling
     def run(self, binary, checker, check=False, sample=False):
+        """Run binary with all test in this dataset as input and
+        check outcome of input.
+
+        Args:
+            binary (Binary)
+            checker (Checker): Checker to check outcome
+            check  (bool): If true this only report if expected output
+                correspond to binary execution output.
+            sample (bool): If true run solution with sample test data.
+        """
         for test in self._tests:
             test.run(binary, checker, check=check);
         if sample:
@@ -278,6 +353,12 @@ class DataSet(object):
                 test.run(binary, checker, check=check);
 
     def gen_expected(self, binary, sample=False):
+        """Run binary with all test in this dataset as input to generate expected
+        output files.
+        Args:
+            binary (Binary)
+            sample (bool): If true run binary with sample data as input as well.
+        """
         for test in self._tests:
             test.gen_expected(binary)
         if sample:
@@ -285,6 +366,11 @@ class DataSet(object):
                 test.gen_expected(binary)
 
     def compress(self):
+        """Compress all test in this dataset in a single zip file. This function
+        prepend the subdirectory basename to all files. The order in which
+        subdirectories appears in the dataset directory is relevant, so files
+        maintains this order.
+        """
         tmpdir = Directory.tmpdir()
         w = floor(log(len(self._tests), 10)) + 1
         in_format = "%%s-%%0%dd.in" % w
@@ -321,10 +407,17 @@ class Test(object):
 
     @property
     def directory(self):
+        """Diretory: diretory where this test reside"""
         return self._in_path.directory
 
     @ui.work('Gen')
     def gen_expected(self, binary):
+        """Run binary with this test as input to generate expected output file
+        Args:
+            binary (Binary)
+        Returns:
+            (bool, msg): A tuple containing status and result message.
+        """
         (st, _, errmsg) = binary.run(self.in_path, self.expected_path)
         msg = 'OK' if st else errmsg
         return (st, msg)
@@ -332,6 +425,13 @@ class Test(object):
 
     @ui.work('Run')
     def run(self, binary, checker, check=False):
+        """Run binary whit this test as input and check output correcteness
+        Args:
+            binary (Binary)
+            checker (Checker): Checker to check outcome
+            check  (bool): If true this only report if expected output
+                correspond to binary execution output.
+        """
         out_path = FilePath.tmpfile()
         if self.expected_path:
             (st, time, errmsg) = binary.run(self.in_path, out_path)
@@ -371,7 +471,7 @@ class Checker(object):
     """Check solutions
     """
     def __call__(self, in_path, expected_path, out_path):
-        """Check output of solution.
+        """Check outcome.
 
         Args:
             in_path (FilePath): Input file.
@@ -379,7 +479,7 @@ class Checker(object):
             out_path (FilePath): Output file.
 
         Returns:
-            float: Float between 0 and 1 indicating result.
+            float: Float between 0.0 and 1.0 indicating result.
         """
         NotImplementedError("Class %s doesn't implement __call__()" % (
             self.__class__.__name__))
@@ -389,6 +489,13 @@ class DiffChecker(Checker):
     """White diff checker
     """
     def __call__(self, in_path, expected_path, out_path):
+        """Performs a white diff between expected output and output files
+        Parameters correspond to convention for checker in cms.
+        Args:
+            in_path (FilePath)
+            expected_path (FilePath)
+            out_path (FilePath)
+        """
         assert(in_path.exists())
         assert(expected_path.exists())
         assert(out_path.exists())
@@ -411,6 +518,13 @@ class CppChecker(Checker):
         self._binary_path = FilePath(source.directory(), 'checker')
 
     def __call__(self, in_path, expected_path, out_path):
+        """Run checker to evaluate outcome. Parameters correspond to convention
+        for checker in cms.
+        Args:
+            in_path (FilePath)
+            expected_path (FilePath)
+            out_path (FilePath)
+        """
         assert(in_path.exists())
         assert(expected_path.exists())
         assert(out_path.exists())
@@ -431,9 +545,11 @@ class CppChecker(Checker):
             return 0.0
 
     def build(self):
-       return self._compiler(self._source, self._binary_path)
-
-
+        """Build source of the checker
+        Returns:
+            bool: True if compilation is successful. False otherwise
+        """
+        return self._compiler(self._source, self._binary_path)
 
 
 from ctypes import Structure, c_long, CDLL, c_int, POINTER, byref
@@ -460,7 +576,9 @@ def monotonic_time():
 
 
 class Binary(object):
-    """An executable file."""
+    """An entity that may be executed redirecting stdin and stdout to specific
+    files.
+    """
 
     signal = {
         1: 'SIGHUP', 2: 'SIGINT', 3: 'SIGQUIT', 4: 'SIGILL', 5: 'SIGTRAP',
@@ -488,7 +606,6 @@ class Binary(object):
         Args:
             in_path (FilePath): Path to redirect stdin from.
             out_path (FilePath): File to redirecto stdout to.
-            *args
 
         Returns:
             (bool, str, float): Returns a tuple (status, time, errmsg).
@@ -523,7 +640,15 @@ class Binary(object):
 
 
 class Statement(object):
+    """Represent a statement. A statement is formed by a latex source and a pdf
+    file.
+    """
     def __init__(self, directory, num):
+        """
+        Args:
+            directory (Directory): Directory to search for statement source file.
+            num (int): Number of the statement in the contest starting from 0
+        """
         assert(FilePath(directory, 'statement.tex'))
         self._source = FilePath(directory, 'statement.tex')
         self._pdf = self._source.chext('.pdf')
@@ -533,6 +658,11 @@ class Statement(object):
 
     @property
     def pdf(self):
+        """Returns path to pdf file and compiles it if necessary.
+        Returns:
+            Optional[FilePath]: The file path if the binary is present or None
+                if pdf file cannot be generated.
+        """
         if self._pdf.mtime() < self._source.mtime():
             st = self.build()
             if not st:
@@ -544,11 +674,20 @@ class Statement(object):
 
     @ui.work('PDF')
     def build(self):
-        os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A')+self._num-1)
+        """Compile statement latex source
+        Returns:
+           (bool, msg) a tuple containing status code and result message.
+
+        """
+        os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A')+self._num)
         st = self._compiler(self._source)
         return (st, 'OK' if st else 'FAILED')
 
     def io_samples(self):
+        """Find sample input data in the satement
+        Returns:
+            List[Test]: list of tests
+        """
         latex_file = self._source.open('r')
         samples = set()
         for line in latex_file:
@@ -561,13 +700,24 @@ class Statement(object):
 
 
 class LatexCompiler(object):
+    """Compiles latex source"""
     def __init__(self, cmd='pdflatex',
                  flags=['--shell-escape', '-interaction=batchmode']):
                  # flags=['--shell-escape']):
+        """
+        Args:
+            cmd (str): command to compile files. default to pdflatex
+            flags (List[str]): list of flags to pass to command
+        """
         self._cmd = cmd
         self._flags = flags
 
     def __call__(self, source):
+        """It compiles a latex source leaving the pdf in the same diretory of
+        the source.
+        Args:
+            source (FilePath): path of file to compile
+        """
         flags = ' '.join(self._flags)
         cmd = 'cd %s && %s %s %s' % (
             source.directory(), self._cmd, flags, source.name)
