@@ -12,6 +12,7 @@ OPTS = {
     'timeout': None,
 }
 
+
 def new_contest(args):
     if len(args) < 1:
         ui.fatal_error('You have to specify a name for the contest.')
@@ -23,12 +24,14 @@ def new_contest(args):
     except Exception as exc:
         ui.fatal_error('Couldn\'t create contest: %s.' % exc)
 
+
 def contest_problemset(contest, _):
     contest.build_problemset()
 
+
 def contest_mode(args):
     if not args:
-        ocimatic_help()
+        ui.ocimatic_help()
 
     actions = {
         'problemset': contest_problemset,
@@ -54,6 +57,7 @@ def new_task(args):
     except Exception as exc:
         ui.fatal_error('Couldn\'t create task: %s' % exc)
 
+
 def tasks_run(tasks, _):
     for task in tasks:
         task.run_solutions(partial=OPTS['partial'])
@@ -78,6 +82,7 @@ def tasks_build_statement(tasks, _):
     for task in tasks:
         task.build_statement()
 
+
 def tasks_compress(tasks, _):
     for task in tasks:
         task.compress_dataset()
@@ -85,7 +90,7 @@ def tasks_compress(tasks, _):
 
 def task_mode(args):
     if not args:
-        ocimatic_help()
+        ui.ocimatic_help()
 
     actions = {
         'build': tasks_build,
@@ -93,7 +98,7 @@ def task_mode(args):
         'expected': tasks_gen_expected,
         'pdf': tasks_build_statement,
         'run': tasks_run,
-        'compress' : tasks_compress,
+        'compress': tasks_compress,
         # 'normalize' : tasks_normalize,
     }
 
@@ -118,16 +123,17 @@ def task_mode(args):
     else:
         ui.fatal_error('Unknown action for task mode.')
 
+
 def main():
     try:
         optlist, args = getopt.gnu_getopt(sys.argv[1:], 'hpst:',
                                           ['help', 'partial', 'task=',
                                            'phase=', 'sample', 'timeout='])
     except getopt.GetoptError as err:
-        error_message(str(err))
+        ui.fatal_error(str(err))
 
     if len(args) == 0:
-        ocimatic_help()
+        ui.ocimatic_help()
 
     modes = {
         'contest': contest_mode,
@@ -143,7 +149,7 @@ def main():
     # Process options
     for (key, val) in optlist:
         if key == '-h' or key == '--help':
-            ocimatic_help()
+            ui.ocimatic_help()
         elif key == '--partial' or key == '-p':
             OPTS['partial'] = True
         elif key == '--task' or key == '-t':
@@ -160,6 +166,6 @@ def main():
     if mode in modes:
         modes[mode](args)
     else:
-        error_message('Unknown mode.')
+        ui.fatal_error('Unknown mode.')
     # except Exception as exc:
     #     ui.fatal_error(str(exc))

@@ -1,4 +1,5 @@
 import sys
+import re
 
 RESET = '\x1b[0m'
 BOLD = '\x1b[1m'
@@ -12,6 +13,7 @@ INFO = BOLD
 OK = BOLD + GREEN
 WARNING = BOLD + YELLOW
 ERROR = BOLD + RED
+
 
 def colorize(text, color):
     u"Add ANSI coloring to `text`."
@@ -42,6 +44,7 @@ def task_header(name, msg):
     sys.stdout.write(colorize('[%s] %s' % (name, msg), BOLD + YELLOW))
     print()
 
+
 def workgroup_header(msg, length=35):
     """Header for group of works"""
     print()
@@ -49,16 +52,19 @@ def workgroup_header(msg, length=35):
     sys.stdout.write(colorize('[%s]' % (msg), INFO))
     print()
 
+
 def start_work(action, msg, length=45):
     msg = '....' + msg[-length-4:] if len(msg)-4 > length else msg
-    msg = ' * [' + action+ '] ' + msg + '  '
+    msg = ' * [' + action + '] ' + msg + '  '
     sys.stdout.write(msg)
     sys.stdout.flush()
+
 
 def end_work(msg, status):
     color = OK if status else ERROR
     sys.stdout.write(colorize(str(msg), color))
     print()
+
 
 def fatal_error(message):
     writeln('ocimatic: ' + message)
@@ -67,8 +73,10 @@ def fatal_error(message):
     # writeln('Try ' + bold('ocimatic -h') + ' for more information.')
     sys.exit(1)
 
+
 def show_message(label, msg, color=INFO):
     sys.stdout.write(' %s \n' % colorize(label + ': ' + msg, color + UNDERLINE))
+
 
 def work(action, target=None):
     def decorator(func):
@@ -79,6 +87,7 @@ def work(action, target=None):
         return wrapper
     return decorator
 
+
 def workgroup(msg=None):
     def decorator(func):
         def wrapper(self, *args, **kwargs):
@@ -86,6 +95,7 @@ def workgroup(msg=None):
             return func(self, *args, **kwargs)
         return wrapper
     return decorator
+
 
 def task(action):
     def decorator(func):

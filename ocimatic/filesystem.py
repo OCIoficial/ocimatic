@@ -6,6 +6,7 @@ from tempfile import mkstemp, mkdtemp
 
 from ocimatic import ui
 
+
 def change_directory():
     """Changes directory to the contest root and returns the absolute path of the
     last directory before reaching the root, this correspond to the directory
@@ -13,8 +14,9 @@ def change_directory():
     root the program exists.
 
     Returns:
-        (Directory) If ocimatic was called inside a subdirectory of a task this
-            function returns the the problem directory. Otherwise it returns None.
+        (Directory) If ocimatic was called inside a subdirectory of
+            corresponding to a task this function returns the the problem
+            directory. Otherwise it returns None.
     """
     last_dir = None
     while not os.path.exists('.ocimatic_contest'):
@@ -28,19 +30,24 @@ def change_directory():
     task_call = None if not last_dir else Directory(last_dir)
     return (Directory(os.getcwd()), task_call)
 
+
 @total_ordering
 class FilePath(object):
-    """Represents a path to a file. The file may not exists in the
+    """Represents a path to a file. The file may not exist in the
     file system, however the directory where the file resides must exist.
     """
+    @staticmethod
+    def tmpfile():
+        tmp_path = mkstemp()[1]
+        return FilePath(tmp_path)
+
     def __init__(self, arg1, arg2=None):
         """
         Args:
-
-            arg1 (Directory or str): If arg2 is present correspond to
-                directory where the file resides. Otherwise it contains
-                a full path to file.
-            arg2 (str): Basename of the file (including extension).
+            arg1 (Directory|str): If arg2 is not None, it corresponds to
+                the directory where the file resides. Otherwise it contains
+                a full path to the file.
+            arg2 (Optional[str]): name of the file (including extension).
         """
         if arg2:
             self._directory = arg1
@@ -58,23 +65,27 @@ class FilePath(object):
         return open(self.path, mode)
 
     def copy(self, dest):
+        """Copy file in this path.
+        Args:
+           dest (FilePath): destination path
+        """
         shutil.copy2(self.path, dest.path)
 
-    @staticmethod
-    def tmpfile():
-        tmp_path = mkstemp()[1]
-        return FilePath(tmp_path)
-
     def remove(self):
+        """Removes file in this path from the filesystem"""
         os.remove(self.path)
 
     @property
     def name(self):
+        """Name of the file.
+        Returns:
+           str
+        """
         return self._filename
 
     @property
     def ext(self):
-        """str: File extension with beginning dot. """
+        """str: File extension beginning with dot. """
         return self.splitext()[1]
 
     @property
@@ -108,7 +119,7 @@ class FilePath(object):
         """Split filename in root name and extension.
 
         Returns:
-            (str, str): A pair where the first component correspond
+            (str, str): A pair where the first component corresponds
                 to root name and the second to the extension.
         """
         return os.path.splitext(self.path)
@@ -149,29 +160,37 @@ class FilePath(object):
 @total_ordering
 class Directory(object):
     """Represent a directory in the filesystem. The directory must always
-    exists.
+    exist.
     """
+    @staticmethod
+    def tmpdir():
+        """Returns a temporary directory. The user is responsible
+        of deleting the directory after using it.
+        Returns:
+            Directory
+        """
+        return Directory(mkdtemp())
 
     def __init__(self, path):
-        """
+        """Produces an assertion error if the directory does not exist
+        or if the path does not correspond to a directory.
         Args:
             path (str): Full path to directory.
         """
         assert(os.path.exists(path))
+        assert(os.path.isdir(path))
         self._path = os.path.abspath(path)
 
     def __str__(self):
         return self.path
 
-    @staticmethod
-    def tmpdir():
-        return Directory(mkdtemp())
-
     def rmtree(self):
+        """Removes this directory from the filesystem."""
         shutil.rmtree(self.path)
 
     @property
     def basename(self):
+        """str: Name of this directory"""
         return os.path.basename(self._path)
 
     @property
@@ -180,13 +199,14 @@ class Directory(object):
         return self._path
 
     def chdir(self, path):
-        """Changes directory
+        """Changes directory. If the new directory does not exists
+        this functions produces an assertion error.
 
         Args:
-            path (str)
+            path (str): A path relative to this directory.
 
         Returns:
-            Directory:
+            Directory: The new directory.
         """
         return Directory(os.path.join(self.path, path))
 
@@ -197,9 +217,11 @@ class Directory(object):
         return self.path < other.path
 
     def lsfile(self, pattern='*'):
-        """List files inside this directory. An optional glob pattern
-        could be provided. This pattern is concatenated to the path
-        directory.
+        """List files inside this directory sorted by name.
+        An optional glob pattern could be provided. This pattern is
+        concatenated to the path directory.
+        Eg: d.lsfile('*/*.pdf') list all files with pdf extension inside
+        a subdirectory of directory d.
 
         Returns:
             List[FilePath]
@@ -209,7 +231,7 @@ class Directory(object):
         return sorted(files)
 
     def lsdir(self):
-        """List directories inside this directory
+        """List directories inside this directory sorted by name.
 
         Returns:
             List[Directory]
@@ -222,7 +244,8 @@ class Directory(object):
         """Finds a file by name in this directory.
 
         Returns:
-            Optional[FilePath]
+            Optional[FilePath]: Path to file if there exists some file
+                with the provided name or None otherwise.
         """
         files = self.lsfile(filename)
         return files[0] if len(files) > 0 else None
