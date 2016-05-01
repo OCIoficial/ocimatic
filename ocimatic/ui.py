@@ -84,6 +84,7 @@ def work(action, target=None):
             start_work(action, str(target or self))
             (st, msg) = func(self, *args, **kwargs)
             end_work(msg, st)
+            return (st, msg)
         return wrapper
     return decorator
 
