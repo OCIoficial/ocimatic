@@ -1,1 +1,1 @@
-../../oci.cls
+../../contest-skel/oci.cls
