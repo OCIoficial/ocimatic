@@ -6,7 +6,7 @@ Ocimatic
 Usage and Installation
 ------------------
 ```
-$ git clone https://github.com/nilehmann/ocimatic
+$ git clone https://github.com/OCIoficial/ocimatic
 $ cd ocimatic
 $ ./bin/ocimatic --help
 ```
