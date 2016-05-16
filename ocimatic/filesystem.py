@@ -31,6 +31,11 @@ def change_directory():
     return (Directory(os.getcwd()), task_call)
 
 
+def pwd():
+    """Returns current directory"""
+    return Directory(os.getcwd())
+
+
 @total_ordering
 class FilePath(object):
     """Represents a path to a file. The file may not exist in the

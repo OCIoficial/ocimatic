@@ -124,6 +124,28 @@ def task_mode(args):
         ui.fatal_error('Unknown action for task mode.')
 
 
+def dataset_compress(dataset):
+    dataset.compress()
+
+def dataset_mode(args):
+    if not args:
+        ui.ocimatic_help()
+    actions = {
+        'compress': dataset_compress,
+    }
+    if args[0] in actions:
+        in_ext = '.in'
+        in_ext = '.sol'
+        if len(args) > 1:
+            in_ext = args[1]
+        if len(args) > 2:
+            sol_ext = args[2]
+        dataset = core.Dataset(filesystem.pwd(), in_ext=in_ext, sol_ext=sol_ext)
+        actions[args[0]](dataset)
+    else:
+        ui.fatal_error('Unknown action for dataset mode.')
+
+
 def main():
     try:
         optlist, args = getopt.gnu_getopt(sys.argv[1:], 'hpst:',
@@ -138,6 +160,7 @@ def main():
     modes = {
         'contest': contest_mode,
         'task': task_mode,
+        'dataset': dataset_mode,
     }
 
     # If no mode is provided we assume task

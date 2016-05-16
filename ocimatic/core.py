@@ -3,6 +3,7 @@ import os
 import subprocess
 import shutil
 import re
+import fnmatch
 from contextlib import ExitStack
 from math import floor, log
 
@@ -132,7 +133,7 @@ class Task(object):
 
         self._statement = Statement(directory.chdir('statement'), num)
 
-        self._dataset = DataSet(directory.chdir('dataset'), self._statement)
+        self._dataset = Dataset(directory.chdir('dataset'), self._statement)
 
     @ui.work('ZIP')
     def compress_dataset(self):
@@ -322,17 +323,27 @@ class CppCompiler(object):
             return complete.returncode == 0
 
 
-class DataSet(object):
+# TODO refactor statement out of dataset
+# TODO split dataset between subtasks this will allow better display
+# of runs and a better renaming of files when compressing.
+class Dataset(object):
     """Test data"""
-    def __init__(self, directory, statement):
+    def __init__(self, directory, statement=None,
+                 in_ext=".in", sol_ext=".sol"):
         """
         Args:
             directory (Directory): dataset directory.
-            statement (Statement): statement to look for sample test data.
+            statement (Optional[Statement]): optional statement to look for
+                sample test data.
         """
         self._directory = directory
-        self._tests = [Test(f) for f in directory.lsfile('*/*.in')]
-        self._samples = statement.io_samples();
+        self._in_ext = in_ext
+        self._sol_ext = sol_ext
+        self._tests = []
+        for f in directory.lsfile('*/*'+self._in_ext):
+            self._tests.append(Test(f, f.chext(sol_ext)))
+
+        self._samples = statement.io_samples() if statement else []
 
     # TODO error handling
     def run(self, binary, checker, check=False, sample=False):
@@ -347,10 +358,10 @@ class DataSet(object):
             sample (bool): If true run solution with sample test data.
         """
         for test in self._tests:
-            test.run(binary, checker, check=check);
+            test.run(binary, checker, check=check)
         if sample:
             for test in self._samples:
-                test.run(binary, checker, check=check);
+                test.run(binary, checker, check=check)
 
     def gen_expected(self, binary, sample=False):
         """Run binary with all test in this dataset as input to generate expected
@@ -371,17 +382,21 @@ class DataSet(object):
         subdirectories appears in the dataset directory is relevant, so files
         maintains this order.
         """
+        if not self._tests:
+            return
         tmpdir = Directory.tmpdir()
         w = floor(log(len(self._tests), 10)) + 1
-        in_format = "%%s-%%0%dd.in" % w
-        sol_format = "%%s-%%0%dd.sol" % w
+        in_format = "%%s-%%0%dd%s" % (w, self._in_ext)
+        sol_format = "%%s-%%0%dd%s" % (w, self._sol_ext)
         for (i, test) in enumerate(self._tests):
             if test.expected_path:
                 in_name = in_format % (test.directory().basename, i)
                 sol_name = sol_format % (test.directory().basename, i)
                 test.in_path.copy(FilePath(tmpdir, in_name))
                 test.expected_path.copy(FilePath(tmpdir, sol_name))
-        cmd = "cd %s && zip data.zip *.in *.sol" % tmpdir
+        cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir,
+                                                 self._in_ext,
+                                                 self._sol_ext)
         with FilePath('/dev/null').open('a') as null:
             complete = subprocess.run(cmd, stdout=null, shell=True)
             dst_file = FilePath(self._directory, 'data.zip')
@@ -393,14 +408,14 @@ class DataSet(object):
 
 class Test(object):
     """A single test file. Expected output file may not exists"""
-    def __init__(self, in_path):
+    def __init__(self, in_path, expected_path):
         """
         Args:
             in_path (FilePath)
         """
         assert(in_path.exists())
         self._in_path = in_path
-        self._expected_path = in_path.chext('.sol')
+        self._expected_path = expected_path
 
     def __str__(self):
         return str(self._in_path)
