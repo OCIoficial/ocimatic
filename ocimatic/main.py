@@ -135,7 +135,7 @@ def dataset_mode(args):
     }
     if args[0] in actions:
         in_ext = '.in'
-        in_ext = '.sol'
+        sol_ext = '.sol'
         if len(args) > 1:
             in_ext = args[1]
         if len(args) > 2:

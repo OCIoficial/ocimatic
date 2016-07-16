@@ -388,12 +388,16 @@ class Dataset(object):
         w = floor(log(len(self._tests), 10)) + 1
         in_format = "%%s-%%0%dd%s" % (w, self._in_ext)
         sol_format = "%%s-%%0%dd%s" % (w, self._sol_ext)
+        found = False
         for (i, test) in enumerate(self._tests):
             if test.expected_path:
+                foud = True
                 in_name = in_format % (test.directory().basename, i)
                 sol_name = sol_format % (test.directory().basename, i)
                 test.in_path.copy(FilePath(tmpdir, in_name))
                 test.expected_path.copy(FilePath(tmpdir, sol_name))
+        if not found:
+            return
         cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir,
                                                  self._in_ext,
                                                  self._sol_ext)
