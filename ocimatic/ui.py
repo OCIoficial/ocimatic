@@ -105,3 +105,8 @@ def task(action):
             return func(self, *args, **kwargs)
         return wrapper
     return decorator
+
+def ocimatic_help():
+    show_message('INFO', 'Sorry, but we don\'t have a help message yet :(')
+    sys.exit(0)
+

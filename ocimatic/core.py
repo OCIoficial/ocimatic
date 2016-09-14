@@ -324,7 +324,7 @@ class CppCompiler(object):
 
 
 # TODO refactor statement out of dataset
-# TODO split dataset between subtasks this will allow better display
+# TODO split dataset between subtasks, this will allow better display
 # of runs and a better renaming of files when compressing.
 class Dataset(object):
     """Test data"""
@@ -344,6 +344,7 @@ class Dataset(object):
             self._tests.append(Test(f, f.chext(sol_ext)))
 
         self._samples = statement.io_samples() if statement else []
+        self._samples = [Test(f, f.chext(sol_ext)) for f in self._samples]
 
     # TODO error handling
     def run(self, binary, checker, check=False, sample=False):
@@ -413,7 +414,7 @@ class Dataset(object):
 
 class Test(object):
     """A single test file. Expected output file may not exists"""
-    def __init__(self, in_path, expected_path):
+    def __init__(self, in_path, expected_path=None):
         """
         Args:
             in_path (FilePath)
@@ -706,7 +707,7 @@ class Statement(object):
     def io_samples(self):
         """Find sample input data in the satement
         Returns:
-            List[Test]: list of tests
+            List[FilePath]: list of paths
         """
         latex_file = self._source.open('r')
         samples = set()
@@ -714,7 +715,7 @@ class Statement(object):
             m = re.match(r'[^%]*\\sampleIO{([^}]*)}', line)
             m and samples.add(m.group(1))
         latex_file.close()
-        samples = [Test(FilePath(self._directory, s+'.in')) for s in samples]
+        samples = [FilePath(self._directory, s+'.in') for s in samples]
         return samples
 
 

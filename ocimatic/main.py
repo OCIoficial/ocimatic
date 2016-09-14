@@ -107,11 +107,11 @@ def task_mode(args):
     }
 
     (contest_dir, task_call) = filesystem.change_directory()
-    contest = core.Contest(contest_dir)
 
     if args[0] == 'new':
         new_task(args[1:])
     elif args[0] in actions:
+        contest = core.Contest(contest_dir)
         if OPTS['task']:
             tasks = [contest.find_task(OPTS['task'])]
         elif task_call:
