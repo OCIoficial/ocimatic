@@ -1,11 +1,11 @@
 # coding=UTF-8
 import os
 import subprocess
-import shutil
 import re
 import fnmatch
 from contextlib import ExitStack
 from math import floor, log
+from distutils.dir_util import copy_tree
 
 import ocimatic
 from ocimatic import ui
@@ -36,8 +36,8 @@ class Contest(object):
             contest_path (str)
         """
         ocimatic_dir = os.path.dirname(__file__)
-        shutil.copytree(os.path.join(ocimatic_dir, "resources/contest-skel"),
-                        contest_path)
+        copy_tree(os.path.join(ocimatic_dir, "resources/contest-skel"),
+                  contest_path)
 
     @property
     def tasks(self):
@@ -100,7 +100,7 @@ class Contest(object):
 
 
 class Task(object):
-    """This class represent a task. A task consist of a statement,
+    """This class represent a task. A task consists of a statement,
     a list of correct and partial solutions and a dataset. A task is
     always associated to a directory in the filesystem.
 
@@ -108,8 +108,8 @@ class Task(object):
     @staticmethod
     def create_layout(task_path):
         ocimatic_dir = os.path.dirname(__file__)
-        shutil.copytree(os.path.join(ocimatic_dir, "resources/task-skel"),
-                        task_path)
+        copy_tree(os.path.join(ocimatic_dir, "resources/task-skel"),
+                  task_path, preserve_symlinks=1)
 
     def __init__(self, directory, num):
         """
@@ -397,6 +397,7 @@ class Dataset(object):
                 test.in_path.copy(FilePath(tmpdir, in_name))
                 test.expected_path.copy(FilePath(tmpdir, sol_name))
         if not found:
+            ui.show_message("Warning", "no dataset", ui.WARNING)
             return
         cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir,
                                                  self._in_ext,

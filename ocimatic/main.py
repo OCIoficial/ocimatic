@@ -19,6 +19,8 @@ def new_contest(args):
     name = args[0]
 
     try:
+        # @TODO (NL: 14/10/2016) Ask for confirmation before creating contest
+        # on existing directory.
         core.Contest.create_layout(os.path.join(os.getcwd(), name))
         ui.show_message('Info', 'Contest [%s] created' % name)
     except Exception as exc:
@@ -52,6 +54,8 @@ def new_task(args):
         ui.fatal_error('You have to specify a name for the task.')
     name = args[0]
     try:
+        # @TODO (NL: 14/10/2016) Ask for confirmation before creating task
+        # on existing directory.
         core.Task.create_layout(os.path.join(os.getcwd(), name))
         ui.show_message('Info', 'Task [%s] created' % name)
     except Exception as exc:
