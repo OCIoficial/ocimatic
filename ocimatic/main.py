@@ -92,6 +92,11 @@ def tasks_compress(tasks, _):
         task.compress_dataset()
 
 
+def tasks_normalize(tasks, _):
+    for task in tasks:
+        task.normalize()
+
+
 def task_mode(args):
     if not args:
         ui.ocimatic_help()
@@ -103,7 +108,7 @@ def task_mode(args):
         'pdf': tasks_build_statement,
         'run': tasks_run,
         'compress': tasks_compress,
-        # 'normalize' : tasks_normalize,
+        'normalize' : tasks_normalize,
     }
 
     (contest_dir, task_call) = filesystem.change_directory()

@@ -3,6 +3,7 @@ import os
 import subprocess
 import re
 import fnmatch
+import shutil
 from contextlib import ExitStack
 from math import floor, log
 from distutils.dir_util import copy_tree
@@ -153,6 +154,10 @@ class Task(object):
     def statement(self):
         """Statement"""
         return self._statement
+
+    @ui.task('Normalizing')
+    def normalize(self):
+        self._dataset.normalize()
 
     @ui.task('Running solutions')
     def run_solutions(self, partial=False):
@@ -411,13 +416,17 @@ class Dataset(object):
 
             return complete.returncode == 0
 
+    def normalize(self):
+        for test in self._tests + self._samples:
+            test.normalize()
 
 class Test(object):
-    """A single test file. Expected output file may not exists"""
-    def __init__(self, in_path, expected_path=None):
+    """A single test file. Expected output file may not exist"""
+    def __init__(self, in_path, expected_path):
         """
         Args:
             in_path (FilePath)
+            expected_path (FilePath)
         """
         assert(in_path.exists())
         self._in_path = in_path
@@ -486,6 +495,24 @@ class Test(object):
     def expected_path(self):
         """FilePath: Expected output file path."""
         return self._expected_path
+
+    @ui.work('Normalize')
+    def normalize(self):
+        if not shutil.which('dos2unix'):
+            return (False, 'Cannot find dos2unix')
+        if not shutil.which('sed'):
+            return (False, 'Cannot find sed')
+        tounix_input = "dos2unix \"%s\"" % self._in_path
+        tounix_expected = "dos2unix \"%s\"" % self._expected_path
+        cmd_input = "sed -i -e '$a\\' \"%s\"" % self._in_path
+        cmd_expected = "sed -i -e '$a\\' \"%s\"" % self._expected_path
+        with open('/dev/null', 'a') as f:
+            st = subprocess.call(tounix_input, stdout=f, stderr=f, shell=True)
+            st += subprocess.call(cmd_input, stdout=f, stderr=f, shell=True)
+            if self.expected_path:
+                st += subprocess.call(tounix_expected, stdout=f, stderr=f, shell=True)
+                st += subprocess.call(cmd_expected, stdout=f, stderr=f, shell=True)
+            return (st == 0, 'OK' if st == 0 else 'FAILED')
 
 
 class Checker(object):
