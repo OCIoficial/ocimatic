@@ -150,6 +150,13 @@ class Task(object):
     def __str__(self):
         return self.name
 
+    def solutions(self, partial=False):
+        for solution in self._correct:
+            yield solution
+        if partial:
+            for solution in self._partial:
+                yield solution
+
     @property
     def statement(self):
         """Statement"""
@@ -161,16 +168,12 @@ class Task(object):
 
     @ui.task('Running solutions')
     def run_solutions(self, partial=False):
-        """Run all solutions and report outcome and running time
+        """Run all solutions and report outcome and running time.
 
         Args:
             partial (bool): If true it runs partial solutions as well.
         """
-        solutions = self._correct
-        if partial:
-            solutions.extend(self._partial)
-
-        for sol in solutions:
+        for sol in self.solutions(partial):
             sol.run(self._dataset, self._checker)
 
     @ui.task('Checking dataset')
@@ -178,13 +181,13 @@ class Task(object):
         """Check if dataset input/output is correct by running all correct
         solutions.
         """
-        for sol in self._correct:
+        for sol in self.solutions():
             sol.run(self._dataset, self._checker, check=True, sample=True)
 
     @ui.task('Building solutions')
     def build_solutions(self):
         """Force a rebuilding of all solutions, both partial and corrects."""
-        for sol in self._correct + self._partial:
+        for sol in self.solutions(partial=True):
             sol.build()
 
     @ui.task('Generating expected output')
@@ -225,27 +228,29 @@ class Solution(object):
 
     @ui.workgroup()
     def run(self, dataset, checker, check=False, sample=False):
-        """Run this solution for all test in a dataset.
+        """Run this solution for all test cases in the given dataset.
         Args:
             dataset (Dataset)
             checker (Checker): Checker to compute outcome.
-            check  (bool): If true this only report if expected output
-                correspond to solution output.
+            check  (bool): If true only report if expected output
+                corresponds to solution output.
             sample (bool): If true run solution with sample test data from
                 statement.
         """
-        dataset.run(self.binary, checker, check=check, sample=sample)
+        for test in dataset.iterate(sample):
+            test.run(self.binary, checker, check=check)
 
     @ui.workgroup()
     def gen_expected(self, dataset, sample=False):
-        """Generate expected output files for all test cases in the dataset
+        """Generate expected output files for all test cases in the given dataset
         running this solution.
         Args:
             dataset (Dataset)
             sample (bool): If true expected output file for are generated for
                 sample test data from statement.
         """
-        dataset.gen_expected(self.binary, sample=sample)
+        for test in dataset.iterate(sample):
+            test.gen_expected(self.binary)
 
     @ui.work('Build')
     def build(self):
@@ -351,59 +356,32 @@ class Dataset(object):
         self._samples = statement.io_samples() if statement else []
         self._samples = [Test(f, f.chext(sol_ext)) for f in self._samples]
 
-    # TODO error handling
-    def run(self, binary, checker, check=False, sample=False):
-        """Run binary with all test in this dataset as input and
-        check outcome of input.
-
-        Args:
-            binary (Binary)
-            checker (Checker): Checker to check outcome
-            check  (bool): If true this only report if expected output
-                correspond to binary execution output.
-            sample (bool): If true run solution with sample test data.
-        """
+    def iterate(self, sample=False):
         for test in self._tests:
-            test.run(binary, checker, check=check)
+            yield test
         if sample:
             for test in self._samples:
-                test.run(binary, checker, check=check)
-
-    def gen_expected(self, binary, sample=False):
-        """Run binary with all test in this dataset as input to generate expected
-        output files.
-        Args:
-            binary (Binary)
-            sample (bool): If true run binary with sample data as input as well.
-        """
-        for test in self._tests:
-            test.gen_expected(binary)
-        if sample:
-            for test in self._samples:
-                test.gen_expected(binary)
+                yield test
 
     def compress(self):
-        """Compress all test in this dataset in a single zip file. This function
-        prepend the subdirectory basename to all files. The order in which
-        subdirectories appears in the dataset directory is relevant, so files
-        maintains this order.
+        """Compress all test cases in this dataset in a single zip file.
+        The basename of the corresponding subtask subdirectory is prepended
+        to each file.
         """
         if not self._tests:
             return
         tmpdir = Directory.tmpdir()
-        w = floor(log(len(self._tests), 10)) + 1
-        in_format = "%%s-%%0%dd%s" % (w, self._in_ext)
-        sol_format = "%%s-%%0%dd%s" % (w, self._sol_ext)
         found = False
-        for (i, test) in enumerate(self._tests):
+        for test in self._tests:
             if test.expected_path:
-                foud = True
-                in_name = in_format % (test.directory().basename, i)
-                sol_name = sol_format % (test.directory().basename, i)
+                found = True
+                in_name = "%s-%s" % (test.directory().basename, test.in_path.name())
+                sol_name = "%s-%s" % (test.directory().basename, test.in_path.name())
                 test.in_path.copy(FilePath(tmpdir, in_name))
                 test.expected_path.copy(FilePath(tmpdir, sol_name))
+
         if not found:
-            ui.show_message("Warning", "no dataset", ui.WARNING)
+            ui.show_message("Warning", "no files in dataset", ui.WARNING)
             return
         cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir,
                                                  self._in_ext,
@@ -504,14 +482,14 @@ class Test(object):
             return (False, 'Cannot find sed')
         tounix_input = "dos2unix \"%s\"" % self._in_path
         tounix_expected = "dos2unix \"%s\"" % self._expected_path
-        cmd_input = "sed -i -e '$a\\' \"%s\"" % self._in_path
-        cmd_expected = "sed -i -e '$a\\' \"%s\"" % self._expected_path
+        sed_input = "sed -i -e '$a\\' \"%s\"" % self._in_path
+        sed_expected = "sed -i -e '$a\\' \"%s\"" % self._expected_path
         with open('/dev/null', 'a') as f:
             st = subprocess.call(tounix_input, stdout=f, stderr=f, shell=True)
-            st += subprocess.call(cmd_input, stdout=f, stderr=f, shell=True)
+            st += subprocess.call(sed_input, stdout=f, stderr=f, shell=True)
             if self.expected_path:
                 st += subprocess.call(tounix_expected, stdout=f, stderr=f, shell=True)
-                st += subprocess.call(cmd_expected, stdout=f, stderr=f, shell=True)
+                st += subprocess.call(sed_expected, stdout=f, stderr=f, shell=True)
             return (st == 0, 'OK' if st == 0 else 'FAILED')
 
 
@@ -688,7 +666,7 @@ class Binary(object):
 
 
 class Statement(object):
-    """Represent a statement. A statement is formed by a latex source and a pdf
+    """Represents a statement. A statement is formed by a latex source and a pdf
     file.
     """
     def __init__(self, directory, num):
@@ -709,10 +687,10 @@ class Statement(object):
         """Returns path to pdf file and compiles it if necessary.
         Returns:
             Optional[FilePath]: The file path if the binary is present or None
-                if pdf file cannot be generated.
+                if the pdf file cannot be generated.
         """
         if self._pdf.mtime() < self._source.mtime():
-            st = self.build()
+            (st, msg) = self.build()
             if not st:
                 return None
         return self._pdf

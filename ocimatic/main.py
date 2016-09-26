@@ -19,7 +19,7 @@ def new_contest(args):
     name = args[0]
 
     try:
-        # @TODO (NL: 14/10/2016) Ask for confirmation before creating contest
+        # @TODO (NL: 14/09/2016) Ask for confirmation before creating contest
         # on existing directory.
         core.Contest.create_layout(os.path.join(os.getcwd(), name))
         ui.show_message('Info', 'Contest [%s] created' % name)
