@@ -169,14 +169,22 @@ class Task(object):
         self._dataset.normalize()
 
     @ui.task('Running solutions')
-    def run_solutions(self, partial=False):
+    def run_solutions(self, partial=False, name=None):
         """Run all solutions and report outcome and running time.
 
         Args:
             partial (bool): If true it runs partial solutions as well.
+            name (Optional[string]): If present it only runs the solution that
+                contains name as substring. Solution is searched in partial
+                solutions regardless of the argument partial.
         """
-        for sol in self.solutions(partial):
-            sol.run(self._dataset, self._checker)
+        if name:
+            for sol in self.solutions(True):
+                if name in sol.name:
+                    sol.run(self._dataset, self._checker)
+        else:
+            for sol in self.solutions(partial):
+                sol.run(self._dataset, self._checker)
 
     @ui.task('Checking dataset')
     def check_dataset(self):
@@ -288,6 +296,10 @@ class Solution(object):
     def build_time(self):
         raise NotImplementedError("Class %s doesn't implement build_time()" % (
             self.__class__.__name__))
+
+    @property
+    def name(self):
+        return self._source.name
 
 class CppSolution(Solution):
     """Solution written in C++. This solutions is compiled with

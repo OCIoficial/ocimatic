@@ -62,32 +62,32 @@ def new_task(args):
         ui.fatal_error('Couldn\'t create task: %s' % exc)
 
 
-def tasks_run(tasks, _):
+def tasks_run(tasks, name=None):
     for task in tasks:
-        task.run_solutions(partial=OPTS['partial'])
+        task.run_solutions(partial=OPTS['partial'], name=name)
 
 
-def tasks_check(tasks, _):
+def tasks_check(tasks):
     for task in tasks:
         task.check_dataset()
 
 
-def tasks_build(tasks, _):
+def tasks_build(tasks):
     for task in tasks:
         task.build_solutions()
 
 
-def tasks_gen_expected(tasks, _):
+def tasks_gen_expected(tasks):
     for task in tasks:
         task.gen_expected(sample=OPTS['sample'])
 
 
-def tasks_build_statement(tasks, _):
+def tasks_build_statement(tasks):
     for task in tasks:
         task.build_statement()
 
 
-def tasks_compress(tasks, _):
+def tasks_compress(tasks):
     for task in tasks:
         task.compress_dataset()
 
@@ -127,7 +127,7 @@ def task_mode(args):
         if not tasks:
             ui.show_message("Warning", "no tasks", ui.WARNING)
 
-        actions[args[0]](tasks, args[1:])
+        actions[args[0]](tasks, *args[1:])
 
     else:
         ui.fatal_error('Unknown action for task mode.')
