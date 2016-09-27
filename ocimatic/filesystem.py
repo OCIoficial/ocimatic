@@ -93,9 +93,10 @@ class FilePath(object):
         """str: File extension beginning with dot. """
         return self.splitext()[1]
 
-    @property
-    def rootname(self):
-        """str: Filename without extension."""
+    def rootname(self, full=False):
+        """Return filename without extension.
+        Args:
+            full (bool): if true returns fullpath."""
         return self.splitext()[0]
 
     @property
@@ -118,16 +119,18 @@ class FilePath(object):
         Returns:
             FilePath: file path with the new extension
         """
-        return FilePath(self._directory, self.rootname+ext)
+        return FilePath(self._directory, self.rootname()+ext)
 
-    def splitext(self):
+    def splitext(self, full=False):
         """Split filename in root name and extension.
+        Args:
+            full (bool): if true returns rootname with fullpath.
 
         Returns:
             (str, str): A pair where the first component corresponds
                 to root name and the second to the extension.
         """
-        return os.path.splitext(self.path)
+        return os.path.splitext(self.path if full else self._filename)
 
     def mtime(self):
         """Returns modification time. If the file does not exists in

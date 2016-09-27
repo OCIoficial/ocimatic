@@ -14,8 +14,8 @@ from ocimatic.filesystem import FilePath, Directory
 
 
 class Contest(object):
-    """This class represent a contest. A contest is conformed by a list of
-    tasks and a titlepage. In ocimatic, a contest is always associated to
+    """This class represents a contest. A contest is formed by a list of
+    tasks and a titlepage. A contest is always associated to
     a directory in the filesystem.
     """
     def __init__(self, directory):
@@ -31,7 +31,7 @@ class Contest(object):
 
     @staticmethod
     def create_layout(contest_path):
-        """Copy contest skeleton to contest_path.
+        """Copies contest skeleton to contest_path.
 
         Args:
             contest_path (str)
@@ -59,18 +59,21 @@ class Contest(object):
     def compile_titlepage(self):
         """Compile title page latex
         Returns:
-            (bool, msg): Returns status and result message
+            (bool, msg): Status and result message
         """
         st = self._compiler(self._titlepage)
         return (st, 'OK' if st else 'FAILED')
 
     @ui.work('MERGE', 'problemset.pdf')
     def merge_pdfs(self):
-        """Merge statements and title page in a single file """
+        """Merges statements and title page in a single file """
+        if not shutil.which('gs'):
+            return (False, 'Cannot find gs')
+
         pdfs = ' '.join('"%s"' % t.statement.pdf for t in self._tasks
                         if t.statement.pdf)
         titlepage = FilePath(self._directory, 'titlepage.pdf')
-        if titlepage:
+        if titlepage.exists():
             pdfs = '"%s" %s' % (titlepage, pdfs)
 
         cmd = ('gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite'
@@ -78,16 +81,15 @@ class Contest(object):
                    FilePath(self._directory, 'problemset.pdf'),
                    pdfs
                )
-        with FilePath('/dev/null').open('w') as null:
-            complete = subprocess.run(cmd,
-                                      shell=True,
-                                      timeout=20,
-                                      # stdin=null)
-                                      stdin=null,
-                                      stdout=null,
-                                      stderr=null)
-            st = complete.returncode == 0
-            return (st, 'OK' if st else 'FAILED')
+        complete = subprocess.run(cmd,
+                                    shell=True,
+                                    timeout=20,
+                                    # stdin=null)
+                                    stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL)
+        st = complete.returncode == 0
+        return (st, 'OK' if st else 'FAILED')
 
     def find_task(self, name):
         """find task with given name.
@@ -101,7 +103,7 @@ class Contest(object):
 
 
 class Task(object):
-    """This class represent a task. A task consists of a statement,
+    """This class represents a task. A task consists of a statement,
     a list of correct and partial solutions and a dataset. A task is
     always associated to a directory in the filesystem.
 
@@ -115,7 +117,7 @@ class Task(object):
     def __init__(self, directory, num):
         """
         Args:
-            directory (Directory): Directory where the task reside.
+            directory (Directory): Directory where the task resides.
             num (int): Position of the task in the problemset starting from 0.
         """
         self._directory = directory
@@ -186,7 +188,7 @@ class Task(object):
 
     @ui.task('Building solutions')
     def build_solutions(self):
-        """Force a rebuilding of all solutions, both partial and corrects."""
+        """Forces a rebuilding of all solutions, both partial and corrects."""
         for sol in self.solutions(partial=True):
             sol.build()
 
@@ -224,6 +226,8 @@ class Solution(object):
         for f in solutions_dir.lsfile():
             if f.ext == CppSolution.ext:
                 solutions.append(CppSolution(f, managers_dir))
+            if f.ext == JavaSolution.ext:
+                solutions.append(JavaSolution(f, managers_dir))
         return solutions
 
     @ui.workgroup()
@@ -237,8 +241,10 @@ class Solution(object):
             sample (bool): If true run solution with sample test data from
                 statement.
         """
-        for test in dataset.iterate(sample):
-            test.run(self.binary, checker, check=check)
+        runnable = self.get_and_build()
+        if runnable:
+            for test in dataset.iterate(sample):
+                test.run(runnable, checker, check=check)
 
     @ui.workgroup()
     def gen_expected(self, dataset, sample=False):
@@ -249,8 +255,10 @@ class Solution(object):
             sample (bool): If true expected output file for are generated for
                 sample test data from statement.
         """
-        for test in dataset.iterate(sample):
-            test.gen_expected(self.binary)
+        runnable = self.get_and_build()
+        if runnable:
+            for test in dataset.iterate(sample):
+                test.gen_expected(runnable)
 
     @ui.work('Build')
     def build(self):
@@ -262,14 +270,24 @@ class Solution(object):
         msg = 'OK' if st else 'FAILED'
         return (st, msg)
 
-    @property
-    def binary(self):
-        """Optional[Binary]: Binary file of this solution"""
-        if self._bin_path.mtime() < self._source.mtime():
-            if not self.build():
+    def get_and_build(self):
+        """
+        Returns:
+            Optional[Runnable]: Runnable file of this solution or None if it fails
+          to build"""
+        if self.build_time() < self._source.mtime():
+            (st, msg) = self.build()
+            if not st:
                 return None
-        return Binary(self._bin_path)
+        return self.get_runnable()
 
+    def get_runnable(self):
+        raise NotImplementedError("Class %s doesn't implement get_runnable()" % (
+            self.__class__.__name__))
+
+    def build_time(self):
+        raise NotImplementedError("Class %s doesn't implement build_time()" % (
+            self.__class__.__name__))
 
 class CppSolution(Solution):
     """Solution written in C++. This solutions is compiled with
@@ -288,6 +306,12 @@ class CppSolution(Solution):
         self._compiler = CppCompiler(['-I"%s"' % managers])
         self._grader = managers.find_file('grader.cpp')
         self._bin_path = self._source.chext('.bin')
+
+    def get_runnable(self):
+        return Runnable(self._bin_path.path)
+
+    def build_time(self):
+        return self._bin_path.mtime()
 
     def __str__(self):
         return self._source.path
@@ -325,17 +349,82 @@ class CppCompiler(object):
         sources = ' '.join('"%s"' % w for w in sources)
         cmd = self._cmd_template % (out, sources)
 
-        with FilePath('/dev/null').open('w') as null:
-            complete = subprocess.run(cmd,
-                                      stdout=null,
-                                      stderr=null,
-                                      shell=True)
-            return complete.returncode == 0
+        complete = subprocess.run(cmd,
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL,
+                                    shell=True)
+        return complete.returncode == 0
 
+class JavaSolution(Solution):
+    """Solution written in C++. This solutions is compiled with
+    a grader if one is present in the managers directory.
+    """
+    ext = '.java'
+
+    def __init__(self, source, managers):
+        """
+        Args:
+            source (FilePath): Source code.
+            managers (Directory): Directory where managers reside.
+        """
+        assert(source.ext == self.ext)
+        self._source = source
+        self._compiler = JavaCompiler()
+        # self._grader = managers.find_file('grader.cpp')
+        self._classname = self._source.rootname()
+        self._classpath = self._source.directory().path
+        self._bytecode = self._source.chext('.class')
+
+    def get_runnable(self):
+        return Runnable('java', ['-cp', self._classpath,
+                                 self._classname])
+
+    def build_time(self):
+        return self._bytecode.mtime()
+
+    def __str__(self):
+        return self._source.path
+
+    def _build(self):
+        """Compile solution with the JavaCompiler.
+        @TODO Compile solutions with a grader if present.
+        """
+        sources = [self._source]
+        # if self._grader:
+        #     sources.append(self._grader)
+        return self._compiler(sources)
+
+class JavaCompiler(object):
+    """Compiles Java code
+    """
+    _flags = []
+    def __init__(self, flags=[]):
+        flags = list(set(self._flags+flags))
+        self._cmd_template = 'javac %s %%s' % ' '.join(flags)
+
+    def __call__(self, sources):
+        """Compiles a list of Java sources.
+
+        Args:
+            sources (List[FilePath]|FilePath): Source or list of sources.
+            out (FilePath): Output path for bytecode
+
+        Returns:
+            bool: True if compilation succeed, False otherwise.
+        """
+        sources = [sources] if isinstance(sources, FilePath) else sources
+        sources = ' '.join('"%s"' % w for w in sources)
+        cmd = self._cmd_template % sources
+
+        complete = subprocess.run(cmd,
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL,
+                                  shell=True)
+        return complete.returncode == 0
 
 # TODO refactor statement out of dataset
 # TODO split dataset between subtasks, this will allow better display
-# of runs and a better renaming of files when compressing.
+# of runs.
 class Dataset(object):
     """Test data"""
     def __init__(self, directory, statement=None,
@@ -386,13 +475,12 @@ class Dataset(object):
         cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir,
                                                  self._in_ext,
                                                  self._sol_ext)
-        with FilePath('/dev/null').open('a') as null:
-            complete = subprocess.run(cmd, stdout=null, shell=True)
-            dst_file = FilePath(self._directory, 'data.zip')
-            FilePath(tmpdir, 'data.zip').copy(dst_file)
-            tmpdir.rmtree()
+        complete = subprocess.run(cmd, stdout=subprocess.DEVNULL, shell=True)
+        dst_file = FilePath(self._directory, 'data.zip')
+        FilePath(tmpdir, 'data.zip').copy(dst_file)
+        tmpdir.rmtree()
 
-            return complete.returncode == 0
+        return complete.returncode == 0
 
     def normalize(self):
         for test in self._tests + self._samples:
@@ -419,37 +507,38 @@ class Test(object):
         return self._in_path.directory
 
     @ui.work('Gen')
-    def gen_expected(self, binary):
+    def gen_expected(self, runnable):
         """Run binary with this test as input to generate expected output file
         Args:
-            binary (Binary)
+            runnable (Runnable)
         Returns:
             (bool, msg): A tuple containing status and result message.
         """
-        (st, _, errmsg) = binary.run(self.in_path, self.expected_path)
+        (st, _, errmsg) = runnable.run(self.in_path, self.expected_path)
         msg = 'OK' if st else errmsg
         return (st, msg)
 
 
     @ui.work('Run')
-    def run(self, binary, checker, check=False):
-        """Run binary whit this test as input and check output correcteness
+    def run(self, runnable, checker, check=False):
+        """Run runnable whit this test as input and check output correctness
         Args:
-            binary (Binary)
+            runnable (Runnable)
             checker (Checker): Checker to check outcome
             check  (bool): If true this only report if expected output
                 correspond to binary execution output.
         """
         out_path = FilePath.tmpfile()
         if self.expected_path:
-            (st, time, errmsg) = binary.run(self.in_path, out_path)
+            (st, time, errmsg) = runnable.run(self.in_path, out_path)
 
             # Execution failed
             if not st:
                 if check:
                     return (st, errmsg)
                 else:
-                    return (st, '%s [%.2fs]' % (errmsg, time))
+                    # return (st, '%s [%.2fs]' % (errmsg, time))
+                    return (st, '%s' % errmsg)
 
             outcome = checker(self.in_path,
                               self.expected_path,
@@ -480,17 +569,17 @@ class Test(object):
             return (False, 'Cannot find dos2unix')
         if not shutil.which('sed'):
             return (False, 'Cannot find sed')
-        tounix_input = "dos2unix \"%s\"" % self._in_path
-        tounix_expected = "dos2unix \"%s\"" % self._expected_path
+        tounix_input = 'dos2unix "%s"' % self._in_path
+        tounix_expected = 'dos2unix "%s"' % self._expected_path
         sed_input = "sed -i -e '$a\\' \"%s\"" % self._in_path
         sed_expected = "sed -i -e '$a\\' \"%s\"" % self._expected_path
-        with open('/dev/null', 'a') as f:
-            st = subprocess.call(tounix_input, stdout=f, stderr=f, shell=True)
-            st += subprocess.call(sed_input, stdout=f, stderr=f, shell=True)
-            if self.expected_path:
-                st += subprocess.call(tounix_expected, stdout=f, stderr=f, shell=True)
-                st += subprocess.call(sed_expected, stdout=f, stderr=f, shell=True)
-            return (st == 0, 'OK' if st == 0 else 'FAILED')
+        null = subprocess.DEVNULL
+        st = subprocess.call(tounix_input, stdout=null, stderr=null, shell=True)
+        st += subprocess.call(sed_input, stdout=null, stderr=null, shell=True)
+        if self.expected_path:
+            st += subprocess.call(tounix_expected, stdout=null, stderr=null, shell=True)
+            st += subprocess.call(sed_expected, stdout=null, stderr=null, shell=True)
+        return (st == 0, 'OK' if st == 0 else 'FAILED')
 
 
 class Checker(object):
@@ -601,7 +690,7 @@ def monotonic_time():
     return t.tv_sec + t.tv_nsec / 1e9
 
 
-class Binary(object):
+class Runnable(object):
     """An entity that may be executed redirecting stdin and stdout to specific
     files.
     """
@@ -615,13 +704,14 @@ class Binary(object):
         26: 'SIGVTALRM', 27: 'SIGPROF', 28: 'SIGWINCH', 29: 'SIGINFO',
         30: 'SIGUSR1', 31: 'SIGUSR2',
     }
-    def __init__(self, bin_path):
+    def __init__(self, command, args=[]):
         """
         Args:
-            bin_path (FilePath): Path to the binary.
+            bin_path (string): Command to execute.
+            args (List[string]): List of arguments to pass to the command.
         """
-        assert(bin_path.exists())
-        self._bin_path = bin_path
+        assert(shutil.which(command))
+        self._cmd = [command] + args
 
     def __str__(self):
         return self._bin_path.name
@@ -644,24 +734,32 @@ class Binary(object):
         with ExitStack() as stack:
             in_file = stack.enter_context(in_path.open('r'))
             out_file = stack.enter_context(out_path.open('w'))
-            null = stack.enter_context(open('/dev/null', 'w'))
 
             start = monotonic_time()
             try:
-                complete = subprocess.run([self._bin_path.path],
+                complete = subprocess.run(self._cmd,
                                           timeout=ocimatic.config['timeout'],
                                           stdin=in_file,
                                           stdout=out_file,
-                                          stderr=null)
+                                          universal_newlines=True,
+                                          stderr=subprocess.PIPE)
             except subprocess.TimeoutExpired as to:
                 return (False, monotonic_time() - start, 'Execution timed out')
             time = monotonic_time() - start
             status = complete.returncode == 0
             msg = ''
             if not status:
-                sig = -complete.returncode
-                msg = 'Execution killed with signal %d: %s' % (
-                    sig, self.signal[sig])
+                stderr = complete.stderr.strip('\n')
+                if 0 < len(stderr) < 75:
+                    msg = stderr
+                else:
+                    ret = complete.returncode
+                    if complete.returncode < 0:
+                        sig = -ret
+                        msg = 'Execution killed with signal %d: %s' % (
+                            sig, self.signal[sig])
+                    else:
+                        msg = 'Execution ended with error (return code %d)' % ret
             return (status, time, msg)
 
 
@@ -675,7 +773,7 @@ class Statement(object):
             directory (Directory): Directory to search for statement source file.
             num (int): Number of the statement in the contest starting from 0
         """
-        assert(FilePath(directory, 'statement.tex'))
+        assert(FilePath(directory, 'statement.tex').exists())
         self._source = FilePath(directory, 'statement.tex')
         self._pdf = self._source.chext('.pdf')
         self._compiler = LatexCompiler()
@@ -755,4 +853,3 @@ class LatexCompiler(object):
                                       stdout=null,
                                       stderr=null)
             return complete.returncode == 0
-
