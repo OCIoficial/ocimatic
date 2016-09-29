@@ -67,7 +67,7 @@ def tasks_run(tasks, name=None):
         task.run_solutions(partial=OPTS['partial'], name=name)
 
 
-def tasks_check(tasks):
+def tasks_check(tasks, *args):
     for task in tasks:
         task.check_dataset()
 
@@ -92,7 +92,7 @@ def tasks_compress(tasks):
         task.compress_dataset()
 
 
-def tasks_normalize(tasks, _):
+def tasks_normalize(tasks):
     for task in tasks:
         task.normalize()
 

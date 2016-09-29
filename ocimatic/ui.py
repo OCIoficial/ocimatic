@@ -1,5 +1,23 @@
 import sys
 import re
+# from importlib.util import find_spec
+# if find_spec('colorama') is not None:
+#     from colorama import Style, Fore
+#     RESET = Style.RESET_ALL
+#     BOLD = Style.BRIGHT
+#     UNDERLINE = '\x1b[4m'
+#     RED = Fore.RED
+#     GREEN = Fore.GREEN
+#     YELLOW = Fore.YELLOW
+#     BLUE = Fore.BLUE
+# else:
+#     RESET = ''
+#     BOLD = ''
+#     UNDERLINE = ''
+#     RED = ''
+#     GREEN = ''
+#     YELLOW = ''
+#     BLUE = ''
 
 RESET = '\x1b[0m'
 BOLD = '\x1b[1m'
@@ -8,6 +26,7 @@ RED = '\x1b[31m'
 GREEN = '\x1b[32m'
 YELLOW = '\x1b[33m'
 BLUE = '\x1b[34m'
+
 
 INFO = BOLD
 OK = BOLD + GREEN

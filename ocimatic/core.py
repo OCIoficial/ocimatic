@@ -15,8 +15,8 @@ from ocimatic.filesystem import FilePath, Directory
 
 class Contest(object):
     """This class represents a contest. A contest is formed by a list of
-    tasks and a titlepage. A contest is always associated to
-    a directory in the filesystem.
+    tasks and a titlepage. A contest is associated to a directory in the
+    filesystem.
     """
     def __init__(self, directory):
         """
@@ -47,8 +47,8 @@ class Contest(object):
 
     @ui.workgroup('Generating Problemset')
     def build_problemset(self):
-        """It builds titlepage and statement of all tasks. Then it merges all pdfs
-        in a single file.
+        """It builds the titlepage and the statement of all tasks. Then it merges
+        all pdfs in a single file.
         """
         self.compile_titlepage()
         for task in self._tasks:
@@ -84,7 +84,6 @@ class Contest(object):
         complete = subprocess.run(cmd,
                                     shell=True,
                                     timeout=20,
-                                    # stdin=null)
                                     stdin=subprocess.DEVNULL,
                                     stdout=subprocess.DEVNULL,
                                     stderr=subprocess.DEVNULL)
@@ -105,8 +104,7 @@ class Contest(object):
 class Task(object):
     """This class represents a task. A task consists of a statement,
     a list of correct and partial solutions and a dataset. A task is
-    always associated to a directory in the filesystem.
-
+    associated to a directory in the filesystem.
     """
     @staticmethod
     def create_layout(task_path):
@@ -169,18 +167,18 @@ class Task(object):
         self._dataset.normalize()
 
     @ui.task('Running solutions')
-    def run_solutions(self, partial=False, name=None):
-        """Run all solutions and report outcome and running time.
+    def run_solutions(self, partial=False, pattern=None):
+        """Run all solutions reporting outcome and running time.
 
         Args:
             partial (bool): If true it runs partial solutions as well.
-            name (Optional[string]): If present it only runs the solution that
-                contains name as substring. Solution is searched in partial
+            pattern (Optional[string]): If present it only runs the solutions that
+                contain pattern as substring. Solutions are looked up in partial
                 solutions regardless of the argument partial.
         """
-        if name:
+        if pattern:
             for sol in self.solutions(True):
-                if name in sol.name:
+                if pattern in sol.pattern:
                     sol.run(self._dataset, self._checker)
         else:
             for sol in self.solutions(partial):
@@ -224,8 +222,8 @@ class Solution(object):
         Args:
             solutions_dir (Directory): Directory to look for solutions.
             managers_dir (Directory): Directory where managers reside.
-                This is used for example when solutions are compiled
-                with a grader.
+                This is used to provide necessary files for compilation,
+                for example, when solutions are compiled with a grader.
 
         Returns:
             List[Solution]: List of solutions.
@@ -251,8 +249,7 @@ class Solution(object):
         """
         runnable = self.get_and_build()
         if runnable:
-            for test in dataset.iterate(sample):
-                test.run(runnable, checker, check=check)
+            dataset.run(runnable, checker, sample=sample, check=check)
 
     @ui.workgroup()
     def gen_expected(self, dataset, sample=False):
@@ -265,8 +262,7 @@ class Solution(object):
         """
         runnable = self.get_and_build()
         if runnable:
-            for test in dataset.iterate(sample):
-                test.gen_expected(runnable)
+            dataset.gen_expected(runnable, sample=sample)
 
     @ui.work('Build')
     def build(self):
@@ -440,7 +436,7 @@ class JavaCompiler(object):
 class Dataset(object):
     """Test data"""
     def __init__(self, directory, statement=None,
-                 in_ext=".in", sol_ext=".sol"):
+                 in_ext='.in', sol_ext='.sol'):
         """
         Args:
             directory (Directory): dataset directory.
@@ -450,19 +446,21 @@ class Dataset(object):
         self._directory = directory
         self._in_ext = in_ext
         self._sol_ext = sol_ext
-        self._tests = []
-        for f in directory.lsfile('*/*'+self._in_ext):
-            self._tests.append(Test(f, f.chext(sol_ext)))
+        self._subtasks = [Subtask(d, in_ext, sol_ext) for d in directory.lsdir()]
+        self._sampledata = SampleData(statement, in_ext=in_ext, sol_ext=sol_ext)
 
-        self._samples = statement.io_samples() if statement else []
-        self._samples = [Test(f, f.chext(sol_ext)) for f in self._samples]
-
-    def iterate(self, sample=False):
-        for test in self._tests:
-            yield test
+    def gen_expected(self, runnable, sample=False):
+        for subtask in self._subtasks:
+            subtask.gen_expected(runnable)
         if sample:
-            for test in self._samples:
-                yield test
+            self._sampledata.gen_expected(runnable)
+
+
+    def run(self, runnable, checker, check=False, sample=False):
+        for subtask in self._subtasks:
+            subtask.run(runnable, checker, check=check)
+        if sample:
+            self._sampledata.run(runnable, checker, check=check)
 
     def compress(self):
         """Compress all test cases in this dataset in a single zip file.
@@ -473,30 +471,78 @@ class Dataset(object):
             return
         tmpdir = Directory.tmpdir()
         found = False
-        for test in self._tests:
-            if test.expected_path:
-                found = True
-                in_name = "%s-%s" % (test.directory().basename, test.in_path.name())
-                sol_name = "%s-%s" % (test.directory().basename, test.in_path.name())
-                test.in_path.copy(FilePath(tmpdir, in_name))
-                test.expected_path.copy(FilePath(tmpdir, sol_name))
 
-        if not found:
+        copied = 0
+        for subtask in self._subtasks:
+            copied += subtasks.copy_to(tmpdir)
+
+        if not copied:
             ui.show_message("Warning", "no files in dataset", ui.WARNING)
             return
+
         cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir,
                                                  self._in_ext,
                                                  self._sol_ext)
-        complete = subprocess.run(cmd, stdout=subprocess.DEVNULL, shell=True)
+        st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
         dst_file = FilePath(self._directory, 'data.zip')
         FilePath(tmpdir, 'data.zip').copy(dst_file)
         tmpdir.rmtree()
 
-        return complete.returncode == 0
+        return st == 0
 
     def normalize(self):
-        for test in self._tests + self._samples:
+        for subtask in self._subtasks:
+            subtask.normalize()
+        self._sampledata.normalize()
+
+class Subtask(object):
+    def __init__(self, directory, in_ext='.in', sol_ext='.sol'):
+        self._tests = []
+        self._in_ext = in_ext
+        self._sol_ext = sol_ext
+        for f in directory.lsfile('*'+self._in_ext):
+            self._tests.append(Test(f, f.chext(sol_ext)))
+        self._name = directory.basename
+
+    def copy_to(self, directory):
+        copied = 0
+        for test in self._tests:
+            if test.expected_path:
+                found = True
+                in_name = "%s-%s" % (self._name, test.in_path.name())
+                sol_name = "%s-%s" % (self._name, test.in_path.name())
+                test.in_path.copy(FilePath(directory, in_name))
+                test.expected_path.copy(FilePath(directory, sol_name))
+                copied += 1
+        return copied
+
+    def normalize(self):
+        for test in self._tests:
             test.normalize()
+
+    @ui.workgroup()
+    def run(self, runnable, checker, check=False):
+        for test in self._tests:
+            test.run(runnable, checker, check=check)
+
+    @ui.workgroup()
+    def gen_expected(self, runnable):
+        for test in self._tests:
+            test.gen_expected(runnable)
+
+    def __str__(self):
+        return self._name
+
+class SampleData(Subtask):
+    def __init__(self, statement, in_ext='.in', sol_ext='.sol'):
+        self._in_ext = in_ext
+        self._sol_ext = sol_ext
+        tests = statement.io_samples() if statement else []
+        self._tests = [Test(f.chext(in_ext), f.chext(sol_ext)) for f in tests]
+
+    def __str__(self):
+        return 'Sample'
+
 
 class Test(object):
     """A single test file. Expected output file may not exist"""
@@ -740,7 +786,7 @@ class Runnable(object):
                 status is True if the execution terminates with exit code zero
                 or False otherwise.
                 time corresponds to execution time.
-                if status is False errmsg contains an error message.
+                if status is False errmsg contains an explanatory error message.
         """
         assert(in_path.exists())
         with ExitStack() as stack:
@@ -758,18 +804,19 @@ class Runnable(object):
             except subprocess.TimeoutExpired as to:
                 return (False, monotonic_time() - start, 'Execution timed out')
             time = monotonic_time() - start
-            status = complete.returncode == 0
+            ret = complete.returncode
+            status = ret == 0
             msg = ''
             if not status:
                 stderr = complete.stderr.strip('\n')
                 if 0 < len(stderr) < 75:
                     msg = stderr
                 else:
-                    ret = complete.returncode
-                    if complete.returncode < 0:
+                    if ret < 0:
                         sig = -ret
-                        msg = 'Execution killed with signal %d: %s' % (
-                            sig, self.signal[sig])
+                        msg = 'Execution killed with signal %d' % sig
+                        if sig in self.signal:
+                            msg += ': %s' + self.signal[sig]
                     else:
                         msg = 'Execution ended with error (return code %d)' % ret
             return (status, time, msg)
@@ -830,7 +877,7 @@ class Statement(object):
             m = re.match(r'[^%]*\\sampleIO{([^}]*)}', line)
             m and samples.add(m.group(1))
         latex_file.close()
-        samples = [FilePath(self._directory, s+'.in') for s in samples]
+        samples = [FilePath(self._directory, s) for s in samples]
         return samples
 
 
