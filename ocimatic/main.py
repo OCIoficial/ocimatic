@@ -62,9 +62,9 @@ def new_task(args):
         ui.fatal_error('Couldn\'t create task: %s' % exc)
 
 
-def tasks_run(tasks, name=None):
+def tasks_run(tasks, pattern=None):
     for task in tasks:
-        task.run_solutions(partial=OPTS['partial'], name=name)
+        task.run_solutions(partial=OPTS['partial'], pattern=pattern)
 
 
 def tasks_check(tasks, *args):

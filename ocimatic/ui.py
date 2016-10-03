@@ -72,6 +72,15 @@ def workgroup_header(msg, length=35):
     print()
 
 
+def supergroup_header(msg, length=35):
+    """Header for group of works"""
+    print()
+    print()
+    msg = '....' + msg[-length-4:] if len(msg)-4 > length else msg
+    sys.stdout.write(colorize('[%s]' % (msg), INFO + BLUE))
+    print()
+
+
 def start_work(action, msg, length=45):
     msg = '....' + msg[-length-4:] if len(msg)-4 > length else msg
     msg = ' * [' + action + '] ' + msg + '  '
@@ -108,6 +117,15 @@ def work(action, target=None):
     return decorator
 
 
+def supergroup(msg=None):
+    def decorator(func):
+        def wrapper(self, *args, **kwargs):
+            supergroup_header(msg or str(self))
+            return func(self, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
 def workgroup(msg=None):
     def decorator(func):
         def wrapper(self, *args, **kwargs):
@@ -125,7 +143,7 @@ def task(action):
         return wrapper
     return decorator
 
+
 def ocimatic_help():
     show_message('INFO', 'Sorry, but we don\'t have a help message yet :(')
     sys.exit(0)
-

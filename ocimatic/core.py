@@ -2,10 +2,8 @@
 import os
 import subprocess
 import re
-import fnmatch
 import shutil
 from contextlib import ExitStack
-from math import floor, log
 from distutils.dir_util import copy_tree
 
 import ocimatic
@@ -25,7 +23,7 @@ class Contest(object):
         """
         self._directory = directory
         dirs = [d for d in directory.lsdir() if d.find_file('.ocimatic_task')]
-        self._tasks = [Task(d,i) for (i,d) in enumerate(dirs)]
+        self._tasks = [Task(d, i) for (i, d) in enumerate(dirs)]
         self._titlepage = FilePath(directory, 'titlepage.tex')
         self._compiler = LatexCompiler()
 
@@ -178,7 +176,7 @@ class Task(object):
         """
         if pattern:
             for sol in self.solutions(True):
-                if pattern in sol.pattern:
+                if pattern in sol.name:
                     sol.run(self._dataset, self._checker)
         else:
             for sol in self.solutions(partial):
@@ -236,7 +234,7 @@ class Solution(object):
                 solutions.append(JavaSolution(f, managers_dir))
         return solutions
 
-    @ui.workgroup()
+    @ui.supergroup()
     def run(self, dataset, checker, check=False, sample=False):
         """Run this solution for all test cases in the given dataset.
         Args:
@@ -402,6 +400,7 @@ class JavaSolution(Solution):
         #     sources.append(self._grader)
         return self._compiler(sources)
 
+
 class JavaCompiler(object):
     """Compiles Java code
     """
@@ -430,6 +429,7 @@ class JavaCompiler(object):
                                   shell=True)
         return complete.returncode == 0
 
+
 # TODO refactor statement out of dataset
 # TODO split dataset between subtasks, this will allow better display
 # of runs.
@@ -455,7 +455,6 @@ class Dataset(object):
         if sample:
             self._sampledata.gen_expected(runnable)
 
-
     def run(self, runnable, checker, check=False, sample=False):
         for subtask in self._subtasks:
             subtask.run(runnable, checker, check=check)
@@ -470,11 +469,10 @@ class Dataset(object):
         if not self._tests:
             return
         tmpdir = Directory.tmpdir()
-        found = False
 
         copied = 0
         for subtask in self._subtasks:
-            copied += subtasks.copy_to(tmpdir)
+            copied += subtask.copy_to(tmpdir)
 
         if not copied:
             ui.show_message("Warning", "no files in dataset", ui.WARNING)
@@ -495,6 +493,7 @@ class Dataset(object):
             subtask.normalize()
         self._sampledata.normalize()
 
+
 class Subtask(object):
     def __init__(self, directory, in_ext='.in', sol_ext='.sol'):
         self._tests = []
@@ -508,7 +507,6 @@ class Subtask(object):
         copied = 0
         for test in self._tests:
             if test.expected_path:
-                found = True
                 in_name = "%s-%s" % (self._name, test.in_path.name())
                 sol_name = "%s-%s" % (self._name, test.in_path.name())
                 test.in_path.copy(FilePath(directory, in_name))
@@ -532,6 +530,7 @@ class Subtask(object):
 
     def __str__(self):
         return self._name
+
 
 class SampleData(Subtask):
     def __init__(self, statement, in_ext='.in', sol_ext='.sol'):
@@ -575,7 +574,6 @@ class Test(object):
         (st, _, errmsg) = runnable.run(self.in_path, self.expected_path)
         msg = 'OK' if st else errmsg
         return (st, msg)
-
 
     @ui.work('Run')
     def run(self, runnable, checker, check=False):
@@ -680,6 +678,7 @@ class DiffChecker(Checker):
                                       stderr=null)
             return 1.0 if complete.returncode == 0 else 0.0
 
+
 class CppChecker(Checker):
     def __init__(self, source):
         """
@@ -762,6 +761,7 @@ class Runnable(object):
         26: 'SIGVTALRM', 27: 'SIGPROF', 28: 'SIGWINCH', 29: 'SIGINFO',
         30: 'SIGUSR1', 31: 'SIGUSR2',
     }
+
     def __init__(self, command, args=[]):
         """
         Args:
@@ -786,7 +786,8 @@ class Runnable(object):
                 status is True if the execution terminates with exit code zero
                 or False otherwise.
                 time corresponds to execution time.
-                if status is False errmsg contains an explanatory error message.
+                if status is False errmsg contains an explanatory error
+                message.
         """
         assert(in_path.exists())
         with ExitStack() as stack:
@@ -881,12 +882,10 @@ class Statement(object):
         return samples
 
 
-
 class LatexCompiler(object):
     """Compiles latex source"""
     def __init__(self, cmd='pdflatex',
                  flags=['--shell-escape', '-interaction=batchmode']):
-                 # flags=['--shell-escape']):
         """
         Args:
             cmd (str): command to compile files. default to pdflatex
