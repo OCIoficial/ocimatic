@@ -67,14 +67,14 @@ def tasks_run(tasks, pattern=None):
         task.run_solutions(partial=OPTS['partial'], pattern=pattern)
 
 
-def tasks_check(tasks, *args):
+def tasks_check(tasks):
     for task in tasks:
         task.check_dataset()
 
 
-def tasks_build(tasks):
+def tasks_build(tasks, pattern):
     for task in tasks:
-        task.build_solutions()
+        task.build_solutions(pattern=pattern)
 
 
 def tasks_gen_expected(tasks):

@@ -23,7 +23,7 @@ class Contest(object):
         """
         self._directory = directory
         dirs = [d for d in directory.lsdir() if d.find_file('.ocimatic_task')]
-        self._tasks = [Task(d, i) for (i, d) in enumerate(dirs)]
+        self._tasks = [Task(d) for d in dirs]
         self._titlepage = FilePath(directory, 'titlepage.tex')
         self._compiler = LatexCompiler()
 
@@ -49,8 +49,9 @@ class Contest(object):
         all pdfs in a single file.
         """
         self.compile_titlepage()
-        for task in self._tasks:
-            task.build_statement()
+        for (i, task) in enumerate(self._tasks):
+            last = i == len(self._tasks) - 1
+            task.build_statement(num=i, blank_page=last)
         self.merge_pdfs()
 
     @ui.work('PDF', 'titlepage.tex')
@@ -110,7 +111,7 @@ class Task(object):
         copy_tree(os.path.join(ocimatic_dir, "resources/task-skel"),
                   task_path, preserve_symlinks=1)
 
-    def __init__(self, directory, num):
+    def __init__(self, directory):
         """
         Args:
             directory (Directory): Directory where the task resides.
@@ -130,7 +131,7 @@ class Task(object):
         if custom_checker:
             self._checker = CppChecker(custom_checker)
 
-        self._statement = Statement(directory.chdir('statement'), num)
+        self._statement = Statement(directory.chdir('statement'))
 
         self._dataset = Dataset(directory.chdir('dataset'), self._statement)
 
@@ -174,7 +175,7 @@ class Task(object):
                 contain pattern as substring. Solutions are looked up in partial
                 solutions regardless of the argument partial.
         """
-        if pattern:
+        if pattern is not None:
             for sol in self.solutions(True):
                 if pattern in sol.name:
                     sol.run(self._dataset, self._checker)
@@ -191,10 +192,11 @@ class Task(object):
             sol.run(self._dataset, self._checker, check=True, sample=True)
 
     @ui.task('Building solutions')
-    def build_solutions(self):
+    def build_solutions(self, pattern=None):
         """Forces a rebuilding of all solutions, both partial and corrects."""
         for sol in self.solutions(partial=True):
-            sol.build()
+            if pattern is not None and pattern in sol.name:
+                sol.build()
 
     @ui.task('Generating expected output')
     def gen_expected(self, sample=False):
@@ -205,9 +207,9 @@ class Task(object):
             ui.fatal_error('No correct solution.')
         self._correct[0].gen_expected(self._dataset, sample=sample)
 
-    def build_statement(self):
+    def build_statement(self, num=None, blank_page=False):
         """Generate pdf for the statement"""
-        return self._statement.build()
+        return self._statement.build(num=num, blank_page=blank_page)
 
 
 class Solution(object):
@@ -817,7 +819,7 @@ class Runnable(object):
                         sig = -ret
                         msg = 'Execution killed with signal %d' % sig
                         if sig in self.signal:
-                            msg += ': %s' + self.signal[sig]
+                            msg += ': %s' % self.signal[sig]
                     else:
                         msg = 'Execution ended with error (return code %d)' % ret
             return (status, time, msg)
@@ -827,7 +829,7 @@ class Statement(object):
     """Represents a statement. A statement is formed by a latex source and a pdf
     file.
     """
-    def __init__(self, directory, num):
+    def __init__(self, directory):
         """
         Args:
             directory (Directory): Directory to search for statement source file.
@@ -838,7 +840,6 @@ class Statement(object):
         self._pdf = self._source.chext('.pdf')
         self._compiler = LatexCompiler()
         self._directory = directory
-        self._num = num
 
     @property
     def pdf(self):
@@ -857,13 +858,19 @@ class Statement(object):
         return self._source.path
 
     @ui.work('PDF')
-    def build(self):
+    def build(self, num=None, blank_page=False):
         """Compile statement latex source
+        Args:
+           blank_page (Optional[bool]) if true adds a blank page at the end of the
+               problem.
         Returns:
            (bool, msg) a tuple containing status code and result message.
 
         """
-        os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A')+self._num)
+        if num is not None:
+            os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A')+num)
+        if blank_page:
+            os.environ['OCIMATIC_BLANK_PAGE'] = 'True'
         st = self._compiler(self._source)
         return (st, 'OK' if st else 'FAILED')
 
