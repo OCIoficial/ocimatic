@@ -4,15 +4,21 @@
 
 \DeclareOption*{\PassOptionsToClass{\CurrentOption}{article}}
 \ProcessOptions\relax
-\LoadClass[11pt]{article}
+\LoadClass[twoside, 11pt]{article}
 
-\RequirePackage{ifthen}
+\RequirePackage{etoolbox}
 \RequirePackage{fancyhdr}
 \RequirePackage{graphicx}
 \RequirePackage{verbatim}
 \RequirePackage{enumitem}
+\RequirePackage{tabu}
+\RequirePackage{color}
 
-
+%% Catch environment variable
+\RequirePackage{catchfile}
+\newcommand{\getenv}[2][]{%
+  \CatchFileEdef{\temp}{"|kpsewhich --var-value #2"}{\endlinechar=-1}%
+  \if\relax\detokenize{#1}\relax\temp\else\let#1\temp\fi}
 
 %% GEOMETRY
 \oddsidemargin  0.0in
@@ -22,6 +28,15 @@
 \voffset        -0.5in
 %\headsep        0in
 \parindent      0.0in
+
+%% PAGE NUMBERING
+% \global\let\@pagenumber\@empty
+% \getenv[\@pagenumber]{OCIMATIC_PAGE_NUMBER}
+% \if\@pagenumber\@empty
+% \else
+% \setcounter{page}{\@pagenumber}
+% \fi
+% \setcounter{page}{11}
 
 
 %% EXTRA
@@ -37,30 +52,27 @@
 \rhead{\@phase\ \the\year}
 \renewcommand{\headrulewidth}{0.2pt}
 
+%% FOOTER
+\cfoot{}
 
 %% TITLE
+\global\let\@problem\@empty
+\getenv[\@problem]{OCIMATIC_PROBLEM_NUMBER}
+\newcommand{\problem}[1]{\def\@problem{#1}}
+
 \newif\ifproblemcnt%
 \problemcntfalse%
-% \global\let\@filename\@empty
-% \newcommand{\filename}[1]{\def\@filename{#1}}
+\global\let\@codename\@empty
+\newcommand{\codename}[1]{\def\@codename{#1}}
 
-\global\let\@problem\@empty
-\newcommand{\problem}[1]{\def\@problem{#1}}
-\newcounter{problemcnt}
-\setcounter{problemcnt}{1}
 
 \newcommand{\mymaketitle}{
     \begin{center}
-      \ifproblemcnt%
-      {\huge\bf \sf Problema \Alph{problemcnt}}\\
-      \else
       {\huge\bf \sf Problema \@problem}\\
-      \fi
     \LARGE{\sf \@title}\\[2mm]
-    % \normalsize {\em archivo:} {\tt \@filename\{.c,.cpp,.pas\}}
+    \normalsize {\em nombre clave:} {\tt \@codename}
     \vspace{6pt}
     \end{center}
-    \stepcounter{problemcnt}
 }
 
 \renewcommand*{\cleardoublepage}{\clearpage\if@twoside \ifodd\c@page\else
@@ -74,17 +86,29 @@
                                      {-1.0ex\@plus -1ex \@minus -.2ex}%
                                      {1.0ex \@plus .2ex}%
                                    {\reset@font\large\bfseries}}
-\newenvironment{problemDescription}{\cleardoublepage\mymaketitle}{}
+\newenvironment{problemDescription}{\mymaketitle}{}
 \newenvironment{inputDescription}{\subsection*{Entrada}}{\par}
 \newenvironment{outputDescription}{\subsection*{Salida}}{\par}
 
 
+\global\let\@useblankpage\@empty
+\getenv[\@useblankpage]{OCIMATIC_BLANK_PAGE}
+\newcommand{\@blankpage}{%
+\newpage%
+\thispagestyle{empty}%
+\makebox(200,300){}
+}
+\AtEndDocument{\ifdefempty{\@useblankpage}{\cleardoublepage}{\@blankpage}}
+% \AtEndDocument{\cleardoublepage}
+
 %% Ejemplo Input/Output
 
+\definecolor{samplegray}{rgb}{0.3,0.3,0.3}
 \newcommand{\sampleIO}[1]{%
   \begin{minipage}[c]{\textwidth}
     \begin{center}
-      \begin{tabular}{|l|} 
+      \begin{tabu}{|l|} 
+        \taburulecolor{samplegray}
         \hline
         \begin{minipage}[t]{0.45\textwidth}
             \vskip 0.3pt
@@ -102,15 +126,16 @@
         \end{minipage}
         \\
         \hline
-      \end{tabular}
+      \end{tabu}
     \end{center}
   \end{minipage}
   \vskip 12pt
 }
 
 
-\newenvironment{scoreDescription}{\subsection*{Subtareas y Puntaje}\begin{description}[leftmargin=0pt]\itemsep 0pt}{\end{description}}
+\newenvironment{scoreDescription}{\subsection*{Subtareas y puntaje}\begin{description}[leftmargin=0pt]\itemsep 0pt}{\end{description}}
 \newcommand{\score}[1]{\item[#1 puntos]}
 
-\newenvironment{sampleDescription}{\subsection*{Ejemplos de Entrada y Salida}}{}
+\newenvironment{sampleDescription}{\subsection*{Ejemplos de entrada y salida}}{}
+
 

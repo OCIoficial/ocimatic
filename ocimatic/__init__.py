@@ -9,5 +9,5 @@
 __version__ = 'beta2'
 
 config = {
-    'timeout': 3
+    'timeout': 2
 }

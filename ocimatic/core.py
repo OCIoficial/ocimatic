@@ -172,15 +172,10 @@ class Task(object):
         Args:
             partial (bool): If true it runs partial solutions as well.
             pattern (Optional[string]): If present it only runs the solutions that
-                contain pattern as substring. Solutions are looked up in partial
-                solutions regardless of the argument partial.
+                contain pattern as substring.
         """
-        if pattern is not None:
-            for sol in self.solutions(True):
-                if pattern in sol.name:
-                    sol.run(self._dataset, self._checker)
-        else:
-            for sol in self.solutions(partial):
+        for sol in self.solutions(partial):
+            if not pattern or pattern in sol.name:
                 sol.run(self._dataset, self._checker)
 
     @ui.task('Checking dataset')
@@ -395,7 +390,7 @@ class JavaSolution(Solution):
 
     def _build(self):
         """Compile solution with the JavaCompiler.
-        @TODO Compile solutions with a grader if present.
+        @TODO (NL: 26/09/2016) Compile solutions with a grader if present.
         """
         sources = [self._source]
         # if self._grader:
@@ -433,8 +428,6 @@ class JavaCompiler(object):
 
 
 # TODO refactor statement out of dataset
-# TODO split dataset between subtasks, this will allow better display
-# of runs.
 class Dataset(object):
     """Test data"""
     def __init__(self, directory, statement=None,
@@ -468,25 +461,25 @@ class Dataset(object):
         The basename of the corresponding subtask subdirectory is prepended
         to each file.
         """
-        if not self._tests:
-            return
         tmpdir = Directory.tmpdir()
 
-        copied = 0
-        for subtask in self._subtasks:
-            copied += subtask.copy_to(tmpdir)
+        try:
+            copied = 0
+            for subtask in self._subtasks:
+                copied += subtask.copy_to(tmpdir)
 
-        if not copied:
-            ui.show_message("Warning", "no files in dataset", ui.WARNING)
-            return
+            if not copied:
+                ui.show_message("Warning", "no files in dataset", ui.WARNING)
+                return
 
-        cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir,
-                                                 self._in_ext,
-                                                 self._sol_ext)
-        st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
-        dst_file = FilePath(self._directory, 'data.zip')
-        FilePath(tmpdir, 'data.zip').copy(dst_file)
-        tmpdir.rmtree()
+            cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir,
+                                                    self._in_ext,
+                                                    self._sol_ext)
+            st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
+            dst_file = FilePath(self._directory, 'data.zip')
+            FilePath(tmpdir, 'data.zip').copy(dst_file)
+        finally:
+            tmpdir.rmtree()
 
         return st == 0
 
@@ -509,8 +502,8 @@ class Subtask(object):
         copied = 0
         for test in self._tests:
             if test.expected_path:
-                in_name = "%s-%s" % (self._name, test.in_path.name())
-                sol_name = "%s-%s" % (self._name, test.in_path.name())
+                in_name = "%s-%s" % (self._name, test.in_path.name)
+                sol_name = "%s-%s" % (self._name, test.expected_path.name)
                 test.in_path.copy(FilePath(directory, in_name))
                 test.expected_path.copy(FilePath(directory, sol_name))
                 copied += 1
@@ -781,7 +774,7 @@ class Runnable(object):
 
         Args:
             in_path (FilePath): Path to redirect stdin from.
-            out_path (FilePath): File to redirecto stdout to.
+            out_path (FilePath): File to redirec stdout to.
 
         Returns:
             (bool, str, float): Returns a tuple (status, time, errmsg).
@@ -908,13 +901,11 @@ class LatexCompiler(object):
             source (FilePath): path of file to compile
         """
         flags = ' '.join(self._flags)
-        cmd = 'cd %s && %s %s %s' % (
+        cmd = 'cd "%s" && %s %s "%s"' % (
             source.directory(), self._cmd, flags, source.name)
-        with FilePath('/dev/null').open('w') as null:
-            complete = subprocess.run(cmd,
-                                      shell=True,
-                                      # stdin=null)
-                                      stdin=null,
-                                      stdout=null,
-                                      stderr=null)
-            return complete.returncode == 0
+        complete = subprocess.run(cmd,
+                                  shell=True,
+                                  stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
+        return complete.returncode == 0
