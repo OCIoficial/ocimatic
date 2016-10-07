@@ -9,5 +9,6 @@
 __version__ = 'beta2'
 
 config = {
-    'timeout': 2
+    'timeout': 2,
+    'last_blank_page': True
 }

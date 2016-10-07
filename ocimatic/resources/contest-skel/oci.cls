@@ -4,15 +4,16 @@
 
 \DeclareOption*{\PassOptionsToClass{\CurrentOption}{article}}
 \ProcessOptions\relax
-\LoadClass[twoside, 11pt]{article}
 
-\RequirePackage{etoolbox}
+\LoadClass[11pt]{article}
+
 \RequirePackage{fancyhdr}
 \RequirePackage{graphicx}
 \RequirePackage{verbatim}
 \RequirePackage{enumitem}
 \RequirePackage{tabu}
 \RequirePackage{color}
+\RequirePackage{etoolbox}
 
 %% Catch environment variable
 \RequirePackage{catchfile}
@@ -44,6 +45,7 @@
 
 %% HEADER
 \global\let\@phase\@empty
+\getenv[\@phase]{OCIMATIC_PHASE}
 \newcommand{\phase}[1]{\def\@phase{#1}}
 
 \setlength\headheight{54.3pt} 
@@ -75,11 +77,31 @@
     \end{center}
 }
 
-\renewcommand*{\cleardoublepage}{\clearpage\if@twoside \ifodd\c@page\else
-\hbox{}%
-\thispagestyle{empty}%
-\newpage%
-\if@twocolumn\hbox{}\newpage\fi\fi\fi}
+%% Sideness
+\def\@sideness{oneside}
+\getenv[\@sideness]{OCIMATIC_SIDENESS}
+
+\renewcommand*{\cleardoublepage}{
+  \clearpage
+  \ifdefstring{\@sideness}{twoside}{%
+    \ifnumodd{\c@page}{}{%
+      \hbox{}%
+      \thispagestyle{empty}%
+      \newpage%
+    }
+  }{}
+}
+
+\global\let\@useblankpage\@empty
+\getenv[\@useblankpage]{OCIMATIC_BLANK_PAGE}
+\newcommand{\@blankpage}{%
+  \ifdefstring{\@sideness}{twoside}{%
+    \clearpage%
+    \thispagestyle{empty}%
+    \hbox{}
+    \clearpage
+  }{}
+}
 
 %% Secciones de description
 \renewcommand{\subsection}{\@startsection{subsection}{2}{\z@}%
@@ -91,13 +113,6 @@
 \newenvironment{outputDescription}{\subsection*{Salida}}{\par}
 
 
-\global\let\@useblankpage\@empty
-\getenv[\@useblankpage]{OCIMATIC_BLANK_PAGE}
-\newcommand{\@blankpage}{%
-\newpage%
-\thispagestyle{empty}%
-\makebox(200,300){}
-}
 \AtEndDocument{\ifdefempty{\@useblankpage}{\cleardoublepage}{\@blankpage}}
 % \AtEndDocument{\cleardoublepage}
 

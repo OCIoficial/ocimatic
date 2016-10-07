@@ -43,18 +43,37 @@ class Contest(object):
         """List[Task]"""
         return self._tasks
 
-    @ui.workgroup('Generating Problemset')
+
+    @ui.supergroup('Generating problemset')
     def build_problemset(self):
         """It builds the titlepage and the statement of all tasks. Then it merges
         all pdfs in a single file.
         """
+        self.build_problemset_twoside()
+        self.build_problemset_oneside()
+
+    @ui.workgroup('oneside')
+    def build_problemset_oneside(self):
+        os.environ['OCIMATIC_SIDENESS'] = 'oneside'
         self.compile_titlepage()
+
+        for (i, task) in enumerate(self._tasks):
+            task.build_statement(num=i)
+        self.merge_pdfs('oneside.pdf')
+
+    @ui.workgroup('twoside')
+    def build_problemset_twoside(self):
+        os.environ['OCIMATIC_SIDENESS'] = 'twoside'
+        self.compile_titlepage()
+
         for (i, task) in enumerate(self._tasks):
             last = i == len(self._tasks) - 1
-            task.build_statement(num=i, blank_page=last)
-        self.merge_pdfs()
+            blank_page = last and ocimatic.config['last_blank_page']
+            task.build_statement(num=i, blank_page=blank_page)
+        self.merge_pdfs('twoside.pdf')
 
-    @ui.work('PDF', 'titlepage.tex')
+
+    @ui.isolated_work('PDF', 'titlepage.tex')
     def compile_titlepage(self):
         """Compile title page latex
         Returns:
@@ -63,8 +82,8 @@ class Contest(object):
         st = self._compiler(self._titlepage)
         return (st, 'OK' if st else 'FAILED')
 
-    @ui.work('MERGE', 'problemset.pdf')
-    def merge_pdfs(self):
+    @ui.isolated_work('MERGE')
+    def merge_pdfs(self, filename):
         """Merges statements and title page in a single file """
         if not shutil.which('gs'):
             return (False, 'Cannot find gs')
@@ -77,7 +96,7 @@ class Contest(object):
 
         cmd = ('gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite'
                ' -dPDFSETTINGS=/prepress -sOutputFile=%s %s') % (
-                   FilePath(self._directory, 'problemset.pdf'),
+                   FilePath(self._directory, filename),
                    pdfs
                )
         complete = subprocess.run(cmd,

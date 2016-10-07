@@ -106,16 +106,25 @@ def show_message(label, msg, color=INFO):
     sys.stdout.write(' %s \n' % colorize(label + ': ' + msg, color + UNDERLINE))
 
 
-def work(action, target=None):
+def work(action):
     def decorator(func):
         def wrapper(self, *args, **kwargs):
-            start_work(action, str(target or self))
+            start_work(action, str(self))
             (st, msg) = func(self, *args, **kwargs)
             end_work(msg, st)
             return (st, msg)
         return wrapper
     return decorator
 
+def isolated_work(action, target=None):
+    def decorator(func):
+        def wrapper(self, *args, **kwargs):
+            start_work(action, target or args[0])
+            (st, msg) = func(self, *args, **kwargs)
+            end_work(msg, st)
+            return (st, msg)
+        return wrapper
+    return decorator
 
 def supergroup(msg=None):
     def decorator(func):
