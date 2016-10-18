@@ -179,6 +179,19 @@ class Directory(object):
         """
         return Directory(mkdtemp())
 
+    @staticmethod
+    def create(parent, name):
+        """Create new directory name in parent
+        Args:
+            parent (Directory): Parent directory
+            name (str): name of the new directory
+        Returns:
+            Directory: the created directory
+        """
+        path = os.path.join(parent.path, name)
+        os.mkdir(path)
+        return Directory(path)
+
     def __init__(self, path):
         """Produces an assertion error if the directory does not exist
         or if the path does not correspond to a directory.

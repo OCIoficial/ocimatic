@@ -23,7 +23,7 @@ class Contest(object):
         """
         self._directory = directory
         dirs = [d for d in directory.lsdir() if d.find_file('.ocimatic_task')]
-        self._tasks = [Task(d) for d in dirs]
+        self._tasks = [Task(d,i) for (i,d) in enumerate(dirs)]
         self._titlepage = FilePath(directory, 'titlepage.tex')
         self._compiler = LatexCompiler()
 
@@ -58,7 +58,7 @@ class Contest(object):
         self.compile_titlepage()
 
         for (i, task) in enumerate(self._tasks):
-            task.build_statement(num=i)
+            task.build_statement()
         self.merge_pdfs('oneside.pdf')
 
     @ui.workgroup('twoside')
@@ -69,9 +69,24 @@ class Contest(object):
         for (i, task) in enumerate(self._tasks):
             last = i == len(self._tasks) - 1
             blank_page = last and ocimatic.config['last_blank_page']
-            task.build_statement(num=i, blank_page=blank_page)
+            task.build_statement(blank_page=blank_page)
         self.merge_pdfs('twoside.pdf')
 
+    @ui.supergroup('Compressing contest')
+    def compress(self):
+        """Compress statement and dataset of all tasks in a single file"""
+        tmpdir = Directory.tmpdir()
+        try:
+            for task in self._tasks:
+                task.copy_to(tmpdir)
+            cmd = 'cd %s && zip -r contest.zip .' % tmpdir
+            st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
+            contest = FilePath(self._directory, '%s.zip' % self.name)
+            FilePath(tmpdir, 'contest.zip').copy(contest)
+        finally:
+            tmpdir.rmtree()
+
+        return st == 0
 
     @ui.isolated_work('PDF', 'titlepage.tex')
     def compile_titlepage(self):
@@ -108,6 +123,14 @@ class Contest(object):
         st = complete.returncode == 0
         return (st, 'OK' if st else 'FAILED')
 
+    @property
+    def name(self):
+        """str: Name of the contest"""
+        return self._directory.basename
+
+    def __str__(self):
+        return self.name
+
     def find_task(self, name):
         """find task with given name.
         Args:
@@ -130,7 +153,7 @@ class Task(object):
         copy_tree(os.path.join(ocimatic_dir, "resources/task-skel"),
                   task_path, preserve_symlinks=1)
 
-    def __init__(self, directory):
+    def __init__(self, directory, num):
         """
         Args:
             directory (Directory): Directory where the task resides.
@@ -150,9 +173,22 @@ class Task(object):
         if custom_checker:
             self._checker = CppChecker(custom_checker)
 
-        self._statement = Statement(directory.chdir('statement'))
+        self._statement = Statement(directory.chdir('statement'), num)
 
         self._dataset = Dataset(directory.chdir('dataset'), self._statement)
+
+    def copy_to(self, directory):
+        new_dir = Directory.create(directory, str(self))
+
+        (st, msg) = self.compress_dataset()
+        if st:
+            dataset = FilePath(new_dir, 'data.zip')
+            FilePath(self._directory.chdir('dataset'), 'data.zip').copy(dataset)
+
+        (st, msg) = self.build_statement()
+        if st:
+            statement = FilePath(new_dir, 'statement.pdf')
+            FilePath(self._directory.chdir('statement'), 'statement.pdf').copy(statement)
 
     @ui.work('ZIP')
     def compress_dataset(self):
@@ -221,9 +257,9 @@ class Task(object):
             ui.fatal_error('No correct solution.')
         self._correct[0].gen_expected(self._dataset, sample=sample)
 
-    def build_statement(self, num=None, blank_page=False):
+    def build_statement(self, blank_page=False):
         """Generate pdf for the statement"""
-        return self._statement.build(num=num, blank_page=blank_page)
+        return self._statement.build(blank_page=blank_page)
 
 
 class Solution(object):
@@ -841,7 +877,7 @@ class Statement(object):
     """Represents a statement. A statement is formed by a latex source and a pdf
     file.
     """
-    def __init__(self, directory):
+    def __init__(self, directory, num):
         """
         Args:
             directory (Directory): Directory to search for statement source file.
@@ -852,6 +888,7 @@ class Statement(object):
         self._pdf = self._source.chext('.pdf')
         self._compiler = LatexCompiler()
         self._directory = directory
+        self._num = num
 
     @property
     def pdf(self):
@@ -870,7 +907,7 @@ class Statement(object):
         return self._source.path
 
     @ui.work('PDF')
-    def build(self, num=None, blank_page=False):
+    def build(self, blank_page=False):
         """Compile statement latex source
         Args:
            blank_page (Optional[bool]) if true adds a blank page at the end of the
@@ -879,8 +916,7 @@ class Statement(object):
            (bool, msg) a tuple containing status code and result message.
 
         """
-        if num is not None:
-            os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A')+num)
+        os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A')+self._num)
         if blank_page:
             os.environ['OCIMATIC_BLANK_PAGE'] = 'True'
         st = self._compiler(self._source)

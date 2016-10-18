@@ -27,9 +27,12 @@ def new_contest(args):
         ui.fatal_error('Couldn\'t create contest: %s.' % exc)
 
 
-def contest_problemset(contest, _):
+def contest_problemset(contest):
     contest.build_problemset()
 
+
+def contest_compress(contest):
+    contest.compress()
 
 def contest_mode(args):
     if not args:
@@ -37,6 +40,7 @@ def contest_mode(args):
 
     actions = {
         'problemset': contest_problemset,
+        'compress': contest_compress,
     }
 
     if args[0] == "new":
@@ -44,7 +48,7 @@ def contest_mode(args):
     elif args[0] in actions:
         contest_dir = filesystem.change_directory()[0]
         contest = core.Contest(contest_dir)
-        actions[args[0]](contest, args[1:])
+        actions[args[0]](contest, *args[1:])
     else:
         ui.fatal_error('Unknown action for contest mode.')
 
