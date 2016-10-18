@@ -177,6 +177,10 @@ class Task(object):
 
         self._dataset = Dataset(directory.chdir('dataset'), self._statement)
 
+        self._dataset_plan = DatasetPlan(directory.chdir('attic'),
+                                         directory,
+                                         directory.chdir('dataset'))
+
     def copy_to(self, directory):
         new_dir = Directory.create(directory, str(self))
 
@@ -189,6 +193,10 @@ class Task(object):
         if st:
             statement = FilePath(new_dir, 'statement.pdf')
             FilePath(self._directory.chdir('statement'), 'statement.pdf').copy(statement)
+
+    @ui.task('Generating dataset')
+    def gen_input(self):
+        self._dataset_plan.run()
 
     @ui.work('ZIP')
     def compress_dataset(self):
@@ -229,6 +237,7 @@ class Task(object):
             pattern (Optional[string]): If present it only runs the solutions that
                 contain pattern as substring.
         """
+        print(pattern)
         for sol in self.solutions(partial):
             if not pattern or pattern in sol.name:
                 sol.run(self._dataset, self._checker)
@@ -346,6 +355,7 @@ class Solution(object):
     @property
     def name(self):
         return self._source.name
+
 
 class CppSolution(Solution):
     """Solution written in C++. This solutions is compiled with
@@ -688,6 +698,131 @@ class Test(object):
         return (st == 0, 'OK' if st == 0 else 'FAILED')
 
 
+class DatasetPlan(object):
+    """Functionality to read and run a plan for generating dataset."""
+
+    def __init__(self, directory, task_directory, dataset_directory):
+        self._directory = directory
+        self._task_directory = task_directory
+        self._dataset_directory = dataset_directory
+        self._cpp_compiler = CppCompiler()
+
+
+    def run(self, name='testplan.txt'):
+        path = FilePath(self._directory, name)
+        if not path.exists():
+            ui.fatal_error('No such file plan for creating dataset: "%s"' % path)
+        (subtasksno, cmds) = self.parse_file(path)
+
+        for st in range(1, subtasksno + 1):
+            dire = FilePath(self._dataset_directory, 'st%d' % st).get_or_create_dir()
+            dire.clear()
+
+        if not cmds:
+            ui.show_message("Warning", 'no commands were executed for the plan.',
+                            ui.WARNING)
+
+        for (cmd, st, test, args) in cmds:
+            st_dir = FilePath(self._dataset_directory, 'st%d' % st).get_or_create_dir()
+            if cmd == 'copy':
+                self.copy(args[1], st_dir)
+            else:
+                name = FilePath(args[0]).chext('').name
+                test_file = FilePath(st_dir, '-'.join([name] + args[1:]))
+                if cmd == 'cpp':
+                    self.run_cpp_generator(args[0], args[1:], test_file)
+                elif cmd == 'py':
+                    self.run_py_generator(args[0], args[1:], test_file)
+                else:
+                    ui.fatal_error('unexpected command when running plan: %s ' % cmd)
+
+
+    @ui.isolated_work('Copy')
+    def copy(self, src, dst):
+        fp = FilePath(self._task_directory, src)
+        if not fp.exists():
+            ui.fatal_error('when trying to copy file for plan:'
+                           ' no such file "%s"' % fp.path)
+        fp.copy(dst)
+        return (True, 'OK')
+
+    @ui.isolated_work('Gen')
+    def run_cpp_generator(self, source_name, args, dst):
+        source = FilePath(self._directory, source_name)
+        if not source.exists():
+            ui.fatal_error('when trying to run generator file for plan:'
+                           ' no such file "%s"' % source.path)
+        binary = source.chext('.bin')
+        if binary.mtime() < source.mtime():
+            st = self._cpp_compiler(source, binary)
+            if not st:
+                return (st, 'Failed to build generator')
+
+        (st, time, msg) = Runnable(binary.path).run(None, dst, args)
+        return (st, msg)
+
+    @ui.isolated_work('Gen')
+    def run_py_generator(self, source_name, args, dst):
+        source = FilePath(self._directory, source_name)
+        if not source.exists():
+            ui.fatal_error('when trying to run generator file for plan:'
+                           ' no such file "%s"' % source.path)
+
+        (st, time, msg) = Runnable('python').run(None, dst, [source.path]+args)
+        return (st, msg)
+
+
+    def parse_file(self, path):
+        """
+        Args:
+            path (FilePath)
+        """
+        cmds = []
+        st = 0
+        test = 1
+        for (lineno, line) in enumerate(path.open('r').readlines(), 1):
+            line = line.strip()
+            subtask_header = re.compile(r'\s*\[\s*Subtask\s*(\d+)\s*\]\s*')
+
+            if not line:
+                continue
+            if line[0] != '#':
+                match = subtask_header.fullmatch(line)
+                if match:
+                    found_st = int(match.group(1))
+                    if st + 1 != found_st:
+                        fatal_error(
+                            'line %d: found subtask %d, but subtask %d was expected' %
+                            (lineno, found_st, st)
+                        )
+                    st += 1
+                    test = 1
+                else:
+                    if st == 0:
+                        ui.fatal_error('line %d: found command before declaring a subtask.' % lineno)
+
+                    args = line.split()
+
+                    if args[0] == 'copy':
+                        if len(args) > 2:
+                            fatal_error('line %d: command copy expects exactly one argument.' % lineno)
+                        cmds.append(('copy', st, test, args))
+                    else:
+                        f = FilePath(self._directory, args[0])
+                        name = '%s-%s' % (st, test)
+                        if f.ext == '.cpp':
+                            cmds.append(('cpp', st, test, args))
+                        elif f.ext == '.py':
+                            cmds.append(('py', st, test, args))
+                        # else:
+                        #     cmds.append(('run', st, test, args))
+                        else:
+                            ui.fatal_error('line %d: unexpected command `%s` when'
+                                           ' parsing plan' % (lineno, args[0]))
+                    test += 1
+        return (st, cmds)
+
+
 class Checker(object):
     """Check solutions
     """
@@ -822,14 +957,17 @@ class Runnable(object):
         self._cmd = [command] + args
 
     def __str__(self):
-        return self._bin_path.name
+        return self._cmd[0]
 
-    def run(self, in_path, out_path, *args):
+    def run(self, in_path, out_path, args=[]):
         """Run binary redirecting standard input and output.
 
         Args:
-            in_path (FilePath): Path to redirect stdin from.
-            out_path (FilePath): File to redirec stdout to.
+            in_path (Optional[FilePath]): Path to redirect stdin from. If None
+                input is redirected from /dev/null.
+            out_path (Optional[FilePath]): File to redirec stdout to. If None
+                output is redirected to /dev/null.
+            args (List[str]): Additional parameters
 
         Returns:
             (bool, str, float): Returns a tuple (status, time, errmsg).
@@ -837,14 +975,19 @@ class Runnable(object):
                 or False otherwise.
                 time corresponds to execution time.
                 if status is False errmsg contains an explanatory error
-                message.
+                message, otherwise it contains a success message.
         """
-        assert(in_path.exists())
+        assert(in_path is None or in_path.exists())
         with ExitStack() as stack:
+            if in_path is None:
+                in_path = FilePath('/dev/null')
             in_file = stack.enter_context(in_path.open('r'))
+            if not out_path:
+                out_path = FilePath('/dev/null')
             out_file = stack.enter_context(out_path.open('w'))
 
             start = monotonic_time()
+            self._cmd.extend(args)
             try:
                 complete = subprocess.run(self._cmd,
                                           timeout=ocimatic.config['timeout'],
@@ -857,7 +1000,7 @@ class Runnable(object):
             time = monotonic_time() - start
             ret = complete.returncode
             status = ret == 0
-            msg = ''
+            msg = 'OK'
             if not status:
                 stderr = complete.stderr.strip('\n')
                 if 0 < len(stderr) < 75:

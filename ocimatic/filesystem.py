@@ -39,7 +39,7 @@ def pwd():
 @total_ordering
 class FilePath(object):
     """Represents a path to a file. The file may not exist in the
-    file system, however the directory where the file resides must exist.
+    file system.
     """
     @staticmethod
     def tmpfile():
@@ -55,12 +55,14 @@ class FilePath(object):
             arg2 (Optional[str]): name of the file (including extension).
         """
         if arg2:
-            self._directory = arg1
+            if isinstance(arg1, Directory):
+                self._directory = arg1.path
+            else:
+                self._directory = arg1
             self._filename = arg2
         else:
             dirname = os.path.dirname(arg1)
-            assert(os.path.exists(dirname))
-            self._directory = Directory(dirname)
+            self._directory = dirname
             self._filename = os.path.basename(arg1)
 
     def __str__(self):
@@ -72,9 +74,18 @@ class FilePath(object):
     def copy(self, dest):
         """Copy file in this path.
         Args:
-           dest (FilePath): destination path
+           dest (FilePath|Directory): destination path
         """
         shutil.copy2(self.path, dest.path)
+
+    def create_dir(self):
+        os.mkdor(self.path)
+        return Directory(self.path)
+
+    def get_or_create_dir(self):
+        if not self.exists():
+            os.mkdir(self.path)
+        return Directory(self.path)
 
     def remove(self):
         """Removes file in this path from the filesystem"""
@@ -102,7 +113,7 @@ class FilePath(object):
     @property
     def path(self):
         """str: Full path to file"""
-        return os.path.join(self._directory.path, self._filename)
+        return os.path.join(self._directory, self._filename)
 
     def __eq__(self, other):
         return self.fullath == other.path
@@ -119,7 +130,7 @@ class FilePath(object):
         Returns:
             FilePath: file path with the new extension
         """
-        return FilePath(self._directory, self.rootname()+ext)
+        return FilePath(os.path.join(self._directory,self.rootname()+ext))
 
     def splitext(self, full=False):
         """Split filename in root name and extension.
@@ -151,7 +162,7 @@ class FilePath(object):
         Returns:
             Directory
         """
-        return self._directory
+        return Directory(self._directory)
 
     def exists(self):
         """Returns true if the file actually exists in the file system
@@ -160,9 +171,6 @@ class FilePath(object):
             bool
         """
         return os.path.exists(self.path)
-
-    def __bool__(self):
-        return self.exists()
 
 
 @total_ordering
@@ -202,6 +210,14 @@ class Directory(object):
         assert(os.path.isdir(path))
         self._path = os.path.abspath(path)
 
+    def clear(self):
+        """Remove all files in this directory recursively but keeps the directory
+        """
+        for f in self.lsfile():
+            f.remove()
+        for subdir in self.lsdir():
+            subdir.rmtree()
+
     def __str__(self):
         return self.path
 
@@ -230,7 +246,6 @@ class Directory(object):
             Directory: The new directory.
         """
         return Directory(os.path.join(self.path, path))
-
     def __eq__(self, other):
         return self.fullath == other.path
 

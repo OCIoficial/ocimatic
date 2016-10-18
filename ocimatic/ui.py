@@ -119,7 +119,7 @@ def work(action):
 def isolated_work(action, target=None):
     def decorator(func):
         def wrapper(self, *args, **kwargs):
-            start_work(action, target or args[0])
+            start_work(action, target or str(args[0]))
             (st, msg) = func(self, *args, **kwargs)
             end_work(msg, st)
             return (st, msg)

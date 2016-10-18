@@ -26,21 +26,13 @@ def new_contest(args):
     except Exception as exc:
         ui.fatal_error('Couldn\'t create contest: %s.' % exc)
 
-
-def contest_problemset(contest):
-    contest.build_problemset()
-
-
-def contest_compress(contest):
-    contest.compress()
-
 def contest_mode(args):
     if not args:
         ui.ocimatic_help()
 
     actions = {
-        'problemset': contest_problemset,
-        'compress': contest_compress,
+        'problemset': 'build_problemset',
+        'compress': 'compress',
     }
 
     if args[0] == "new":
@@ -48,7 +40,7 @@ def contest_mode(args):
     elif args[0] in actions:
         contest_dir = filesystem.change_directory()[0]
         contest = core.Contest(contest_dir)
-        actions[args[0]](contest, *args[1:])
+        getattr(contest, actions[args[0]])()
     else:
         ui.fatal_error('Unknown action for contest mode.')
 
@@ -66,53 +58,19 @@ def new_task(args):
         ui.fatal_error('Couldn\'t create task: %s' % exc)
 
 
-def tasks_run(tasks, pattern=None):
-    for task in tasks:
-        task.run_solutions(partial=OPTS['partial'], pattern=pattern)
-
-
-def tasks_check(tasks):
-    for task in tasks:
-        task.check_dataset()
-
-
-def tasks_build(tasks, pattern):
-    for task in tasks:
-        task.build_solutions(pattern=pattern)
-
-
-def tasks_gen_expected(tasks):
-    for task in tasks:
-        task.gen_expected(sample=OPTS['sample'])
-
-
-def tasks_build_statement(tasks):
-    for task in tasks:
-        task.build_statement()
-
-
-def tasks_compress(tasks):
-    for task in tasks:
-        task.compress_dataset()
-
-
-def tasks_normalize(tasks):
-    for task in tasks:
-        task.normalize()
-
-
 def task_mode(args):
     if not args:
         ui.ocimatic_help()
 
     actions = {
-        'build': tasks_build,
-        'check': tasks_check,
-        'expected': tasks_gen_expected,
-        'pdf': tasks_build_statement,
-        'run': tasks_run,
-        'compress': tasks_compress,
-        'normalize' : tasks_normalize,
+        'build': ('build_solutions', ['pattern'], {}),
+        'check': ('check_dataset', [], {}),
+        'expected': ('gen_expected', [], {'sample': OPTS['sample']}),
+        'pdf': ('build_statement', [], {}),
+        'run': ('run_solutions', ['pattern'], {'partial': OPTS['partial']}),
+        'compress': ('compress_dataset', [], {}),
+        'normalize' : ('normalize', [], {}),
+        'gen-input': ('gen_input', [], {}),
     }
 
     (contest_dir, task_call) = filesystem.change_directory()
@@ -131,20 +89,28 @@ def task_mode(args):
         if not tasks:
             ui.show_message("Warning", "no tasks", ui.WARNING)
 
-        actions[args[0]](tasks, *args[1:])
-
+        # actions[args[0]](tasks, *args[1:])
+        action = actions[args[0]]
+        args.pop(0)
+        kwargs = action[2]
+        if len(args) > len(action[1]):
+            ui.fatal_error(
+                'action %d expect no more than %d argument. %d were given' %
+                (action[0], len(action[1]), len(args))
+            )
+        for (i, arg) in enumerate(args):
+            kwargs[action[1][i]] = arg
+        for task in tasks:
+            getattr(task, action[0])(**kwargs)
     else:
         ui.fatal_error('Unknown action for task mode.')
 
-
-def dataset_compress(dataset):
-    dataset.compress()
 
 def dataset_mode(args):
     if not args:
         ui.ocimatic_help()
     actions = {
-        'compress': dataset_compress,
+        'compress': 'compress',
     }
     if args[0] in actions:
         in_ext = '.in'
@@ -154,7 +120,7 @@ def dataset_mode(args):
         if len(args) > 2:
             sol_ext = args[2]
         dataset = core.Dataset(filesystem.pwd(), in_ext=in_ext, sol_ext=sol_ext)
-        actions[args[0]](dataset)
+        getattr(dataset, actions[args[0]])()
     else:
         ui.fatal_error('Unknown action for dataset mode.')
 
