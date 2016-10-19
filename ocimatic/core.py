@@ -712,9 +712,9 @@ class DatasetPlan(object):
         path = FilePath(self._directory, name)
         if not path.exists():
             ui.fatal_error('No such file plan for creating dataset: "%s"' % path)
-        (subtasksno, cmds) = self.parse_file(path)
+        (subtasks, cmds) = self.parse_file(path)
 
-        for st in range(1, subtasksno + 1):
+        for st in range(1, subtasks + 1):
             dire = FilePath(self._dataset_directory, 'st%d' % st).get_or_create_dir()
             dire.clear()
 
@@ -722,36 +722,48 @@ class DatasetPlan(object):
             ui.show_message("Warning", 'no commands were executed for the plan.',
                             ui.WARNING)
 
-        for (cmd, st, test, args) in cmds:
-            st_dir = FilePath(self._dataset_directory, 'st%d' % st).get_or_create_dir()
-            if cmd == 'copy':
-                self.copy(args[1], st_dir)
-            else:
-                name = FilePath(args[0]).chext('').name
-                test_file = FilePath(st_dir, '-'.join([name] + args[1:]))
-                if cmd == 'cpp':
-                    self.run_cpp_generator(args[0], args[1:], test_file)
-                elif cmd == 'py':
-                    self.run_py_generator(args[0], args[1:], test_file)
-                else:
-                    ui.fatal_error('unexpected command when running plan: %s ' % cmd)
+        for (st, tests) in sorted(cmds.items()):
+            self.run_subtask('Subtask %d'%st, st, tests)
 
+    @ui.isolated_workgroup()
+    def run_subtask(self, msg, st, tests):
+        for test in tests:
+            st_dir = FilePath(self._dataset_directory, 'st%d' % st).get_or_create_dir()
+            cmd = test['cmd']
+            if cmd == 'copy':
+                self.copy(test['file'], st_dir)
+            else:
+                if cmd in ['cpp', 'py']:
+                    source = FilePath(self._directory, test['source'])
+                    test_file = FilePath(st_dir,
+                                            test['source']).chext('-%d.in' % test['num'])
+                    if cmd == 'cpp':
+                        self.run_cpp_generator(source, test['args'], test_file)
+                    elif cmd == 'py':
+                        self.run_py_generator(source, test['args'], test_file)
+                elif cmd == 'run':
+                    bin_path = FilePath(self._directory, test['bin'])
+                    test_file = FilePath(st_dir, '%s-%s.in' % (test['bin'], test['num']))
+                    self.run_bin_generator(bin_path, test['args'], test_file)
+                else:
+                    ui.fatal_error('unexpected command when running plan: %s '
+                                    % cmd)
 
     @ui.isolated_work('Copy')
     def copy(self, src, dst):
         fp = FilePath(self._task_directory, src)
         if not fp.exists():
-            ui.fatal_error('when trying to copy file for plan:'
-                           ' no such file "%s"' % fp.path)
-        fp.copy(dst)
-        return (True, 'OK')
+            return (False, 'No such file')
+        try:
+            fp.copy(dst)
+            return (True, 'OK')
+        except:
+            return (False, 'Unexpected error when copying file')
 
     @ui.isolated_work('Gen')
-    def run_cpp_generator(self, source_name, args, dst):
-        source = FilePath(self._directory, source_name)
+    def run_cpp_generator(self, source, args, dst):
         if not source.exists():
-            ui.fatal_error('when trying to run generator file for plan:'
-                           ' no such file "%s"' % source.path)
+            return (False, 'No such file')
         binary = source.chext('.bin')
         if binary.mtime() < source.mtime():
             st = self._cpp_compiler(source, binary)
@@ -762,13 +774,19 @@ class DatasetPlan(object):
         return (st, msg)
 
     @ui.isolated_work('Gen')
-    def run_py_generator(self, source_name, args, dst):
-        source = FilePath(self._directory, source_name)
+    def run_py_generator(self, source, args, dst):
         if not source.exists():
-            ui.fatal_error('when trying to run generator file for plan:'
-                           ' no such file "%s"' % source.path)
-
+            return (False, 'No such file')
         (st, time, msg) = Runnable('python').run(None, dst, [source.path]+args)
+        return (st, msg)
+
+    @ui.isolated_work('Gen')
+    def run_bin_generator(self, bin_path, args, dst):
+        if not bin_path.exists():
+            return (False, 'No such file')
+        if not Runnable.is_callable(bin_path):
+            return (False, 'Cannot run file, it may not have correct permissions')
+        (st, time, msg) = Runnable(bin_path.path).run(None, dst, args)
         return (st, msg)
 
 
@@ -777,7 +795,7 @@ class DatasetPlan(object):
         Args:
             path (FilePath)
         """
-        cmds = []
+        cmds = {}
         st = 0
         test = 1
         for (lineno, line) in enumerate(path.open('r').readlines(), 1):
@@ -796,6 +814,7 @@ class DatasetPlan(object):
                             (lineno, found_st, st)
                         )
                     st += 1
+                    cmds[st] = []
                     test = 1
                 else:
                     if st == 0:
@@ -806,19 +825,38 @@ class DatasetPlan(object):
                     if args[0] == 'copy':
                         if len(args) > 2:
                             fatal_error('line %d: command copy expects exactly one argument.' % lineno)
-                        cmds.append(('copy', st, test, args))
+                        cmds[st].append({
+                            'cmd': 'copy',
+                            'num': test,
+                            'file': args[1]
+                        })
                     else:
                         f = FilePath(self._directory, args[0])
                         name = '%s-%s' % (st, test)
                         if f.ext == '.cpp':
-                            cmds.append(('cpp', st, test, args))
+                            cmds[st].append({
+                                'cmd': 'cpp',
+                                'num': test,
+                                'source': args[0],
+                                'args': args[1:]
+                            })
                         elif f.ext == '.py':
-                            cmds.append(('py', st, test, args))
-                        # else:
-                        #     cmds.append(('run', st, test, args))
+                            cmds[st].append({
+                                'cmd': 'py',
+                                'num': test,
+                                'source': args[0],
+                                'args': args[1:]
+                            })
                         else:
-                            ui.fatal_error('line %d: unexpected command `%s` when'
-                                           ' parsing plan' % (lineno, args[0]))
+                            cmds[st].append({
+                                'cmd': 'run',
+                                'num': test,
+                                'bin': args[0],
+                                'args': args[1:]
+                            })
+                        # else:
+                        #     ui.fatal_error('line %d: unexpected command `%s` when'
+                        #                    ' parsing plan' % (lineno, args[0]))
                     test += 1
         return (st, cmds)
 
@@ -946,6 +984,10 @@ class Runnable(object):
         26: 'SIGVTALRM', 27: 'SIGPROF', 28: 'SIGWINCH', 29: 'SIGINFO',
         30: 'SIGUSR1', 31: 'SIGUSR2',
     }
+
+    @staticmethod
+    def is_callable(file_path):
+        return shutil.which(file_path.path) is not None
 
     def __init__(self, command, args=[]):
         """

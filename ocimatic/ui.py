@@ -143,6 +143,14 @@ def workgroup(msg=None):
         return wrapper
     return decorator
 
+def isolated_workgroup(msg=None):
+    def decorator(func):
+        def wrapper(self, *args, **kwargs):
+            workgroup_header(msg or str(args[0]))
+            return func(self, *args, **kwargs)
+        return wrapper
+    return decorator
+
 
 def task(action):
     def decorator(func):
