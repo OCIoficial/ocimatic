@@ -4,6 +4,7 @@ import os
 
 import ocimatic
 from ocimatic import core, ui, filesystem
+from ocimatic.filesystem import Directory
 
 OPTS = {
     'partial': False,
@@ -19,9 +20,20 @@ def new_contest(args):
     name = args[0]
 
     try:
-        # @TODO (NL: 14/09/2016) Ask for confirmation before creating contest
-        # on existing directory.
-        core.Contest.create_layout(os.path.join(os.getcwd(), name))
+        cwd = Directory.getcwd()
+        contest_path = cwd.find(name)
+        if contest_path:
+            if contest_path.isdir():
+                ui.write('Creating contest in existing directory, are you sure (y/N)? ')
+                res = input()
+                if res != 'y' and res != 'Y':
+                    sys.exit(0)
+            else:
+                ui.fatal_error('Couldn\'t create contest. File exists')
+            contest_dir = contest_path.get_or_create_dir()
+        else:
+            contest_dir = cwd.mkdir(name)
+        core.Contest.create_layout(contest_path)
         ui.show_message('Info', 'Contest [%s] created' % name)
     except Exception as exc:
         ui.fatal_error('Couldn\'t create contest: %s.' % exc)
@@ -50,9 +62,11 @@ def new_task(args):
         ui.fatal_error('You have to specify a name for the task.')
     name = args[0]
     try:
-        # @TODO (NL: 14/10/2016) Ask for confirmation before creating task
-        # on existing directory.
-        core.Task.create_layout(os.path.join(os.getcwd(), name))
+        cwd = Directory.getcwd()
+        if cwd.find(name):
+            ui.fatal_error('Cannot create task in existing directory.')
+        task_dir = cwd.mkdir(name)
+        core.Task.create_layout(task_dir)
         ui.show_message('Info', 'Task [%s] created' % name)
     except Exception as exc:
         ui.fatal_error('Couldn\'t create task: %s' % exc)
@@ -95,7 +109,7 @@ def task_mode(args):
         kwargs = action[2]
         if len(args) > len(action[1]):
             ui.fatal_error(
-                'action %d expect no more than %d argument. %d were given' %
+                'action %d expect no more than %d argument, %d were given' %
                 (action[0], len(action[1]), len(args))
             )
         for (i, arg) in enumerate(args):
@@ -119,7 +133,7 @@ def dataset_mode(args):
             in_ext = args[1]
         if len(args) > 2:
             sol_ext = args[2]
-        dataset = core.Dataset(filesystem.pwd(), in_ext=in_ext, sol_ext=sol_ext)
+        dataset = core.Dataset(Directory.getcwd(), in_ext=in_ext, sol_ext=sol_ext)
         getattr(dataset, actions[args[0]])()
     else:
         ui.fatal_error('Unknown action for dataset mode.')

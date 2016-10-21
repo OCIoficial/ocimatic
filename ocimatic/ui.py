@@ -55,6 +55,9 @@ def decolorize(text):
 def writeln(text=''):
     sys.stdout.write(text+'\n')
 
+def write(text):
+    sys.stdout.write(text)
+
 
 def task_header(name, msg):
     """Print header for task"""
@@ -106,7 +109,7 @@ def show_message(label, msg, color=INFO):
     sys.stdout.write(' %s \n' % colorize(label + ': ' + msg, color + UNDERLINE))
 
 
-def work(action):
+def self_work(action):
     def decorator(func):
         def wrapper(self, *args, **kwargs):
             start_work(action, str(self))
@@ -116,7 +119,7 @@ def work(action):
         return wrapper
     return decorator
 
-def isolated_work(action, target=None):
+def args_work(action, target=None):
     def decorator(func):
         def wrapper(self, *args, **kwargs):
             start_work(action, target or str(args[0]))
@@ -135,18 +138,22 @@ def supergroup(msg=None):
     return decorator
 
 
-def workgroup(msg=None):
+def self_workgroup():
     def decorator(func):
         def wrapper(self, *args, **kwargs):
-            workgroup_header(msg or str(self))
+            workgroup_header(str(self))
             return func(self, *args, **kwargs)
         return wrapper
     return decorator
 
-def isolated_workgroup(msg=None):
+def args_workgroup(formatter=None):
     def decorator(func):
         def wrapper(self, *args, **kwargs):
-            workgroup_header(msg or str(args[0]))
+            if formatter:
+                msg = formatter.format(*args)
+            else:
+                msg = str(args[0])
+            workgroup_header(msg)
             return func(self, *args, **kwargs)
         return wrapper
     return decorator

@@ -3,6 +3,7 @@ import os
 import shutil
 from functools import total_ordering
 from tempfile import mkstemp, mkdtemp
+from distutils.dir_util import copy_tree
 
 from ocimatic import ui
 
@@ -31,12 +32,6 @@ def change_directory():
     return (Directory(os.getcwd()), task_call)
 
 
-def pwd():
-    """Returns current directory"""
-    return Directory(os.getcwd())
-
-
-@total_ordering
 class FilePath(object):
     """Represents a path to a file. The file may not exist in the
     file system.
@@ -56,7 +51,7 @@ class FilePath(object):
         """
         if arg2:
             if isinstance(arg1, Directory):
-                self._directory = arg1.path
+                self._directory = str(arg1.path())
             else:
                 self._directory = arg1
             self._filename = arg2
@@ -65,31 +60,31 @@ class FilePath(object):
             self._directory = dirname
             self._filename = os.path.basename(arg1)
 
-    def __str__(self):
-        return self.path
+    def isdir(self):
+        return os.path.isdir(self.path)
 
     def open(self, mode):
-        return open(self.path, mode)
+        return open(str(self), mode)
 
     def copy(self, dest):
         """Copy file in this path.
         Args:
            dest (FilePath|Directory): destination path
         """
-        shutil.copy2(self.path, dest.path)
+        shutil.copy2(str(self), str(dest))
 
     def create_dir(self):
-        os.mkdor(self.path)
-        return Directory(self.path)
+        os.mkdir(str(self))
+        return Directory(str(self))
 
     def get_or_create_dir(self):
         if not self.exists():
-            os.mkdir(self.path)
-        return Directory(self.path)
+            self.create_dir()
+        return Directory(str(self))
 
     def remove(self):
         """Removes file in this path from the filesystem"""
-        os.remove(self.path)
+        os.remove(str(self))
 
     @property
     def name(self):
@@ -104,22 +99,20 @@ class FilePath(object):
         """str: File extension beginning with dot. """
         return self.splitext()[1]
 
-    def rootname(self, full=False):
+    def rootname(self):
         """Return filename without extension.
         Args:
             full (bool): if true returns fullpath."""
         return self.splitext()[0]
 
-    @property
-    def path(self):
-        """str: Full path to file"""
+    def __str__(self):
         return os.path.join(self._directory, self._filename)
 
     def __eq__(self, other):
-        return self.fullath == other.path
+        return str(self) == str(other)
 
     def __lt__(self, other):
-        return self.path < other.path
+        return str(self) < str(other)
 
     def chext(self, ext):
         """Change extension of file
@@ -130,18 +123,16 @@ class FilePath(object):
         Returns:
             FilePath: file path with the new extension
         """
-        return FilePath(os.path.join(self._directory,self.rootname()+ext))
+        return FilePath(os.path.join(self._directory, self.rootname()+ext))
 
-    def splitext(self, full=False):
+    def splitext(self):
         """Split filename in root name and extension.
-        Args:
-            full (bool): if true returns rootname with fullpath.
 
         Returns:
             (str, str): A pair where the first component corresponds
                 to root name and the second to the extension.
         """
-        return os.path.splitext(self.path if full else self._filename)
+        return os.path.splitext(self._filename)
 
     def mtime(self):
         """Returns modification time. If the file does not exists in
@@ -152,7 +143,7 @@ class FilePath(object):
                 does not exists.
         """
         if self.exists():
-            return os.path.getmtime(self.path)
+            return os.path.getmtime(str(self))
         else:
             return float('-Inf')
 
@@ -170,7 +161,7 @@ class FilePath(object):
         Returns:
             bool
         """
-        return os.path.exists(self.path)
+        return os.path.exists(str(self))
 
 
 @total_ordering
@@ -188,17 +179,8 @@ class Directory(object):
         return Directory(mkdtemp())
 
     @staticmethod
-    def create(parent, name):
-        """Create new directory name in parent
-        Args:
-            parent (Directory): Parent directory
-            name (str): name of the new directory
-        Returns:
-            Directory: the created directory
-        """
-        path = os.path.join(parent.path, name)
-        os.mkdir(path)
-        return Directory(path)
+    def getcwd():
+        return Directory(os.getcwd())
 
     def __init__(self, path):
         """Produces an assertion error if the directory does not exist
@@ -210,6 +192,19 @@ class Directory(object):
         assert(os.path.isdir(path))
         self._path = os.path.abspath(path)
 
+    def mkdir(self, name):
+        """Create new directory name inside this directory
+        Args:
+            parent (Directory): Parent directory
+            name (str): name of the new directory
+        Returns:
+            Directory: the created directory
+        """
+        path = os.path.join(str(self.path()), name)
+        assert(not os.path.exists(path))
+        os.mkdir(path)
+        return Directory(path)
+
     def clear(self):
         """Remove all files in this directory recursively but keeps the directory
         """
@@ -219,38 +214,38 @@ class Directory(object):
             subdir.rmtree()
 
     def __str__(self):
-        return self.path
+        return str(self.path())
 
     def rmtree(self):
         """Removes this directory from the filesystem."""
-        shutil.rmtree(self.path)
+        shutil.rmtree(str(self.path()))
 
     @property
     def basename(self):
         """str: Name of this directory"""
         return os.path.basename(self._path)
 
-    @property
     def path(self):
-        """str: Full path to directory."""
-        return self._path
+        """FilePath: Full path to directory."""
+        return FilePath(self._path)
 
-    def chdir(self, path):
+    def chdir(self, *subdirs):
         """Changes directory. If the new directory does not exists
         this functions produces an assertion error.
 
         Args:
-            path (str): A path relative to this directory.
+            paths (List[str]):
 
         Returns:
             Directory: The new directory.
         """
-        return Directory(os.path.join(self.path, path))
+        return Directory(os.path.join(str(self.path()), *subdirs))
+
     def __eq__(self, other):
-        return self.fullath == other.path
+        return self.path() == other.path()
 
     def __lt__(self, other):
-        return self.path < other.path
+        return self.path() < other.path()
 
     def lsfile(self, pattern='*'):
         """List files inside this directory sorted by name.
@@ -262,19 +257,28 @@ class Directory(object):
         Returns:
             List[FilePath]
         """
-        pattern = os.path.join(self.path, pattern)
+        pattern = os.path.join(str(self.path()), pattern)
         files = [FilePath(f) for f in glob.glob(pattern) if os.path.isfile(f)]
         return sorted(files)
 
-    def lsdir(self):
+    def lsdir(self, pattern='*'):
         """List directories inside this directory sorted by name.
 
         Returns:
             List[Directory]
         """
-        pattern = os.path.join(self.path, '*')
+        pattern = os.path.join(str(self.path()), pattern)
         dirs = [Directory(f) for f in glob.glob(pattern) if os.path.isdir(f)]
         return sorted(dirs)
+
+    def ls(self, pattern='*'):
+        pattern = os.path.join(str(self.path()), pattern)
+        paths = [FilePath(f) for f in glob.glob(pattern)]
+        return sorted(paths)
+
+    def find(self, name):
+        files = self.ls(name)
+        return files[0] if len(files) > 0 else None
 
     def find_file(self, filename):
         """Finds a file by name in this directory.
@@ -285,3 +289,12 @@ class Directory(object):
         """
         files = self.lsfile(filename)
         return files[0] if len(files) > 0 else None
+
+    def copy_tree(self, dest):
+        """
+        Copy recursively all content from directory to destination and create
+        dest if it does not exists.
+        Args:
+            dest (FilePath): destination folder
+        """
+        copy_tree(self.path, dest.path, preserve_symlinks=1)
