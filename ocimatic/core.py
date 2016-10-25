@@ -715,6 +715,7 @@ class DatasetPlan(object):
         self._task_directory = task_directory
         self._dataset_directory = dataset_directory
         self._cpp_compiler = CppCompiler()
+        self._java_compiler = JavaCompiler()
 
 
     def run(self, name='testplan.txt'):
@@ -739,20 +740,23 @@ class DatasetPlan(object):
         for test in tests:
             st_dir = FilePath(self._dataset_directory, 'st%d' % st).get_or_create_dir()
             cmd = test['cmd']
+            test_file = FilePath(st_dir, '%02d.in' % test['num'])
             if cmd == 'copy':
-                self.copy(test['file'], st_dir)
+                self.copy(test['file'], test_file)
             else:
-                if cmd in ['cpp', 'py']:
+                if cmd in ['cpp', 'py', 'java']:
                     source = FilePath(self._directory, test['source'])
-                    test_file = FilePath(st_dir,
-                                            test['source']).chext('-%d.in' % test['num'])
+                    # test_file = FilePath(st_dir,
+                    #                      test['source']).chext('-%d.in' % test['num'])
                     if cmd == 'cpp':
                         self.run_cpp_generator(source, test['args'], test_file)
                     elif cmd == 'py':
                         self.run_py_generator(source, test['args'], test_file)
+                    elif cmd == 'java':
+                        self.run_java_generator(source, test['args'], test_file)
                 elif cmd == 'run':
                     bin_path = FilePath(self._directory, test['bin'])
-                    test_file = FilePath(st_dir, '%s-%s.in' % (test['bin'], test['num']))
+                    # test_file = FilePath(st_dir, '%s-%s.in' % (test['bin'], test['num']))
                     self.run_bin_generator(bin_path, test['args'], test_file)
                 else:
                     ui.fatal_error('unexpected command when running plan: %s ' % cmd)
@@ -786,6 +790,21 @@ class DatasetPlan(object):
         if not source.exists():
             return (False, 'No such file')
         (st, time, msg) = Runnable('python', [str(source)]).run(None, dst, args)
+        return (st, msg)
+
+    @ui.args_work('Gen')
+    def run_java_generator(self, source, args, dst):
+        if not source.exists():
+            return (False, 'No such file')
+        bytecode = source.chext('.class')
+        if bytecode.mtime() < source.mtime():
+            st = self._java_compiler(source)
+            if not st:
+                return (st, 'Failed to build generator')
+
+        classname = str(bytecode.rootname())
+        classpath = str(bytecode.directory())
+        (st, time, msg) = Runnable('java', ['-cp', classpath, classname]).run(None, dst, args)
         return (st, msg)
 
     @ui.args_work('Gen')
@@ -851,6 +870,13 @@ class DatasetPlan(object):
                         elif f.ext == '.py':
                             cmds[st].append({
                                 'cmd': 'py',
+                                'num': test,
+                                'source': args[0],
+                                'args': args[1:]
+                            })
+                        elif f.ext == '.java':
+                            cmds[st].append({
+                                'cmd': 'java',
                                 'num': test,
                                 'source': args[0],
                                 'args': args[1:]

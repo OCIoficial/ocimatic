@@ -109,7 +109,7 @@ def task_mode(args):
         kwargs = action[2]
         if len(args) > len(action[1]):
             ui.fatal_error(
-                'action %d expect no more than %d argument, %d were given' %
+                'action %s expects no more than %d argument, %d were given' %
                 (action[0], len(action[1]), len(args))
             )
         for (i, arg) in enumerate(args):
