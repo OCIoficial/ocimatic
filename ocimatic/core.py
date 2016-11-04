@@ -538,8 +538,8 @@ class Dataset(object):
                 return True
 
             cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir,
-                                                    self._in_ext,
-                                                    self._sol_ext)
+                                                     self._in_ext,
+                                                     self._sol_ext)
             st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
             dst_file = FilePath(self._directory, 'data.zip')
             FilePath(tmpdir, 'data.zip').copy(dst_file)
@@ -701,7 +701,7 @@ class Test(object):
         null = subprocess.DEVNULL
         st = subprocess.call(tounix_input, stdout=null, stderr=null, shell=True)
         st += subprocess.call(sed_input, stdout=null, stderr=null, shell=True)
-        if self.expected_path:
+        if self.expected_path.exists():
             st += subprocess.call(tounix_expected, stdout=null, stderr=null, shell=True)
             st += subprocess.call(sed_expected, stdout=null, stderr=null, shell=True)
         return (st == 0, 'OK' if st == 0 else 'FAILED')

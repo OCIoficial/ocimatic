@@ -15,8 +15,8 @@
 
 [Subtask 1]
   # Use sample data as test
-  1 ; copy documents/sample-1.in
-  1 ; copy documents/sample-2.in
+  1 ; copy statement/sample-1.in
+  1 ; copy statement/sample-2.in
 
   # Manual test case
   2 ; copy attic/manual-1.in
