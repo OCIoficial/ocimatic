@@ -14,6 +14,7 @@
 \RequirePackage{tabu}
 \RequirePackage{color}
 \RequirePackage{etoolbox}
+\RequirePackage{xparse}
 
 %% Catch environment variable
 \RequirePackage{catchfile}
@@ -119,24 +120,24 @@
 %% Ejemplo Input/Output
 
 \definecolor{samplegray}{rgb}{0.3,0.3,0.3}
-\newcommand{\sampleIO}[1]{%
+\NewDocumentCommand{\sampleIO}{O{0.45}O{0.45}m}{%
   \begin{minipage}[c]{\textwidth}
     \begin{center}
       \begin{tabu}{|l|} 
         \taburulecolor{samplegray}
         \hline
-        \begin{minipage}[t]{0.45\textwidth}
+        \begin{minipage}[t]{#1\textwidth}
             \vskip 0.3pt
             \bf{Entrada de ejemplo}
             \vskip 12pt
-\verbatiminput{#1.in}
+\verbatiminput{#3.in}
             \vskip 4pt
         \end{minipage}
-        \begin{minipage}[t]{0.45\textwidth}
+        \begin{minipage}[t]{#2\textwidth}
             \vskip 0.3pt
             \bf{Salida de ejemplo}
             \vskip 12pt
-\verbatiminput{#1.sol}
+\verbatiminput{#3.sol}
             \vskip 4pt
         \end{minipage}
         \\
@@ -146,7 +147,6 @@
   \end{minipage}
   \vskip 12pt
 }
-
 
 \newenvironment{scoreDescription}{\subsection*{Subtareas y puntaje}\begin{description}[leftmargin=0pt]\itemsep 0pt}{\end{description}}
 \newcommand{\score}[1]{\item[#1 puntos]}

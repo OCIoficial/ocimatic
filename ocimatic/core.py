@@ -1159,11 +1159,10 @@ class Statement(object):
         latex_file = self._source.open('r')
         samples = set()
         for line in latex_file:
-            m = re.match(r'[^%]*\\sampleIO{([^}]*)}', line)
-            m and samples.add(m.group(1))
+            m = re.match(r'[^%]*\\sampleIO(\[[^\]]*\]){0,2}{([^}]+)}', line)
+            m and samples.add(m.group(2))
         latex_file.close()
-        samples = [FilePath(self._directory, s) for s in samples]
-        return samples
+        return [FilePath(self._directory, s) for s in samples]
 
 
 class LatexCompiler(object):

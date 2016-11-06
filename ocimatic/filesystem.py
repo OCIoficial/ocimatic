@@ -61,7 +61,7 @@ class FilePath(object):
             self._filename = os.path.basename(arg1)
 
     def isdir(self):
-        return os.path.isdir(self.path)
+        return os.path.isdir(str(self))
 
     def open(self, mode):
         return open(str(self), mode)
@@ -297,4 +297,4 @@ class Directory(object):
         Args:
             dest (FilePath): destination folder
         """
-        copy_tree(self.path, dest.path, preserve_symlinks=1)
+        copy_tree(str(self.path()), str(dest), preserve_symlinks=1)
