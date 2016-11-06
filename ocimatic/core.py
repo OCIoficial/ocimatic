@@ -254,7 +254,7 @@ class Task(object):
     def build_solutions(self, pattern=None):
         """Forces a rebuilding of all solutions, both partial and corrects."""
         for sol in self.solutions(partial=True):
-            if pattern is not None and pattern in sol.name:
+            if pattern is None or pattern in sol.name:
                 sol.build()
 
     @ui.task('Generating expected output')
