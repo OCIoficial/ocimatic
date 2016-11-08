@@ -22,7 +22,7 @@ class Contest(object):
         """
         self._directory = directory
         dirs = [d for d in directory.lsdir() if d.find_file('.ocimatic_task')]
-        self._tasks = [Task(d,i) for (i,d) in enumerate(dirs)]
+        self._tasks = [Task(d, i) for (i, d) in enumerate(dirs)]
         self._titlepage = FilePath(directory, 'titlepage.tex')
         self._compiler = LatexCompiler()
 
@@ -56,7 +56,7 @@ class Contest(object):
         os.environ['OCIMATIC_SIDENESS'] = 'oneside'
         self.compile_titlepage()
 
-        for (i, task) in enumerate(self._tasks):
+        for task in self._tasks:
             task.build_statement()
         self.merge_pdfs('oneside.pdf')
 
@@ -114,11 +114,11 @@ class Contest(object):
                    pdfs
                )
         complete = subprocess.run(cmd,
-                                    shell=True,
-                                    timeout=20,
-                                    stdin=subprocess.DEVNULL,
-                                    stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL)
+                                  shell=True,
+                                  timeout=20,
+                                  stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
         st = complete.returncode == 0
         return (st, 'OK' if st else 'FAILED')
 
@@ -184,13 +184,13 @@ class Task(object):
     def copy_to(self, directory):
         new_dir = directory.mkdir(str(self))
 
-        (st, msg) = self.compress_dataset()
+        (st, _) = self.compress_dataset()
         if st:
             dataset = FilePath(new_dir, 'data.zip')
             if dataset.exists():
                 FilePath(self._directory.chdir('dataset'), 'data.zip').copy(dataset)
 
-        (st, msg) = self.build_statement()
+        (st, _) = self.build_statement()
         if st:
             statement = FilePath(new_dir, 'statement.pdf')
             FilePath(self._directory.chdir('statement'), 'statement.pdf').copy(statement)
@@ -339,7 +339,7 @@ class Solution(object):
             Optional[Runnable]: Runnable file of this solution or None if it fails
           to build"""
         if self.build_time() < self._source.mtime():
-            (st, msg) = self.build()
+            (st, _) = self.build()
             if not st:
                 return None
         return self.get_runnable()
@@ -369,7 +369,8 @@ class CppSolution(Solution):
             source (FilePath): Source code.
             managers (Directory): Directory where managers reside.
         """
-        assert(source.ext == self.ext)
+        assert source.ext == self.ext
+
         self._source = source
         self._compiler = CppCompiler(['-I"%s"' % managers])
         self._grader = managers.find_file('grader.cpp')
@@ -398,6 +399,7 @@ class CppCompiler(object):
     """Compiles C++ code
     """
     _flags = ['-std=c++11', '-O2']
+
     def __init__(self, flags=[]):
         flags = list(set(self._flags+flags))
         self._cmd_template = 'g++ %s -o %%s %%s' % ' '.join(flags)
@@ -418,9 +420,9 @@ class CppCompiler(object):
         cmd = self._cmd_template % (out, sources)
 
         complete = subprocess.run(cmd,
-                                    stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL,
-                                    shell=True)
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL,
+                                  shell=True)
         return complete.returncode == 0
 
 class JavaSolution(Solution):
@@ -435,7 +437,7 @@ class JavaSolution(Solution):
             source (FilePath): Source code.
             managers (Directory): Directory where managers reside.
         """
-        assert(source.ext == self.ext)
+        assert source.ext == self.ext
         self._source = source
         self._compiler = JavaCompiler()
         # self._grader = managers.find_file('grader.cpp')
@@ -611,7 +613,7 @@ class Test(object):
             in_path (FilePath)
             expected_path (FilePath)
         """
-        assert(in_path.exists())
+        assert in_path.exists()
         self._in_path = in_path
         self._expected_path = expected_path
 
@@ -840,7 +842,7 @@ class DatasetPlan(object):
                 if header_match:
                     found_st = int(header_match.group(1))
                     if st + 1 != found_st:
-                        fatal_error(
+                        ui.fatal_error(
                             'line %d: found subtask %d, but subtask %d was expected' %
                             (lineno, found_st, st + 1)
                         )
@@ -857,7 +859,7 @@ class DatasetPlan(object):
 
                     if cmd == 'copy':
                         if len(args) > 2:
-                            fatal_error('line %d: command copy expects exactly one argument.' % lineno)
+                            ui.fatal_error('line %d: command copy expects exactly one argument.' % lineno)
                         cmds[st][group].append({
                             'cmd': 'copy',
                             'file': args[0],
@@ -913,10 +915,10 @@ class DiffChecker(Checker):
             expected_path (FilePath)
             out_path (FilePath)
         """
-        assert(shutil.which('diff'))
-        assert(in_path.exists())
-        assert(expected_path.exists())
-        assert(out_path.exists())
+        assert shutil.which('diff')
+        assert in_path.exists()
+        assert expected_path.exists()
+        assert out_path.exists()
         complete = subprocess.run(['diff',
                                     str(expected_path),
                                     str(out_path)],
@@ -948,25 +950,26 @@ class CppChecker(Checker):
             expected_path (FilePath)
             out_path (FilePath)
         """
-        assert(in_path.exists())
-        assert(expected_path.exists())
-        assert(out_path.exists())
+        assert in_path.exists()
+        assert expected_path.exists()
+        assert out_path.exists()
         if self._binary_path.mtime() < self._source.mtime():
             if not self.build():
                 return (False, 0.0, "Failed to build checker")
         complete = subprocess.run([str(self._binary_path),
-                                    str(in_path),
-                                    str(expected_path),
-                                    str(out_path)],
-                                    universal_newlines=True,
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
-        st = complete.returncode == 0
+                                   str(in_path),
+                                   str(expected_path),
+                                   str(out_path)],
+                                  universal_newlines=True,
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+        ret = complete.returncode
+        st = ret == 0
         if st:
             outcome = float(complete.stdout)
             msg = complete.stderr
         else:
-            stderr = complete.stder.strip('\n')
+            stderr = complete.stderr.strip('\n')
             outcome = 0.0
             if 0 < len(stderr) < 75:
                 msg = stderr
@@ -993,11 +996,13 @@ from ctypes import Structure, c_long, CDLL, c_int, POINTER, byref
 from ctypes.util import find_library
 CLOCK_MONOTONIC = 1
 
+
 class timespec(Structure):
     _fields_ = [
         ('tv_sec', c_long),
         ('tv_nsec', c_long)
         ]
+
 librt_filename = find_library('rt')
 if not librt_filename:
     # On Debian Lenny (Python 2.5.2), find_library() is unable
@@ -1027,7 +1032,6 @@ class Runnable(object):
     files.
     """
 
-
     @staticmethod
     def is_callable(file_path):
         return shutil.which(str(file_path)) is not None
@@ -1039,7 +1043,7 @@ class Runnable(object):
             args (List[string]): List of arguments to pass to the command.
         """
         command = str(command)
-        assert(shutil.which(command))
+        assert shutil.which(command)
         self._cmd = [command] + args
 
     def __str__(self):
@@ -1063,7 +1067,7 @@ class Runnable(object):
                 if status is False errmsg contains an explanatory error
                 message, otherwise it contains a success message.
         """
-        assert(in_path is None or in_path.exists())
+        assert in_path is None or in_path.exists()
         with ExitStack() as stack:
             if in_path is None:
                 in_path = FilePath('/dev/null')
@@ -1081,7 +1085,7 @@ class Runnable(object):
                                           stdout=out_file,
                                           universal_newlines=True,
                                           stderr=subprocess.PIPE)
-            except subprocess.TimeoutExpired as to:
+            except subprocess.TimeoutExpired:
                 return (False, monotonic_time() - start, 'Execution timed out')
             time = monotonic_time() - start
             ret = complete.returncode
@@ -1095,8 +1099,8 @@ class Runnable(object):
                     if ret < 0:
                         sig = -ret
                         msg = 'Execution killed with signal %d' % sig
-                        if sig in SIGNAL:
-                            msg += ': %s' % SIGNAL[sig]
+                        if sig in SIGNALS:
+                            msg += ': %s' % SIGNALS[sig]
                     else:
                         msg = 'Execution ended with error (return code %d)' % ret
             return (status, time, msg)
@@ -1112,7 +1116,7 @@ class Statement(object):
             directory (Directory): Directory to search for statement source file.
             num (int): Number of the statement in the contest starting from 0
         """
-        assert(FilePath(directory, 'statement.tex').exists())
+        assert FilePath(directory, 'statement.tex').exists()
         self._source = FilePath(directory, 'statement.tex')
         self._pdf = self._source.chext('.pdf')
         self._compiler = LatexCompiler()
