@@ -739,45 +739,68 @@ class DatasetPlan(object):
 
     @ui.args_workgroup('Subtask {}')
     def run_subtask(self, st, subtask):
-        for (group, tests) in sorted(subtask.items()):
+        groups = subtask['groups']
+        checker = None
+        if subtask['checker']:
+            (checker, msg) = self.build_checker(subtask['checker'])
+            if checker is None:
+                ui.show_message('Warning', 'Skipping checker: %s' % msg, ui.WARNING)
+        else:
+            ui.show_message('Info', 'No checker', ui.INFO)
+        for (group, tests) in sorted(groups.items()):
             for (i, test) in enumerate(tests, 1):
                 st_dir = FilePath(self._dataset_directory, 'st%d' % st).get_or_create_dir()
                 cmd = test['cmd']
                 test_file = FilePath(st_dir, '%s-%d.in' % (group, i))
                 if cmd == 'copy':
-                    self.copy(test['file'], test_file)
+                    self.copy(test['file'], test_file, checker)
                 else:
                     test['args'].append('%s-%s-%s' % (st, group, i))
                     if cmd in ['cpp', 'py', 'java']:
                         source = FilePath(self._directory, test['source'])
-                        # test_file = FilePath(st_dir,
-                        #                      test['source']).chext('-%d.in' % i)
                         if cmd == 'cpp':
-                            self.run_cpp_generator(source, test['args'], test_file)
+                            self.run_cpp_generator(source, test['args'], test_file, checker)
                         elif cmd == 'py':
-                            self.run_py_generator(source, test['args'], test_file)
+                            self.run_py_generator(source, test['args'], test_file, checker)
                         elif cmd == 'java':
-                            self.run_java_generator(source, test['args'], test_file)
+                            self.run_java_generator(source, test['args'], test_file, checker)
                     elif cmd == 'run':
                         bin_path = FilePath(self._directory, test['bin'])
-                        # test_file = FilePath(st_dir, '%s-%s.in' % (test['bin'], i))
-                        self.run_bin_generator(bin_path, test['args'], test_file)
+                        self.run_bin_generator(bin_path, test['args'], test_file, checker)
                     else:
                         ui.fatal_error('unexpected command when running plan: %s ' % cmd)
 
+    def build_checker(self, source):
+        fp = FilePath(self._task_directory, source)
+        if not fp.exists():
+            return (None, 'File does not exists.')
+        if fp.ext == '.cpp':
+            binary = fp.chext('.bin')
+            st = self._cpp_compiler(fp, binary)
+            if not st:
+                return (None, 'Failed to build checker.')
+            return (Runnable(binary), 'OK')
+        elif fp.ext == '.py':
+            return (Runnable('python', [str(source)]), 'OK')
+        else:
+            return (None, 'Not supported source file.')
+
     @ui.args_work('Copy')
-    def copy(self, src, dst):
+    def copy(self, src, dst, checker):
         fp = FilePath(self._task_directory, src)
         if not fp.exists():
             return (False, 'No such file')
         try:
             fp.copy(dst)
-            return (True, 'OK')
+            (st, msg) = (True, 'OK')
+            if checker:
+                (st, time, msg) = checker.run(dst, None)
+            return (st, msg)
         except:
             return (False, 'Error when copying file')
 
     @ui.args_work('Gen')
-    def run_cpp_generator(self, source, args, dst):
+    def run_cpp_generator(self, source, args, dst, checker):
         if not source.exists():
             return (False, 'No such file')
         binary = source.chext('.bin')
@@ -787,17 +810,21 @@ class DatasetPlan(object):
                 return (st, 'Failed to build generator')
 
         (st, time, msg) = Runnable(binary).run(None, dst, args)
+        if checker:
+            (st, time, msg) = checker.run(dst, None)
         return (st, msg)
 
     @ui.args_work('Gen')
-    def run_py_generator(self, source, args, dst):
+    def run_py_generator(self, source, args, dst, checker):
         if not source.exists():
             return (False, 'No such file')
         (st, time, msg) = Runnable('python', [str(source)]).run(None, dst, args)
+        if checker:
+            (st, time, msg) = checker.run(dst, None)
         return (st, msg)
 
     @ui.args_work('Gen')
-    def run_java_generator(self, source, args, dst):
+    def run_java_generator(self, source, args, dst, checker):
         if not source.exists():
             return (False, 'No such file')
         bytecode = source.chext('.class')
@@ -809,6 +836,8 @@ class DatasetPlan(object):
         classname = bytecode.rootname()
         classpath = str(bytecode.directory().path())
         (st, time, msg) = Runnable('java', ['-cp', classpath, classname]).run(None, dst, args)
+        if checker:
+            (st, time, msg) = checker.run(dst, None)
         return (st, msg)
 
     @ui.args_work('Gen')
@@ -820,7 +849,6 @@ class DatasetPlan(object):
         (st, time, msg) = Runnable(bin_path).run(None, dst, args)
         return (st, msg)
 
-
     def parse_file(self, path):
         """
         Args:
@@ -830,7 +858,7 @@ class DatasetPlan(object):
         st = 0
         for (lineno, line) in enumerate(path.open('r').readlines(), 1):
             line = line.strip()
-            subtask_header = re.compile(r'\s*\[\s*Subtask\s*(\d+)\s*\]\s*')
+            subtask_header = re.compile(r'\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*')
             cmd_line = re.compile(r'\s*([^;\s]+)\s*;\s*(\S+)\s*(.*)')
             comment = re.compile('\s*#.*')
 
@@ -841,13 +869,17 @@ class DatasetPlan(object):
                 cmd_match = cmd_line.fullmatch(line)
                 if header_match:
                     found_st = int(header_match.group(1))
+                    checker = header_match.group(2)
                     if st + 1 != found_st:
                         ui.fatal_error(
                             'line %d: found subtask %d, but subtask %d was expected' %
                             (lineno, found_st, st + 1)
                         )
                     st += 1
-                    cmds[st] = {}
+                    cmds[st] = {
+                        'checker': checker,
+                        'groups': {}
+                    }
                 elif cmd_match:
                     if st == 0:
                         ui.fatal_error('line %d: found command before declaring a subtask.' % lineno)
@@ -855,34 +887,31 @@ class DatasetPlan(object):
                     cmd = cmd_match.group(2)
                     args = cmd_match.group(3).split()
                     if group not in cmds[st]:
-                        cmds[st][group] = []
+                        cmds[st]['groups'][group] = []
 
                     if cmd == 'copy':
                         if len(args) > 2:
                             ui.fatal_error('line %d: command copy expects exactly one argument.' % lineno)
-                        cmds[st][group].append({
+                        cmds[st]['groups'][group].append({
                             'cmd': 'copy',
                             'file': args[0],
                         })
                     else:
                         f = FilePath(self._directory, cmd)
                         if f.ext in ['.cpp', '.java', '.py']:
-                            cmds[st][group].append({
+                            cmds[st]['groups'][group].append({
                                 'cmd': f.ext[1:],
                                 'source': cmd,
                                 'args': args,
                             })
                         else:
-                            cmds[st][group].append({
+                            cmds[st]['groups'][group].append({
                                 'cmd': 'run',
                                 'bin': cmd,
                                 'args': args,
                             })
-                        # else:
-                        #     ui.fatal_error('line %d: unexpected command `%s` when'
-                        #                    ' parsing plan' % (lineno, args[0]))
                 else:
-                    ui.show_message('Warning', 'Skipping line %d\n' % lineno, ui.WARNING)
+                    ui.fatal_error('line %d: error while parsing line `%s`\n' % (lineno, line))
         return (st, cmds)
 
 
