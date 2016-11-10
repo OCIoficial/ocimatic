@@ -719,7 +719,6 @@ class DatasetPlan(object):
         self._cpp_compiler = CppCompiler()
         self._java_compiler = JavaCompiler()
 
-
     def run(self, name='testplan.txt'):
         path = FilePath(self._directory, name)
         if not path.exists():
@@ -776,9 +775,9 @@ class DatasetPlan(object):
             return (None, 'File does not exists.')
         if fp.ext == '.cpp':
             binary = fp.chext('.bin')
-            st = self._cpp_compiler(fp, binary)
-            if not st:
-                return (None, 'Failed to build checker.')
+            if binary.mtime() < fp.mtime():
+                if not self._cpp_compiler(fp, binary):
+                    return (None, 'Failed to build checker.')
             return (Runnable(binary), 'OK')
         elif fp.ext == '.py':
             return (Runnable('python', [str(source)]), 'OK')
@@ -886,7 +885,7 @@ class DatasetPlan(object):
                     group = cmd_match.group(1)
                     cmd = cmd_match.group(2)
                     args = cmd_match.group(3).split()
-                    if group not in cmds[st]:
+                    if group not in cmds[st]['groups']:
                         cmds[st]['groups'][group] = []
 
                     if cmd == 'copy':
@@ -949,10 +948,10 @@ class DiffChecker(Checker):
         assert expected_path.exists()
         assert out_path.exists()
         complete = subprocess.run(['diff',
-                                    str(expected_path),
-                                    str(out_path)],
-                                    stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL)
+                                   str(expected_path),
+                                   str(out_path)],
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
         # @TODO(NL 20/10/1990) Check if returncode is nonzero because there
         # is a difference between files or because there was an error executing
         # diff.
@@ -1122,7 +1121,7 @@ class Runnable(object):
             msg = 'OK'
             if not status:
                 stderr = complete.stderr.strip('\n')
-                if 0 < len(stderr) < 75:
+                if 0 < len(stderr) < 100:
                     msg = stderr
                 else:
                     if ret < 0:
