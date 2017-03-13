@@ -8,7 +8,7 @@ Usage and Installation
 ```
 $ git clone https://github.com/OCIoficial/ocimatic
 $ cd ocimatic
-$ ./bin/ocimatic --help
+$ ./bin/ocimatic
 ```
 
 You can also add the `bin` directory to the `PATH`.
