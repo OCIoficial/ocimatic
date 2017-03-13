@@ -15,7 +15,7 @@ You can also add the `bin` directory to the `PATH`.
 
 Basic Usage
 ----------
-Asuming `ocimatic` is in the `PATH`
+Assuming `ocimatic` is in the `PATH`
 
 ```
 $ ocimatic contest new test_contest
