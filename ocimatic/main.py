@@ -33,7 +33,7 @@ def new_contest(args):
             contest_dir = contest_path.get_or_create_dir()
         else:
             contest_dir = cwd.mkdir(name)
-        core.Contest.create_layout(contest_path)
+        core.Contest.create_layout(contest_dir)
         ui.show_message('Info', 'Contest [%s] created' % name)
     except Exception as exc:
         ui.fatal_error('Couldn\'t create contest: %s.' % exc)

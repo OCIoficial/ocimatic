@@ -8,6 +8,7 @@ from contextlib import ExitStack
 import ocimatic
 from ocimatic import ui
 from ocimatic.filesystem import FilePath, Directory
+from ocimatic.monotonic_timer import monotonic_time
 
 
 class Contest(object):
@@ -41,7 +42,6 @@ class Contest(object):
     def tasks(self):
         """List[Task]"""
         return self._tasks
-
 
     @ui.supergroup('Generating problemset')
     def build_problemset(self):
@@ -108,11 +108,13 @@ class Contest(object):
         if titlepage.exists():
             pdfs = '"%s" %s' % (titlepage, pdfs)
 
-        cmd = ('gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite'
-               ' -dPDFSETTINGS=/prepress -sOutputFile=%s %s') % (
-                   FilePath(self._directory, filename),
-                   pdfs
-               )
+        cmd = (
+            'gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite'
+            ' -dPDFSETTINGS=/prepress -sOutputFile=%s %s'
+        ) % (
+            FilePath(self._directory, filename),
+            pdfs
+        )
         complete = subprocess.run(cmd,
                                   shell=True,
                                   timeout=20,
@@ -401,7 +403,7 @@ class CppCompiler(object):
     _flags = ['-std=c++11', '-O2']
 
     def __init__(self, flags=[]):
-        flags = list(set(self._flags+flags))
+        flags = list(set(self._flags + flags))
         self._cmd_template = 'g++ %s -o %%s %%s' % ' '.join(flags)
 
     def __call__(self, sources, out):
@@ -424,6 +426,7 @@ class CppCompiler(object):
                                   stderr=subprocess.DEVNULL,
                                   shell=True)
         return complete.returncode == 0
+
 
 class JavaSolution(Solution):
     """Solution written in C++. This solutions is compiled with
@@ -469,8 +472,9 @@ class JavaCompiler(object):
     """Compiles Java code
     """
     _flags = []
+
     def __init__(self, flags=[]):
-        flags = list(set(self._flags+flags))
+        flags = list(set(self._flags + flags))
         self._cmd_template = 'javac %s %%s' % ' '.join(flags)
 
     def __call__(self, sources):
@@ -561,7 +565,7 @@ class Subtask(object):
         self._tests = []
         self._in_ext = in_ext
         self._sol_ext = sol_ext
-        for f in directory.lsfile('*'+self._in_ext):
+        for f in directory.lsfile('*' + self._in_ext):
             self._tests.append(Test(f, f.chext(sol_ext)))
         self._name = directory.basename
 
@@ -754,7 +758,7 @@ class DatasetPlan(object):
                 if cmd == 'copy':
                     self.copy(test['file'], test_file, checker)
                 else:
-                    test['args'].append('%s-%s-%s' % (st, group, i))
+                    test['args'].insert(0, '%s-%s-%s' % (st, group, i))
                     if cmd in ['cpp', 'py', 'java']:
                         source = FilePath(self._directory, test['source'])
                         if cmd == 'cpp':
@@ -881,7 +885,9 @@ class DatasetPlan(object):
                     }
                 elif cmd_match:
                     if st == 0:
-                        ui.fatal_error('line %d: found command before declaring a subtask.' % lineno)
+                        ui.fatal_error(
+                            'line %d: found command before declaring a subtask.' % lineno
+                        )
                     group = cmd_match.group(1)
                     cmd = cmd_match.group(2)
                     args = cmd_match.group(3).split()
@@ -890,7 +896,9 @@ class DatasetPlan(object):
 
                     if cmd == 'copy':
                         if len(args) > 2:
-                            ui.fatal_error('line %d: command copy expects exactly one argument.' % lineno)
+                            ui.fatal_error(
+                                'line %d: command copy expects exactly one argument.' % lineno
+                            )
                         cmds[st]['groups'][group].append({
                             'cmd': 'copy',
                             'file': args[0],
@@ -1019,30 +1027,6 @@ class CppChecker(Checker):
         """
         return self._compiler(self._source, self._binary_path)
 
-
-from ctypes import Structure, c_long, CDLL, c_int, POINTER, byref
-from ctypes.util import find_library
-CLOCK_MONOTONIC = 1
-
-
-class timespec(Structure):
-    _fields_ = [
-        ('tv_sec', c_long),
-        ('tv_nsec', c_long)
-        ]
-
-librt_filename = find_library('rt')
-if not librt_filename:
-    # On Debian Lenny (Python 2.5.2), find_library() is unable
-    # to locate /lib/librt.so.1
-    librt_filename = 'librt.so.1'
-librt = CDLL(librt_filename)
-_clock_gettime = librt.clock_gettime
-_clock_gettime.argtypes = (c_int, POINTER(timespec))
-def monotonic_time():
-    t = timespec()
-    _clock_gettime(CLOCK_MONOTONIC, byref(t))
-    return t.tv_sec + t.tv_nsec / 1e9
 
 SIGNALS = {
     1: 'SIGHUP', 2: 'SIGINT', 3: 'SIGQUIT', 4: 'SIGILL', 5: 'SIGTRAP',
@@ -1177,7 +1161,7 @@ class Statement(object):
            (bool, msg) a tuple containing status code and result message.
 
         """
-        os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A')+self._num)
+        os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A') + self._num)
         if blank_page:
             os.environ['OCIMATIC_BLANK_PAGE'] = 'True'
         st = self._compiler(self._source)

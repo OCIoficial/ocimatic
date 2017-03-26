@@ -1,14 +1,13 @@
 # This is a sample test plan.
 # Every line specifies a command to generate a test case.
-# The first column specifies a group name, which is used to give a name for the
-# generated test file.
+# The first column specifies a group name.
 # The second column specifies a command to generate the test case, it could be
 # either a `copy` command or a generator with its respective arguments.
 # A `copy` command expects a path to a file relatively to the task root.
 # A generator could be a source file in Java, C++ or Python, which is compiled
 # and executed with the specified arguments.
 # Additionally, an argument which is different for every test case, is passed
-# at the end. Arguments should be used to generate a uniquely random seed
+# at the beginning. Arguments should be used to generate a uniquely random seed
 # inside the generator.
 # To generate test cases using test plan use `ocimatic gen-input`
 
