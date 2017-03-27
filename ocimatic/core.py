@@ -783,8 +783,10 @@ class DatasetPlan(object):
                 if not self._cpp_compiler(fp, binary):
                     return (None, 'Failed to build checker.')
             return (Runnable(binary), 'OK')
-        elif fp.ext == '.py':
-            return (Runnable('python', [str(source)]), 'OK')
+        elif fp.ext in ['.py', '.py3']:
+            return (Runnable('python3', [str(source)]), 'OK')
+        elif fp.ext == '.py2':
+            return (Runnable('python2', [str(source)]), 'OK')
         else:
             return (None, 'Not supported source file.')
 
@@ -844,12 +846,14 @@ class DatasetPlan(object):
         return (st, msg)
 
     @ui.args_work('Gen')
-    def run_bin_generator(self, bin_path, args, dst):
+    def run_bin_generator(self, bin_path, args, dst, checker):
         if not bin_path.exists():
             return (False, 'No such file')
         if not Runnable.is_callable(bin_path):
             return (False, 'Cannot run file, it may not have correct permissions')
         (st, time, msg) = Runnable(bin_path).run(None, dst, args)
+        if checker:
+            (st, time, msg) = checker.run(dst, None)
         return (st, msg)
 
     def parse_file(self, path):
@@ -905,7 +909,7 @@ class DatasetPlan(object):
                         })
                     else:
                         f = FilePath(self._directory, cmd)
-                        if f.ext in ['.cpp', '.java', '.py']:
+                        if f.ext in ['.cpp', '.java', '.py', '.py2', '.py3']:
                             cmds[st]['groups'][group].append({
                                 'cmd': f.ext[1:],
                                 'source': cmd,
