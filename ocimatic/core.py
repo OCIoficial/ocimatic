@@ -763,8 +763,8 @@ class DatasetPlan(object):
                         source = FilePath(self._directory, test['source'])
                         if cmd == 'cpp':
                             self.run_cpp_generator(source, test['args'], test_file, checker)
-                        elif cmd == 'py':
-                            self.run_py_generator(source, test['args'], test_file, checker)
+                        elif cmd in ['py', 'py2', 'py3']:
+                            self.run_py_generator(source, test['args'], test_file, checker, cmd)
                         elif cmd == 'java':
                             self.run_java_generator(source, test['args'], test_file, checker)
                     elif cmd == 'run':
@@ -784,7 +784,7 @@ class DatasetPlan(object):
                     return (None, 'Failed to build checker.')
             return (Runnable(binary), 'OK')
         elif fp.ext in ['.py', '.py3']:
-            return (Runnable('python3', [str(source)]), 'OK')
+            return (Runnable('python', [str(source)]), 'OK')
         elif fp.ext == '.py2':
             return (Runnable('python2', [str(source)]), 'OK')
         else:
@@ -820,10 +820,11 @@ class DatasetPlan(object):
         return (st, msg)
 
     @ui.args_work('Gen')
-    def run_py_generator(self, source, args, dst, checker):
+    def run_py_generator(self, source, args, dst, checker, cmd):
         if not source.exists():
             return (False, 'No such file')
-        (st, time, msg) = Runnable('python', [str(source)]).run(None, dst, args)
+        python = 'python2' if cmd == 'py2' else 'python3'
+        (st, time, msg) = Runnable(python, [str(source)]).run(None, dst, args)
         if checker:
             (st, time, msg) = checker.run(dst, None)
         return (st, msg)
