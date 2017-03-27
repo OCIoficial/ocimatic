@@ -3,12 +3,12 @@ import os
 import subprocess
 import re
 import shutil
+import time as pytime
 from contextlib import ExitStack
 
 import ocimatic
 from ocimatic import ui
 from ocimatic.filesystem import FilePath, Directory
-from ocimatic.monotonic_timer import monotonic_time
 
 
 class Contest(object):
@@ -784,7 +784,7 @@ class DatasetPlan(object):
                     return (None, 'Failed to build checker.')
             return (Runnable(binary), 'OK')
         elif fp.ext in ['.py', '.py3']:
-            return (Runnable('python', [str(source)]), 'OK')
+            return (Runnable('python3', [str(source)]), 'OK')
         elif fp.ext == '.py2':
             return (Runnable('python2', [str(source)]), 'OK')
         else:
@@ -1093,7 +1093,7 @@ class Runnable(object):
                 out_path = FilePath('/dev/null')
             out_file = stack.enter_context(out_path.open('w'))
 
-            start = monotonic_time()
+            start = pytime.monotonic()
             self._cmd.extend(args)
             try:
                 complete = subprocess.run(self._cmd,
@@ -1103,8 +1103,8 @@ class Runnable(object):
                                           universal_newlines=True,
                                           stderr=subprocess.PIPE)
             except subprocess.TimeoutExpired:
-                return (False, monotonic_time() - start, 'Execution timed out')
-            time = monotonic_time() - start
+                return (False, pytime.monotonic() - start, 'Execution timed out')
+            time = pytime.monotonic() - start
             ret = complete.returncode
             status = ret == 0
             msg = 'OK'
