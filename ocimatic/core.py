@@ -757,6 +757,8 @@ class DatasetPlan(object):
                 test_file = FilePath(st_dir, '%s-%d.in' % (group, i))
                 if cmd == 'copy':
                     self.copy(test['file'], test_file, checker)
+                elif cmd == 'echo':
+                    self.echo(test['args'], test_file, checker)
                 else:
                     test['args'].insert(0, '%s-%s-%s' % (st, group, i))
                     if cmd in ['cpp', 'py', 'java']:
@@ -803,6 +805,15 @@ class DatasetPlan(object):
             return (st, msg)
         except:
             return (False, 'Error when copying file')
+
+    @ui.args_work('Echo')
+    def echo(self, args, dst, checker):
+        with dst.open('w') as test_file:
+            test_file.write(' '.join(args) + '\n')
+            (st, msg) = (True, 'Ok')
+            if checker:
+                (st, time, msg) = checker.run(dst, None)
+            return (st, msg)
 
     @ui.args_work('Gen')
     def run_cpp_generator(self, source, args, dst, checker):
@@ -867,7 +878,7 @@ class DatasetPlan(object):
         for (lineno, line) in enumerate(path.open('r').readlines(), 1):
             line = line.strip()
             subtask_header = re.compile(r'\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*')
-            cmd_line = re.compile(r'\s*([^;\s]+)\s*;\s*(\S+)\s*(.*)')
+            cmd_line = re.compile(r'\s*([^;\s]+)\s*;\s*(\S+)\s+(.*)')
             comment = re.compile('\s*#.*')
 
             if not line:
@@ -908,19 +919,24 @@ class DatasetPlan(object):
                             'cmd': 'copy',
                             'file': args[0],
                         })
+                    elif cmd == 'echo':
+                        cmds[st]['groups'][group].append({
+                            'cmd': 'echo',
+                            'args': args
+                        })
                     else:
                         f = FilePath(self._directory, cmd)
                         if f.ext in ['.cpp', '.java', '.py', '.py2', '.py3']:
                             cmds[st]['groups'][group].append({
                                 'cmd': f.ext[1:],
                                 'source': cmd,
-                                'args': args,
+                                'args': args
                             })
                         else:
                             cmds[st]['groups'][group].append({
                                 'cmd': 'run',
                                 'bin': cmd,
-                                'args': args,
+                                'args': args
                             })
                 else:
                     ui.fatal_error('line %d: error while parsing line `%s`\n' % (lineno, line))
