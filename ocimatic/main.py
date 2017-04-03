@@ -38,6 +38,7 @@ def new_contest(args):
     except Exception as exc:
         ui.fatal_error('Couldn\'t create contest: %s.' % exc)
 
+
 def contest_mode(args):
     if not args:
         ui.ocimatic_help()
@@ -83,8 +84,9 @@ def task_mode(args):
         'pdf': ('build_statement', [], {}),
         'run': ('run_solutions', ['pattern'], {'partial': OPTS['partial']}),
         'compress': ('compress_dataset', [], {}),
-        'normalize' : ('normalize', [], {}),
+        'normalize': ('normalize', [], {}),
         'gen-input': ('gen_input', [], {}),
+        'validate-input': ('validate_input', [], {})
     }
 
     (contest_dir, task_call) = filesystem.change_directory()

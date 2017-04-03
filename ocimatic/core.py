@@ -178,9 +178,6 @@ class Task(object):
 
         self._dataset = Dataset(directory.chdir('dataset'), self._statement)
 
-        self._dataset_plan = DatasetPlan(directory.chdir('attic'),
-                                         directory,
-                                         directory.chdir('dataset'))
 
     @ui.self_workgroup()
     def copy_to(self, directory):
@@ -197,9 +194,19 @@ class Task(object):
             statement = FilePath(new_dir, 'statement.pdf')
             FilePath(self._directory.chdir('statement'), 'statement.pdf').copy(statement)
 
-    @ui.task('Generating dataset')
+    @ui.task('Generating dataset input files')
     def gen_input(self):
-        self._dataset_plan.run()
+        testplan = DatasetPlan(self._directory.chdir('attic'),
+                               self._directory,
+                               self._directory.chdir('dataset'))
+        testplan.run()
+
+    @ui.task('Validating dataset input files')
+    def validate_input(self):
+        testplan = DatasetPlan(self._directory.chdir('attic'),
+                               self._directory,
+                               self._directory.chdir('dataset'))
+        testplan.validate_input()
 
     @ui.self_work('ZIP')
     def compress_dataset(self):
@@ -637,7 +644,8 @@ class Test(object):
         Returns:
             (bool, msg): A tuple containing status and result message.
         """
-        (st, _, errmsg) = runnable.run(self.in_path, self.expected_path)
+        (st, _, errmsg) = runnable.run(self.in_path, self.expected_path,
+                                       timeout=ocimatic.config['timeout'])
         msg = 'OK' if st else errmsg
         return (st, msg)
 
@@ -652,14 +660,14 @@ class Test(object):
         """
         out_path = FilePath.tmpfile()
         if self.expected_path.exists():
-            (st, time, errmsg) = runnable.run(self.in_path, out_path)
+            (st, time, errmsg) = runnable.run(self.in_path, out_path,
+                                              timeout=ocimatic.config['timeout'])
 
             # Execution failed
             if not st:
                 if check:
                     return (st, errmsg)
                 else:
-                    # return (st, '%s [%.2fs]' % (errmsg, time))
                     return (st, '%s' % errmsg)
 
             (st, outcome, checkmsg) = checker(self.in_path,
@@ -716,74 +724,56 @@ class Test(object):
 class DatasetPlan(object):
     """Functionality to read and run a plan for generating dataset."""
 
-    def __init__(self, directory, task_directory, dataset_directory):
+    def __init__(self, directory, task_directory, dataset_directory, filename='testplan.txt'):
         self._directory = directory
+        self._testplan_path = FilePath(directory, filename)
+        if not self._testplan_path.exists():
+            ui.fatal_error('No such file plan for creating dataset: "%s"' % self._testplan_path)
         self._task_directory = task_directory
         self._dataset_directory = dataset_directory
         self._cpp_compiler = CppCompiler()
         self._java_compiler = JavaCompiler()
 
-    def run(self, name='testplan.txt'):
-        path = FilePath(self._directory, name)
-        if not path.exists():
-            ui.fatal_error('No such file plan for creating dataset: "%s"' % path)
-        (subtasks, cmds) = self.parse_file(path)
+    def test_filepath(self, stn, group, i):
+        st_dir = FilePath(self._dataset_directory, 'st%d' % stn).get_or_create_dir()
+        return FilePath(st_dir, '%s-%d.in' % (group, i))
 
-        for st in range(1, subtasks + 1):
-            dire = FilePath(self._dataset_directory, 'st%d' % st).get_or_create_dir()
-            dire.clear()
-
-        if not cmds:
-            ui.show_message("Warning", 'no commands were executed for the plan.',
-                            ui.WARNING)
-
+    def validate_input(self):
+        (subtasks, cmds) = self.parse_file()
         for (st, subtask) in sorted(cmds.items()):
-            self.run_subtask(st, subtask)
+            self.validate_subtask(st, subtask)
 
     @ui.args_workgroup('Subtask {}')
-    def run_subtask(self, st, subtask):
-        groups = subtask['groups']
-        checker = None
-        if subtask['checker']:
-            (checker, msg) = self.build_checker(subtask['checker'])
-            if checker is None:
-                ui.show_message('Warning', 'Skipping checker: %s' % msg, ui.WARNING)
+    def validate_subtask(self, stn, subtask):
+        validator = None
+        if subtask['validator']:
+            (validator, msg) = self.build_validator(subtask['validator'])
+            if validator is None:
+                ui.show_message('Warning', 'Failed to build validator: %s' % msg, ui.WARNING)
         else:
-            ui.show_message('Info', 'No checker', ui.INFO)
-        for (group, tests) in sorted(groups.items()):
-            for (i, test) in enumerate(tests, 1):
-                st_dir = FilePath(self._dataset_directory, 'st%d' % st).get_or_create_dir()
-                cmd = test['cmd']
-                test_file = FilePath(st_dir, '%s-%d.in' % (group, i))
-                if cmd == 'copy':
-                    self.copy(test['file'], test_file, checker)
-                elif cmd == 'echo':
-                    self.echo(test['args'], test_file, checker)
-                else:
-                    test['args'].insert(0, '%s-%s-%s' % (st, group, i))
-                    if cmd in ['cpp', 'py', 'java']:
-                        source = FilePath(self._directory, test['source'])
-                        if cmd == 'cpp':
-                            self.run_cpp_generator(source, test['args'], test_file, checker)
-                        elif cmd in ['py', 'py2', 'py3']:
-                            self.run_py_generator(source, test['args'], test_file, checker, cmd)
-                        elif cmd == 'java':
-                            self.run_java_generator(source, test['args'], test_file, checker)
-                    elif cmd == 'run':
-                        bin_path = FilePath(self._directory, test['bin'])
-                        self.run_bin_generator(bin_path, test['args'], test_file, checker)
-                    else:
-                        ui.fatal_error('unexpected command when running plan: %s ' % cmd)
+            ui.show_message('Info', 'No validator specified', ui.INFO)
+        if validator:
+            for (group, tests) in sorted(subtask['groups'].items()):
+                for (i, test) in enumerate(tests, 1):
+                    test_file = self.test_filepath(stn, group, i)
+                    self.validate_test_input(test_file, validator)
 
-    def build_checker(self, source):
-        fp = FilePath(self._task_directory, source)
+    @ui.args_work('Validating')
+    def validate_test_input(self, test_file, validator):
+        if not test_file.exists():
+            return False, 'Test file does not exist'
+        (st, time, msg) = validator.run(test_file, None)
+        return st, msg
+
+    def build_validator(self, source):
+        fp = FilePath(self._directory, source)
         if not fp.exists():
             return (None, 'File does not exists.')
         if fp.ext == '.cpp':
             binary = fp.chext('.bin')
             if binary.mtime() < fp.mtime():
                 if not self._cpp_compiler(fp, binary):
-                    return (None, 'Failed to build checker.')
+                    return (None, 'Failed to build validator.')
             return (Runnable(binary), 'OK')
         elif fp.ext in ['.py', '.py3']:
             return (Runnable('python3', [str(source)]), 'OK')
@@ -792,31 +782,68 @@ class DatasetPlan(object):
         else:
             return (None, 'Not supported source file.')
 
+    def run(self):
+        (subtasks, cmds) = self.parse_file()
+
+        for stn in range(1, subtasks + 1):
+            dire = FilePath(self._dataset_directory, 'st%d' % stn).get_or_create_dir()
+            dire.clear()
+
+        if not cmds:
+            ui.show_message("Warning", 'no commands were executed for the plan.',
+                            ui.WARNING)
+
+        for (stn, subtask) in sorted(cmds.items()):
+            self.run_subtask(stn, subtask)
+
+    @ui.args_workgroup('Subtask {}')
+    def run_subtask(self, stn, subtask):
+        groups = subtask['groups']
+        for (group, tests) in sorted(groups.items()):
+            for (i, test) in enumerate(tests, 1):
+                cmd = test['cmd']
+                test_file = self.test_filepath(stn, group, i)
+                if cmd == 'copy':
+                    self.copy(test['file'], test_file)
+                elif cmd == 'echo':
+                    self.echo(test['args'], test_file)
+                else:
+                    test['args'].insert(0, '%s-%s-%s' % (stn, group, i))
+                    if cmd in ['cpp', 'py', 'java']:
+                        source = FilePath(self._directory, test['source'])
+                        if cmd == 'cpp':
+                            self.run_cpp_generator(source, test['args'], test_file)
+                        elif cmd in ['py', 'py2', 'py3']:
+                            self.run_py_generator(source, test['args'], test_file, cmd)
+                        elif cmd == 'java':
+                            self.run_java_generator(source, test['args'], test_file)
+                    elif cmd == 'run':
+                        bin_path = FilePath(self._directory, test['bin'])
+                        self.run_bin_generator(bin_path, test['args'], test_file)
+                    else:
+                        ui.fatal_error('unexpected command when running plan: %s ' % cmd)
+
     @ui.args_work('Copy')
-    def copy(self, src, dst, checker):
+    def copy(self, src, dst):
         fp = FilePath(self._task_directory, src)
         if not fp.exists():
             return (False, 'No such file')
         try:
             fp.copy(dst)
             (st, msg) = (True, 'OK')
-            if checker:
-                (st, time, msg) = checker.run(dst, None)
             return (st, msg)
         except:
             return (False, 'Error when copying file')
 
     @ui.args_work('Echo')
-    def echo(self, args, dst, checker):
+    def echo(self, args, dst):
         with dst.open('w') as test_file:
             test_file.write(' '.join(args) + '\n')
             (st, msg) = (True, 'Ok')
-            if checker:
-                (st, time, msg) = checker.run(dst, None)
             return (st, msg)
 
     @ui.args_work('Gen')
-    def run_cpp_generator(self, source, args, dst, checker):
+    def run_cpp_generator(self, source, args, dst):
         if not source.exists():
             return (False, 'No such file')
         binary = source.chext('.bin')
@@ -826,22 +853,18 @@ class DatasetPlan(object):
                 return (st, 'Failed to build generator')
 
         (st, time, msg) = Runnable(binary).run(None, dst, args)
-        if checker:
-            (st, time, msg) = checker.run(dst, None)
         return (st, msg)
 
     @ui.args_work('Gen')
-    def run_py_generator(self, source, args, dst, checker, cmd):
+    def run_py_generator(self, source, args, dst, cmd):
         if not source.exists():
             return (False, 'No such file')
         python = 'python2' if cmd == 'py2' else 'python3'
         (st, time, msg) = Runnable(python, [str(source)]).run(None, dst, args)
-        if checker:
-            (st, time, msg) = checker.run(dst, None)
         return (st, msg)
 
     @ui.args_work('Gen')
-    def run_java_generator(self, source, args, dst, checker):
+    def run_java_generator(self, source, args, dst):
         if not source.exists():
             return (False, 'No such file')
         bytecode = source.chext('.class')
@@ -853,29 +876,25 @@ class DatasetPlan(object):
         classname = bytecode.rootname()
         classpath = str(bytecode.directory().path())
         (st, time, msg) = Runnable('java', ['-cp', classpath, classname]).run(None, dst, args)
-        if checker:
-            (st, time, msg) = checker.run(dst, None)
         return (st, msg)
 
     @ui.args_work('Gen')
-    def run_bin_generator(self, bin_path, args, dst, checker):
+    def run_bin_generator(self, bin_path, args, dst):
         if not bin_path.exists():
             return (False, 'No such file')
         if not Runnable.is_callable(bin_path):
             return (False, 'Cannot run file, it may not have correct permissions')
         (st, time, msg) = Runnable(bin_path).run(None, dst, args)
-        if checker:
-            (st, time, msg) = checker.run(dst, None)
         return (st, msg)
 
-    def parse_file(self, path):
+    def parse_file(self):
         """
         Args:
             path (FilePath)
         """
         cmds = {}
         st = 0
-        for (lineno, line) in enumerate(path.open('r').readlines(), 1):
+        for (lineno, line) in enumerate(self._testplan_path.open('r').readlines(), 1):
             line = line.strip()
             subtask_header = re.compile(r'\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*')
             cmd_line = re.compile(r'\s*([^;\s]+)\s*;\s*(\S+)\s+(.*)')
@@ -888,7 +907,7 @@ class DatasetPlan(object):
                 cmd_match = cmd_line.fullmatch(line)
                 if header_match:
                     found_st = int(header_match.group(1))
-                    checker = header_match.group(2)
+                    validator = header_match.group(2)
                     if st + 1 != found_st:
                         ui.fatal_error(
                             'line %d: found subtask %d, but subtask %d was expected' %
@@ -896,7 +915,7 @@ class DatasetPlan(object):
                         )
                     st += 1
                     cmds[st] = {
-                        'checker': checker,
+                        'validator': validator,
                         'groups': {}
                     }
                 elif cmd_match:
@@ -1082,7 +1101,7 @@ class Runnable(object):
     def __str__(self):
         return self._cmd[0]
 
-    def run(self, in_path, out_path, args=[]):
+    def run(self, in_path, out_path, args=[], timeout=None):
         """Run binary redirecting standard input and output.
 
         Args:
@@ -1113,7 +1132,7 @@ class Runnable(object):
             self._cmd.extend(args)
             try:
                 complete = subprocess.run(self._cmd,
-                                          timeout=ocimatic.config['timeout'],
+                                          timeout=timeout,
                                           stdin=in_file,
                                           stdout=out_file,
                                           universal_newlines=True,

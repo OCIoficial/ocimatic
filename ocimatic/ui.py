@@ -120,6 +120,7 @@ def self_work(action):
         return wrapper
     return decorator
 
+
 def args_work(action, target=None):
     def decorator(func):
         def wrapper(self, *args, **kwargs):
@@ -129,6 +130,7 @@ def args_work(action, target=None):
             return (st, msg)
         return wrapper
     return decorator
+
 
 def supergroup(msg=None):
     def decorator(func):
@@ -146,6 +148,7 @@ def self_workgroup():
             return func(self, *args, **kwargs)
         return wrapper
     return decorator
+
 
 def args_workgroup(formatter=None):
     def decorator(func):
