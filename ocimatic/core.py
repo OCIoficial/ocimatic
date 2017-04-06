@@ -809,14 +809,13 @@ class DatasetPlan(object):
                     self.echo(test['args'], test_file)
                 else:
                     test['args'].insert(0, '%s-%s-%s' % (stn, group, i))
-                    if cmd in ['cpp', 'py', 'java']:
-                        source = FilePath(self._directory, test['source'])
-                        if cmd == 'cpp':
-                            self.run_cpp_generator(source, test['args'], test_file)
-                        elif cmd in ['py', 'py2', 'py3']:
-                            self.run_py_generator(source, test['args'], test_file, cmd)
-                        elif cmd == 'java':
-                            self.run_java_generator(source, test['args'], test_file)
+                    source = FilePath(self._directory, test['source'])
+                    if cmd == 'cpp':
+                        self.run_cpp_generator(source, test['args'], test_file)
+                    elif cmd in ['py', 'py2', 'py3']:
+                        self.run_py_generator(source, test['args'], test_file, cmd)
+                    elif cmd == 'java':
+                        self.run_java_generator(source, test['args'], test_file)
                     elif cmd == 'run':
                         bin_path = FilePath(self._directory, test['bin'])
                         self.run_bin_generator(bin_path, test['args'], test_file)
@@ -897,7 +896,7 @@ class DatasetPlan(object):
         for (lineno, line) in enumerate(self._testplan_path.open('r').readlines(), 1):
             line = line.strip()
             subtask_header = re.compile(r'\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*')
-            cmd_line = re.compile(r'\s*([^;\s]+)\s*;\s*(\S+)\s+(.*)')
+            cmd_line = re.compile(r'\s*([^;\s]+)\s*;\s*(\S+)(:?\s+(.*))?')
             comment = re.compile('\s*#.*')
 
             if not line:
@@ -925,7 +924,7 @@ class DatasetPlan(object):
                         )
                     group = cmd_match.group(1)
                     cmd = cmd_match.group(2)
-                    args = cmd_match.group(3).split()
+                    args = (cmd_match.group(3) or '').split()
                     if group not in cmds[st]['groups']:
                         cmds[st]['groups'][group] = []
 
