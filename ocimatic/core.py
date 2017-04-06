@@ -273,7 +273,11 @@ class Task(object):
         """
         if not self._correct:
             ui.fatal_error('No correct solution.')
-        self._correct[0].gen_expected(self._dataset, sample=sample)
+        cpp = [sol for sol in self._correct if isinstance(sol, CppSolution)]
+        sol = self._correct[0]
+        if cpp:
+            sol = cpp[0]
+        sol.gen_expected(self._dataset, sample=sample)
 
     def build_statement(self, blank_page=False):
         """Generate pdf for the statement"""
