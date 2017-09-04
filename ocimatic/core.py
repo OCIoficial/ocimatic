@@ -51,7 +51,7 @@ class Contest(object):
         self.build_problemset_twoside()
         self.build_problemset_oneside()
 
-    @ui.args_workgroup('oneside')
+    @ui.workgroup('oneside')
     def build_problemset_oneside(self):
         os.environ['OCIMATIC_SIDENESS'] = 'oneside'
         self.compile_titlepage()
@@ -60,7 +60,7 @@ class Contest(object):
             task.build_statement()
         self.merge_pdfs('oneside.pdf')
 
-    @ui.args_workgroup('twoside')
+    @ui.workgroup('twoside')
     def build_problemset_twoside(self):
         os.environ['OCIMATIC_SIDENESS'] = 'twoside'
         self.compile_titlepage()
@@ -87,7 +87,7 @@ class Contest(object):
 
         return st == 0
 
-    @ui.args_work('PDF', 'titlepage.tex')
+    @ui.work('PDF', 'titlepage.tex')
     def compile_titlepage(self):
         """Compile title page latex
         Returns:
@@ -96,7 +96,7 @@ class Contest(object):
         st = self._compiler(self._titlepage)
         return (st, 'OK' if st else 'FAILED')
 
-    @ui.args_work('MERGE')
+    @ui.work('MERGE', '{1}')
     def merge_pdfs(self, filename):
         """Merges statements and title page in a single file """
         if not shutil.which('gs'):
@@ -178,8 +178,7 @@ class Task(object):
 
         self._dataset = Dataset(directory.chdir('dataset'), self._statement)
 
-
-    @ui.self_workgroup()
+    @ui.workgroup()
     def copy_to(self, directory):
         new_dir = directory.mkdir(str(self))
 
@@ -208,7 +207,7 @@ class Task(object):
                                self._directory.chdir('dataset'))
         testplan.validate_input()
 
-    @ui.self_work('ZIP')
+    @ui.work('ZIP')
     def compress_dataset(self):
         """Compress dataset in a single file data.zip"""
         st = self._dataset.compress()
@@ -234,6 +233,10 @@ class Task(object):
         """Statement"""
         return self._statement
 
+    @ui.task('Counting')
+    def count(self):
+        self._dataset.count()
+
     @ui.task('Normalizing')
     def normalize(self):
         self._dataset.normalize()
@@ -248,7 +251,7 @@ class Task(object):
                 contain pattern as substring.
         """
         for sol in self.solutions(partial):
-            if not pattern or pattern in sol.name:
+            if not pattern or pattern.lower() in sol.name.lower():
                 sol.run(self._dataset, self._checker)
 
     @ui.task('Checking dataset')
@@ -263,21 +266,29 @@ class Task(object):
     def build_solutions(self, pattern=None):
         """Forces a rebuilding of all solutions, both partial and corrects."""
         for sol in self.solutions(partial=True):
-            if pattern is None or pattern in sol.name:
+            if pattern is None or pattern.lower() in sol.name.lower():
                 sol.build()
 
     @ui.task('Generating expected output')
-    def gen_expected(self, sample=False):
+    def gen_expected(self, sample=False, pattern=None):
         """Generate expected outputs files for dataset by running one of the
         correct solutions.
         """
         if not self._correct:
             ui.fatal_error('No correct solution.')
-        cpp = [sol for sol in self._correct if isinstance(sol, CppSolution)]
-        sol = self._correct[0]
-        if cpp:
-            sol = cpp[0]
-        sol.gen_expected(self._dataset, sample=sample)
+        generator = None
+        if pattern:
+            for sol in self._correct:
+                if pattern.lower() in sol.name.lower():
+                    generator = sol
+                    break
+        else:
+            cpp = [sol for sol in self._correct if isinstance(sol, CppSolution)]
+            if cpp:
+                generator = cpp[0]
+        if not generator:
+            generator = self._correct[0]
+        generator.gen_expected(self._dataset, sample=sample)
 
     def build_statement(self, blank_page=False):
         """Generate pdf for the statement"""
@@ -323,7 +334,7 @@ class Solution(object):
         if runnable:
             dataset.run(runnable, checker, sample=sample, check=check)
 
-    @ui.self_workgroup()
+    @ui.workgroup()
     def gen_expected(self, dataset, sample=False):
         """Generate expected output files for all test cases in the given dataset
         running this solution.
@@ -336,7 +347,7 @@ class Solution(object):
         if runnable:
             dataset.gen_expected(runnable, sample=sample)
 
-    @ui.self_work('Build')
+    @ui.work('Build')
     def build(self):
         """Build solution.
         Returns:
@@ -565,6 +576,10 @@ class Dataset(object):
 
         return st == 0
 
+    def count(self):
+        for st in self._subtasks:
+            st.count()
+
     def normalize(self):
         for subtask in self._subtasks:
             subtask.normalize()
@@ -595,12 +610,17 @@ class Subtask(object):
         for test in self._tests:
             test.normalize()
 
-    @ui.self_workgroup()
+    @ui.work('Gen')
+    def count(self):
+        return (True, len(self._tests))
+
+
+    @ui.workgroup()
     def run(self, runnable, checker, check=False):
         for test in self._tests:
             test.run(runnable, checker, check=check)
 
-    @ui.self_workgroup()
+    @ui.workgroup()
     def gen_expected(self, runnable):
         for test in self._tests:
             test.gen_expected(runnable)
@@ -640,7 +660,7 @@ class Test(object):
         """Diretory: diretory where this test reside"""
         return self._in_path.directory()
 
-    @ui.self_work('Gen')
+    @ui.work('Gen')
     def gen_expected(self, runnable):
         """Run binary with this test as input to generate expected output file
         Args:
@@ -653,7 +673,7 @@ class Test(object):
         msg = 'OK' if st else errmsg
         return (st, msg)
 
-    @ui.self_work('Run')
+    @ui.work('Run')
     def run(self, runnable, checker, check=False):
         """Run runnable whit this test as input and check output correctness
         Args:
@@ -706,7 +726,7 @@ class Test(object):
         """FilePath: Expected output file path."""
         return self._expected_path
 
-    @ui.self_work('Normalize')
+    @ui.work('Normalize')
     def normalize(self):
         if not shutil.which('dos2unix'):
             return (False, 'Cannot find dos2unix')
@@ -747,7 +767,7 @@ class DatasetPlan(object):
         for (st, subtask) in sorted(cmds.items()):
             self.validate_subtask(st, subtask)
 
-    @ui.args_workgroup('Subtask {}')
+    @ui.workgroup('Subtask {1}')
     def validate_subtask(self, stn, subtask):
         validator = None
         if subtask['validator']:
@@ -762,7 +782,7 @@ class DatasetPlan(object):
                     test_file = self.test_filepath(stn, group, i)
                     self.validate_test_input(test_file, validator)
 
-    @ui.args_work('Validating')
+    @ui.work('Validating', '{1}')
     def validate_test_input(self, test_file, validator):
         if not test_file.exists():
             return False, 'Test file does not exist'
@@ -800,7 +820,7 @@ class DatasetPlan(object):
         for (stn, subtask) in sorted(cmds.items()):
             self.run_subtask(stn, subtask)
 
-    @ui.args_workgroup('Subtask {}')
+    @ui.workgroup('Subtask {1}')
     def run_subtask(self, stn, subtask):
         groups = subtask['groups']
         for (group, tests) in sorted(groups.items()):
@@ -826,7 +846,7 @@ class DatasetPlan(object):
                     else:
                         ui.fatal_error('unexpected command when running plan: %s ' % cmd)
 
-    @ui.args_work('Copy')
+    @ui.work('Copy', '{1}')
     def copy(self, src, dst):
         fp = FilePath(self._task_directory, src)
         if not fp.exists():
@@ -838,14 +858,14 @@ class DatasetPlan(object):
         except:
             return (False, 'Error when copying file')
 
-    @ui.args_work('Echo')
+    @ui.work('Echo', '{1}')
     def echo(self, args, dst):
         with dst.open('w') as test_file:
             test_file.write(' '.join(args) + '\n')
             (st, msg) = (True, 'Ok')
             return (st, msg)
 
-    @ui.args_work('Gen')
+    @ui.work('Gen', '{1}')
     def run_cpp_generator(self, source, args, dst):
         if not source.exists():
             return (False, 'No such file')
@@ -858,7 +878,7 @@ class DatasetPlan(object):
         (st, time, msg) = Runnable(binary).run(None, dst, args)
         return (st, msg)
 
-    @ui.args_work('Gen')
+    @ui.work('Gen', '{1}')
     def run_py_generator(self, source, args, dst, cmd):
         if not source.exists():
             return (False, 'No such file')
@@ -866,7 +886,7 @@ class DatasetPlan(object):
         (st, time, msg) = Runnable(python, [str(source)]).run(None, dst, args)
         return (st, msg)
 
-    @ui.args_work('Gen')
+    @ui.work('Gen', '{1}')
     def run_java_generator(self, source, args, dst):
         if not source.exists():
             return (False, 'No such file')
@@ -881,7 +901,7 @@ class DatasetPlan(object):
         (st, time, msg) = Runnable('java', ['-cp', classpath, classname]).run(None, dst, args)
         return (st, msg)
 
-    @ui.args_work('Gen')
+    @ui.work('Gen', '{1}')
     def run_bin_generator(self, bin_path, args, dst):
         if not bin_path.exists():
             return (False, 'No such file')
@@ -1194,7 +1214,7 @@ class Statement(object):
     def __str__(self):
         return str(self._source)
 
-    @ui.self_work('PDF')
+    @ui.work('PDF')
     def build(self, blank_page=False):
         """Compile statement latex source
         Args:

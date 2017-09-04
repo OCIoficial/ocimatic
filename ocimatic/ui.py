@@ -53,7 +53,8 @@ def decolorize(text):
 
 
 def writeln(text=''):
-    sys.stdout.write(text+'\n')
+    sys.stdout.write(text + '\n')
+
 
 def write(text):
     sys.stdout.write(text)
@@ -70,7 +71,7 @@ def task_header(name, msg):
 def workgroup_header(msg, length=35):
     """Header for group of works"""
     print()
-    msg = '....' + msg[-length-4:] if len(msg)-4 > length else msg
+    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
     sys.stdout.write(colorize('[%s]' % (msg), INFO))
     print()
 
@@ -110,55 +111,31 @@ def show_message(label, msg, color=INFO):
     sys.stdout.write(' %s \n' % colorize(label + ': ' + msg, color))
 
 
-def self_work(action):
+def work(action, formatter="{}"):
     def decorator(func):
-        def wrapper(self, *args, **kwargs):
-            start_work(action, str(self))
-            (st, msg) = func(self, *args, **kwargs)
+        def wrapper(*args, **kwargs):
+            start_work(action, formatter.format(*args, **kwargs))
+            (st, msg) = func(*args, **kwargs)
             end_work(msg, st)
             return (st, msg)
         return wrapper
     return decorator
 
 
-def args_work(action, target=None):
+def supergroup(formatter="{}"):
     def decorator(func):
-        def wrapper(self, *args, **kwargs):
-            start_work(action, target or str(args[0]))
-            (st, msg) = func(self, *args, **kwargs)
-            end_work(msg, st)
-            return (st, msg)
+        def wrapper(*args, **kwargs):
+            supergroup_header(formatter.format(*args, **kwargs))
+            return func(*args, **kwargs)
         return wrapper
     return decorator
 
 
-def supergroup(msg=None):
+def workgroup(formatter="{}"):
     def decorator(func):
-        def wrapper(self, *args, **kwargs):
-            supergroup_header(msg or str(self))
-            return func(self, *args, **kwargs)
-        return wrapper
-    return decorator
-
-
-def self_workgroup():
-    def decorator(func):
-        def wrapper(self, *args, **kwargs):
-            workgroup_header(str(self))
-            return func(self, *args, **kwargs)
-        return wrapper
-    return decorator
-
-
-def args_workgroup(formatter=None):
-    def decorator(func):
-        def wrapper(self, *args, **kwargs):
-            if formatter:
-                msg = formatter.format(*args)
-            else:
-                msg = str(args[0])
-            workgroup_header(msg)
-            return func(self, *args, **kwargs)
+        def wrapper(*args, **kwargs):
+            workgroup_header(formatter.format(*args, **kwargs))
+            return func(*args, **kwargs)
         return wrapper
     return decorator
 

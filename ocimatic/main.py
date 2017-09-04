@@ -80,13 +80,14 @@ def task_mode(args):
     actions = {
         'build': ('build_solutions', ['pattern'], {}),
         'check': ('check_dataset', [], {}),
-        'expected': ('gen_expected', [], {'sample': OPTS['sample']}),
+        'expected': ('gen_expected', ['pattern'], {'sample': OPTS['sample']}),
         'pdf': ('build_statement', [], {}),
         'run': ('run_solutions', ['pattern'], {'partial': OPTS['partial']}),
         'compress': ('compress_dataset', [], {}),
         'normalize': ('normalize', [], {}),
         'gen-input': ('gen_input', [], {}),
-        'validate-input': ('validate_input', [], {})
+        'validate-input': ('validate_input', [], {}),
+        'count': ('count', [], {})
     }
 
     (contest_dir, task_call) = filesystem.change_directory()
