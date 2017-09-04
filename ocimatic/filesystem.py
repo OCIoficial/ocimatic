@@ -181,14 +181,20 @@ class Directory(object):
     def getcwd():
         return Directory(os.getcwd())
 
-    def __init__(self, path):
-        """Produces an assertion error if the directory does not exist
+    def __init__(self, path, create=False):
+        """Produces an assertion error if the directory does not exist (unless create is true)
         or if the path does not correspond to a directory.
         Args:
             path (str): Full path to directory.
+            create (bool): Whether the directory should be created if it doesn't exists.
         """
-        assert(os.path.exists(path))
-        assert(os.path.isdir(path))
+        if os.path.exists(path):
+            assert(os.path.isdir(path))
+        elif create:
+            os.makedirs(path)
+        else:
+            assert(os.path.exists(path))
+
         self._path = os.path.abspath(path)
 
     def mkdir(self, name):
@@ -228,9 +234,9 @@ class Directory(object):
         """FilePath: Full path to directory."""
         return FilePath(self._path)
 
-    def chdir(self, *subdirs):
+    def chdir(self, *subdirs, create=False):
         """Changes directory. If the new directory does not exists
-        this functions produces an assertion error.
+        this functions produces an assertion error, unless create is true.
 
         Args:
             paths (List[str]):
@@ -238,7 +244,7 @@ class Directory(object):
         Returns:
             Directory: The new directory.
         """
-        return Directory(os.path.join(str(self.path()), *subdirs))
+        return Directory(os.path.join(str(self.path()), *subdirs), create=create)
 
     def __eq__(self, other):
         return self.path() == other.path()

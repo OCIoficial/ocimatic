@@ -186,7 +186,8 @@ class Task(object):
 
         self._statement = Statement(directory.chdir('statement'), num)
 
-        self._dataset = Dataset(directory.chdir('dataset'), SampleData(self._statement))
+        self._dataset = Dataset(directory.chdir('dataset', create=True),
+                                SampleData(self._statement))
 
     @ui.workgroup()
     def copy_to(self, directory):

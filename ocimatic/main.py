@@ -27,7 +27,6 @@ def new_contest(args):
         core.Contest.create_layout(contest_path)
         ui.show_message('Info', 'Contest [%s] created' % name)
     except Exception as exc:
-        raise
         ui.fatal_error("Couldn't create contest: %s." % exc)
 
 
@@ -58,7 +57,7 @@ def new_task(args):
         cwd = Directory.getcwd()
         if cwd.find(name):
             ui.fatal_error('Cannot create task in existing directory.')
-        task_dir = cwd.mkdir(name)
+        task_dir = FilePath(cwd, name)
         core.Task.create_layout(task_dir)
         ui.show_message('Info', 'Task [%s] created' % name)
     except Exception as exc:
