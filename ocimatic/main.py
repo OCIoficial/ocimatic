@@ -45,7 +45,7 @@ def contest_mode(args):
 
     actions = {
         'problemset': 'build_problemset',
-        'compress': 'compress',
+        'package': 'package'
     }
 
     if args[0] == "new":

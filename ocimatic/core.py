@@ -71,13 +71,23 @@ class Contest(object):
             task.build_statement(blank_page=blank_page)
         self.merge_pdfs('twoside.pdf')
 
-    @ui.supergroup('Compressing contest')
-    def compress(self):
+    @ui.supergroup('Building package')
+    def package(self):
         """Compress statement and dataset of all tasks in a single file"""
         tmpdir = Directory.tmpdir()
         try:
             for task in self._tasks:
                 task.copy_to(tmpdir)
+
+            self.build_problemset_twoside()
+            self.build_problemset_oneside()
+            oneside = FilePath(self._directory, 'oneside.pdf')
+            if oneside.exists():
+                oneside.copy(FilePath(tmpdir, 'oneside.pdf'))
+            twoside = FilePath(self._directory, 'twoside.pdf')
+            if twoside.exists():
+                twoside.copy(FilePath(tmpdir, 'twoside.pdf'))
+
             cmd = 'cd %s && zip -r contest.zip .' % tmpdir
             st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
             contest = FilePath(self._directory, '%s.zip' % self.name)
@@ -176,7 +186,7 @@ class Task(object):
 
         self._statement = Statement(directory.chdir('statement'), num)
 
-        self._dataset = Dataset(directory.chdir('dataset'), self._statement)
+        self._dataset = Dataset(directory.chdir('dataset'), SampleData(self._statement))
 
     @ui.workgroup()
     def copy_to(self, directory):
@@ -184,9 +194,10 @@ class Task(object):
 
         (st, _) = self.compress_dataset()
         if st:
-            dataset = FilePath(new_dir, 'data.zip')
+            dataset = FilePath(self._directory.chdir('dataset'), 'data.zip')
+            dataset_dst = FilePath(new_dir, 'data.zip')
             if dataset.exists():
-                FilePath(self._directory.chdir('dataset'), 'data.zip').copy(dataset)
+                dataset.copy(dataset_dst)
 
         (st, _) = self.build_statement()
         if st:
@@ -520,22 +531,19 @@ class JavaCompiler(object):
         return complete.returncode == 0
 
 
-# TODO refactor statement out of dataset
 class Dataset(object):
     """Test data"""
-    def __init__(self, directory, statement=None,
-                 in_ext='.in', sol_ext='.sol'):
+    def __init__(self, directory, sampledata=None, in_ext='.in', sol_ext='.sol'):
         """
         Args:
             directory (Directory): dataset directory.
-            statement (Optional[Statement]): optional statement to look for
-                sample test data.
+            sampledata (Optional[SampleData]): optional sampledata
         """
         self._directory = directory
         self._in_ext = in_ext
         self._sol_ext = sol_ext
         self._subtasks = [Subtask(d, in_ext, sol_ext) for d in directory.lsdir()]
-        self._sampledata = SampleData(statement, in_ext=in_ext, sol_ext=sol_ext)
+        self._sampledata = sampledata
 
     def gen_expected(self, runnable, sample=False):
         for subtask in self._subtasks:
@@ -549,13 +557,22 @@ class Dataset(object):
         if sample:
             self._sampledata.run(runnable, checker, check=check)
 
+    def mtime(self):
+        mtime = -1
+        for subtask in self._subtasks:
+            mtime = max(mtime, subtask.mtime())
+        return mtime
+
     def compress(self):
         """Compress all test cases in this dataset in a single zip file.
         The basename of the corresponding subtask subdirectory is prepended
         to each file.
         """
-        tmpdir = Directory.tmpdir()
+        dst_file = FilePath(self._directory, 'data.zip')
+        if dst_file.exists() and dst_file.mtime() >= self.mtime():
+            return True
 
+        tmpdir = Directory.tmpdir()
         try:
             copied = 0
             for subtask in self._subtasks:
@@ -565,11 +582,8 @@ class Dataset(object):
                 # ui.show_message("Warning", "no files in dataset", ui.WARNING)
                 return True
 
-            cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir,
-                                                     self._in_ext,
-                                                     self._sol_ext)
+            cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir, self._in_ext, self._sol_ext)
             st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
-            dst_file = FilePath(self._directory, 'data.zip')
             FilePath(tmpdir, 'data.zip').copy(dst_file)
         finally:
             tmpdir.rmtree()
@@ -606,6 +620,12 @@ class Subtask(object):
                 copied += 1
         return copied
 
+    def mtime(self):
+        mtime = -1
+        for test in self._tests:
+            mtime = max(mtime, test.mtime())
+        return mtime
+
     def normalize(self):
         for test in self._tests:
             test.normalize()
@@ -613,7 +633,6 @@ class Subtask(object):
     @ui.work('Gen')
     def count(self):
         return (True, len(self._tests))
-
 
     @ui.workgroup()
     def run(self, runnable, checker, check=False):
@@ -654,6 +673,11 @@ class Test(object):
 
     def __str__(self):
         return str(self._in_path)
+
+    def mtime(self):
+        if self._expected_path.exists():
+            return max(self._in_path.mtime(), self._expected_path.mtime())
+        return self._in_path.mtime()
 
     @property
     def directory(self):
