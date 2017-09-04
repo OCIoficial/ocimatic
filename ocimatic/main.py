@@ -4,7 +4,7 @@ import os
 
 import ocimatic
 from ocimatic import core, ui, filesystem
-from ocimatic.filesystem import Directory
+from ocimatic.filesystem import Directory, FilePath
 
 OPTS = {
     'partial': False,
@@ -21,22 +21,14 @@ def new_contest(args):
 
     try:
         cwd = Directory.getcwd()
-        contest_path = cwd.find(name)
-        if contest_path:
-            if contest_path.isdir():
-                ui.write('Creating contest in existing directory, are you sure (y/N)? ')
-                res = input()
-                if res != 'y' and res != 'Y':
-                    sys.exit(0)
-            else:
-                ui.fatal_error('Couldn\'t create contest. File exists')
-            contest_dir = contest_path.get_or_create_dir()
-        else:
-            contest_dir = cwd.mkdir(name)
-        core.Contest.create_layout(contest_dir)
+        if cwd.find(name):
+            ui.fatal_error("Couldn't create contest. Path already exists")
+        contest_path = FilePath(cwd, name)
+        core.Contest.create_layout(contest_path)
         ui.show_message('Info', 'Contest [%s] created' % name)
     except Exception as exc:
-        ui.fatal_error('Couldn\'t create contest: %s.' % exc)
+        raise
+        ui.fatal_error("Couldn't create contest: %s." % exc)
 
 
 def contest_mode(args):

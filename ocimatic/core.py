@@ -36,7 +36,7 @@ class Contest(object):
         """
         ocimatic_dir = FilePath(__file__).directory()
         contest_skel = ocimatic_dir.chdir('resources', 'contest-skel')
-        contest_skel.copy_tree(contest_path)
+        contest_skel.copy_tree(contest_path, ['auto'])
 
     @property
     def tasks(self):

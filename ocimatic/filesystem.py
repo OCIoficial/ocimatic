@@ -3,7 +3,6 @@ import os
 import shutil
 from functools import total_ordering
 from tempfile import mkstemp, mkdtemp
-from distutils.dir_util import copy_tree
 
 from ocimatic import ui
 
@@ -290,11 +289,13 @@ class Directory(object):
         files = self.lsfile(filename)
         return files[0] if len(files) > 0 else None
 
-    def copy_tree(self, dest):
+    def copy_tree(self, dst, ignore=None):
         """
         Copy recursively all content from directory to destination and create
         dest if it does not exists.
         Args:
             dest (FilePath): destination folder
         """
-        copy_tree(str(self.path()), str(dest), preserve_symlinks=1)
+        if ignore is not None:
+            ignore = shutil.ignore_patterns(*ignore)
+        shutil.copytree(str(self.path()), str(dst), symlinks=1, ignore=ignore)
