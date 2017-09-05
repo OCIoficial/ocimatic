@@ -43,7 +43,7 @@ class Contest(object):
         """List[Task]"""
         return self._tasks
 
-    @ui.supergroup('Generating problemset')
+    @ui.contest_group('Generating problemset')
     def build_problemset(self):
         """It builds the titlepage and the statement of all tasks. Then it merges
         all pdfs in a single file.
@@ -71,7 +71,7 @@ class Contest(object):
             task.build_statement(blank_page=blank_page)
         self.merge_pdfs('twoside.pdf')
 
-    @ui.supergroup('Building package')
+    @ui.contest_group('Building package')
     def package(self):
         """Compress statement and dataset of all tasks in a single file"""
         tmpdir = Directory.tmpdir()
@@ -189,7 +189,7 @@ class Task(object):
         self._dataset = Dataset(directory.chdir('dataset', create=True),
                                 SampleData(self._statement))
 
-    @ui.workgroup()
+    @ui.task('Building package')
     def copy_to(self, directory):
         new_dir = directory.mkdir(str(self))
 
@@ -331,7 +331,7 @@ class Solution(object):
                 solutions.append(JavaSolution(f, managers_dir))
         return solutions
 
-    @ui.supergroup()
+    @ui.solution_group()
     def run(self, dataset, checker, check=False, sample=False):
         """Run this solution for all test cases in the given dataset.
         Args:
@@ -342,11 +342,12 @@ class Solution(object):
             sample (bool): If true run solution with sample test data from
                 statement.
         """
-        runnable = self.get_and_build()
+        runnable, msg = self.get_and_build()
+        yield (runnable is not None, msg)
         if runnable:
             dataset.run(runnable, checker, sample=sample, check=check)
 
-    @ui.workgroup()
+    @ui.solution_group()
     def gen_expected(self, dataset, sample=False):
         """Generate expected output files for all test cases in the given dataset
         running this solution.
@@ -355,7 +356,8 @@ class Solution(object):
             sample (bool): If true expected output file for are generated for
                 sample test data from statement.
         """
-        runnable = self.get_and_build()
+        runnable, msg = self.get_and_build()
+        yield (runnable is not None, msg)
         if runnable:
             dataset.gen_expected(runnable, sample=sample)
 
@@ -375,10 +377,12 @@ class Solution(object):
             Optional[Runnable]: Runnable file of this solution or None if it fails
           to build"""
         if self.build_time() < self._source.mtime():
-            (st, _) = self.build()
+            with ui.capture_works() as works:
+                self.build()
+                (st, msg) = works[0]
             if not st:
-                return None
-        return self.get_runnable()
+                return (None, msg)
+        return (self.get_runnable(), 'OK')
 
     def get_runnable(self):
         raise NotImplementedError("Class %s doesn't implement get_runnable()" % (
@@ -570,7 +574,7 @@ class Dataset(object):
         to each file.
         """
         in_ext = in_ext or self._in_ext
-        sol_ext = sol_ext or self._on_ext
+        sol_ext = sol_ext or self._sol_ext
         dst_file = FilePath(self._directory, 'data.zip')
         if dst_file.exists() and dst_file.mtime() >= self.mtime():
             return True

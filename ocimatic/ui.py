@@ -1,6 +1,7 @@
 import sys
 import textwrap
 import re
+from contextlib import contextmanager
 from importlib.util import find_spec
 
 import ocimatic
@@ -15,6 +16,7 @@ if find_spec('colorama') is not None:
     GREEN = Fore.GREEN
     YELLOW = Fore.YELLOW
     BLUE = Fore.BLUE
+    MAGENTA = Fore.MAGENTA
 else:
     RESET = ''
     BOLD = ''
@@ -23,6 +25,7 @@ else:
     GREEN = ''
     YELLOW = ''
     BLUE = ''
+    MAGENTA = ''
 
 # RESET = '\x1b[0m'
 # BOLD = '\x1b[1m'
@@ -67,32 +70,42 @@ def write(text):
 
 def task_header(name, msg):
     """Print header for task"""
-    print()
-    print()
+    write('\n\n')
     write(colorize('[%s] %s' % (name, msg), BOLD + YELLOW))
-    print()
-
-
-def workgroup_header(msg, length=35):
-    """Header for group of works"""
-    writeln()
-    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    write(colorize('[%s]' % (msg), INFO))
     writeln()
     sys.stdout.flush()
 
 
-def workgroup_footer():
-    if ocimatic.config['verbosity'] == 0:
+def workgroup_header(msg, length=35):
+    """Header for a generic group of works"""
+    writeln()
+    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
+    write(colorize('[%s]' % (msg), INFO))
+    if ocimatic.config['verbosity'] > 0:
         writeln()
-        sys.stdout.flush()
+    else:
+        write(' ')
+    sys.stdout.flush()
 
 
-def supergroup_header(msg, length=35):
-    """Header for group of works"""
+def contest_group_header(msg, length=35):
+    """Header for a group of works involving a contest"""
     write('\n\n')
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    write(colorize('[%s]' % (msg), INFO + BLUE))
+    write(colorize('[%s]' % (msg), INFO + MAGENTA))
+    writeln()
+    sys.stdout.flush()
+
+
+def solution_group_header(msg, length=35):
+    """Header for a group of works involving a solution"""
+    writeln()
+    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
+    write(colorize('[%s]' % (msg), INFO + BLUE) + ' ')
+    sys.stdout.flush()
+
+
+def solution_group_footer():
     writeln()
     sys.stdout.flush()
 
@@ -126,21 +139,46 @@ def show_message(label, msg, color=INFO):
     write(' %s \n' % colorize(label + ': ' + msg, color))
 
 
+CAPTURE_WORKS = []
+
+
+@contextmanager
+def capture_works():
+    CAPTURE_WORKS.append([])
+    yield CAPTURE_WORKS[-1]
+    CAPTURE_WORKS.pop()
+
+
 def work(action, formatter="{}", verbosity=True):
     def decorator(func):
         def wrapper(*args, **kwargs):
-            start_work(action, formatter.format(*args, **kwargs), verbosity=verbosity)
+            if not CAPTURE_WORKS:
+                start_work(action, formatter.format(*args, **kwargs), verbosity=verbosity)
             (st, msg) = func(*args, **kwargs)
-            end_work(msg, st, verbosity=verbosity)
+            if CAPTURE_WORKS:
+                CAPTURE_WORKS[-1].append((st, msg))
+            else:
+                end_work(msg, st, verbosity=verbosity)
             return (st, msg)
         return wrapper
     return decorator
 
 
-def supergroup(formatter="{}"):
+def solution_group(formatter="{}"):
     def decorator(func):
         def wrapper(*args, **kwargs):
-            supergroup_header(formatter.format(*args, **kwargs))
+            solution_group_header(formatter.format(*args, **kwargs))
+            for st, msg in func(*args, **kwargs):
+                end_work(msg, st, verbosity=False)
+            solution_group_footer()
+        return wrapper
+    return decorator
+
+
+def contest_group(formatter="{}"):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            contest_group_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
         return wrapper
     return decorator
@@ -150,9 +188,7 @@ def workgroup(formatter="{}"):
     def decorator(func):
         def wrapper(*args, **kwargs):
             workgroup_header(formatter.format(*args, **kwargs))
-            res = func(*args, **kwargs)
-            workgroup_footer()
-            return res
+            return func(*args, **kwargs)
         return wrapper
     return decorator
 
