@@ -3,6 +3,7 @@ import textwrap
 import re
 from importlib.util import find_spec
 
+import ocimatic
 from ocimatic import getopt
 
 if find_spec('colorama') is not None:
@@ -68,59 +69,69 @@ def task_header(name, msg):
     """Print header for task"""
     print()
     print()
-    sys.stdout.write(colorize('[%s] %s' % (name, msg), BOLD + YELLOW))
+    write(colorize('[%s] %s' % (name, msg), BOLD + YELLOW))
     print()
 
 
 def workgroup_header(msg, length=35):
     """Header for group of works"""
-    print()
+    writeln()
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    sys.stdout.write(colorize('[%s]' % (msg), INFO))
-    print()
+    write(colorize('[%s]' % (msg), INFO))
+    writeln()
+    sys.stdout.flush()
+
+
+def workgroup_footer():
+    if ocimatic.config['verbosity'] == 0:
+        writeln()
+        sys.stdout.flush()
 
 
 def supergroup_header(msg, length=35):
     """Header for group of works"""
-    print()
-    print()
+    write('\n\n')
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    sys.stdout.write(colorize('[%s]' % (msg), INFO + BLUE))
-    print()
-
-
-def start_work(action, msg, length=45):
-    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    msg = ' * [' + action + '] ' + msg + '  '
-    sys.stdout.write(msg)
+    write(colorize('[%s]' % (msg), INFO + BLUE))
+    writeln()
     sys.stdout.flush()
 
 
-def end_work(msg, status):
+def start_work(action, msg, length=45, verbosity=True):
+    if ocimatic.config['verbosity'] == 0 and verbosity:
+        return
+    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
+    msg = ' * [' + action + '] ' + msg + '  '
+    write(msg)
+    sys.stdout.flush()
+
+
+def end_work(msg, status, verbosity=True):
     color = OK if status else ERROR
-    sys.stdout.write(colorize(str(msg), color))
-    print()
+    if not verbosity or ocimatic.config['verbosity'] > 0:
+        write(colorize(str(msg), color))
+        writeln()
+    else:
+        write(colorize('.', color))
+    sys.stdout.flush()
 
 
 def fatal_error(message):
     writeln('ocimatic: ' + message)
     writeln()
-    # writeln(usage())
-    # writeln('Try ' + bold('ocimatic -h') + ' for more information.')
     sys.exit(1)
 
 
 def show_message(label, msg, color=INFO):
-    # sys.stdout.write(' %s \n' % colorize(label + ': ' + msg, color + UNDERLINE))
-    sys.stdout.write(' %s \n' % colorize(label + ': ' + msg, color))
+    write(' %s \n' % colorize(label + ': ' + msg, color))
 
 
-def work(action, formatter="{}"):
+def work(action, formatter="{}", verbosity=True):
     def decorator(func):
         def wrapper(*args, **kwargs):
-            start_work(action, formatter.format(*args, **kwargs))
+            start_work(action, formatter.format(*args, **kwargs), verbosity=verbosity)
             (st, msg) = func(*args, **kwargs)
-            end_work(msg, st)
+            end_work(msg, st, verbosity=verbosity)
             return (st, msg)
         return wrapper
     return decorator
@@ -139,7 +150,9 @@ def workgroup(formatter="{}"):
     def decorator(func):
         def wrapper(*args, **kwargs):
             workgroup_header(formatter.format(*args, **kwargs))
-            return func(*args, **kwargs)
+            res = func(*args, **kwargs)
+            workgroup_footer()
+            return res
         return wrapper
     return decorator
 

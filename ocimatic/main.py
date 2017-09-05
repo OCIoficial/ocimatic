@@ -5,11 +5,6 @@ import ocimatic
 from ocimatic import core, ui, filesystem, getopt
 from ocimatic.filesystem import Directory, FilePath
 
-OPTS = {
-    'task': None,
-    'timeout': None,
-}
-
 
 def new_contest(args):
     if len(args) < 1:
@@ -145,8 +140,8 @@ def task_mode(args, optlist):
         new_task(args[1:])
     elif args[0] in TASK_ACTIONS:
         contest = core.Contest(contest_dir)
-        if OPTS['task']:
-            tasks = [contest.find_task(OPTS['task'])]
+        if ocimatic.config['task']:
+            tasks = [contest.find_task(ocimatic.config['task'])]
         elif task_call:
             tasks = [contest.find_task(task_call.basename)]
         else:
@@ -185,7 +180,7 @@ def dataset_mode(args, optlist):
 
 def main():
     try:
-        optlist, args = getopt.gnu_getopt(sys.argv[1:], 'hpst:',
+        optlist, args = getopt.gnu_getopt(sys.argv[1:], 'hvt:',
                                           ['help', 'task=', 'phase=', 'timeout='],
                                           TASK_ACTIONS, CONTEST_ACTIONS, DATASET_ACTIONS)
     except getopt.GetoptError as err:
@@ -207,11 +202,13 @@ def main():
         mode = 'task'
 
     # Process options
-    for (key, val) in optlist:
+    for key, val in optlist.items():
+        if key == '-v':
+            ocimatic.config['verbosity'] += 1
         if key == '-h' or key == '--help':
             ui.ocimatic_help(modes[mode][1])
         elif key == '--task' or key == '-t':
-            OPTS['task'] = val
+            ocimatic.config['task'] = val
         elif key == '--phase':
             os.environ['OCIMATIC_PHASE'] = val
         elif key == '--timeout':

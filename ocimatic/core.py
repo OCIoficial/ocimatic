@@ -359,7 +359,7 @@ class Solution(object):
         if runnable:
             dataset.gen_expected(runnable, sample=sample)
 
-    @ui.work('Build')
+    @ui.work('Build', verbosity=False)
     def build(self):
         """Build solution.
         Returns:
@@ -721,9 +721,7 @@ class Test(object):
                 else:
                     return (st, '%s' % errmsg)
 
-            (st, outcome, checkmsg) = checker(self.in_path,
-                                              self.expected_path,
-                                              out_path)
+            (st, outcome, checkmsg) = checker(self.in_path, self.expected_path, out_path)
             # Checker failed
             if not st:
                 msg = 'Failed to run checker: %s' % checkmsg

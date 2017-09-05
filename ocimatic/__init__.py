@@ -10,5 +10,7 @@ __version__ = 'beta2'
 
 config = {
     'timeout': 10,
-    'last_blank_page': True
+    'last_blank_page': True,
+    'task': None,
+    'verbosity': 0
 }
