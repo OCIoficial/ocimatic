@@ -564,11 +564,13 @@ class Dataset(object):
             mtime = max(mtime, subtask.mtime())
         return mtime
 
-    def compress(self):
+    def compress(self, in_ext=None, sol_ext=None):
         """Compress all test cases in this dataset in a single zip file.
         The basename of the corresponding subtask subdirectory is prepended
         to each file.
         """
+        in_ext = in_ext or self._in_ext
+        sol_ext = sol_ext or self._on_ext
         dst_file = FilePath(self._directory, 'data.zip')
         if dst_file.exists() and dst_file.mtime() >= self.mtime():
             return True
@@ -583,7 +585,7 @@ class Dataset(object):
                 # ui.show_message("Warning", "no files in dataset", ui.WARNING)
                 return True
 
-            cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir, self._in_ext, self._sol_ext)
+            cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir, in_ext, sol_ext)
             st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
             FilePath(tmpdir, 'data.zip').copy(dst_file)
         finally:

@@ -1,6 +1,10 @@
 import sys
+import textwrap
 import re
 from importlib.util import find_spec
+
+from ocimatic import getopt
+
 if find_spec('colorama') is not None:
     from colorama import Style, Fore
     RESET = Style.RESET_ALL
@@ -80,13 +84,13 @@ def supergroup_header(msg, length=35):
     """Header for group of works"""
     print()
     print()
-    msg = '....' + msg[-length-4:] if len(msg)-4 > length else msg
+    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
     sys.stdout.write(colorize('[%s]' % (msg), INFO + BLUE))
     print()
 
 
 def start_work(action, msg, length=45):
-    msg = '....' + msg[-length-4:] if len(msg)-4 > length else msg
+    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
     msg = ' * [' + action + '] ' + msg + '  '
     sys.stdout.write(msg)
     sys.stdout.flush()
@@ -149,6 +153,47 @@ def task(action):
     return decorator
 
 
-def ocimatic_help():
-    show_message('INFO', 'Sorry, but we don\'t have a help message yet :(')
+def ocimatic_help(mode):
+    for action_name, action in mode.items():
+        write(' ' * 2 + bold(action_name) + ' ')
+        writeln(' '.join(_format_arg(arg) for arg in action.get('args', [])))
+        description = '\n'.join(
+            textwrap.wrap(
+                action.get('description', ''), 90,
+                subsequent_indent=' ' * 4,
+                initial_indent=' ' * 4
+            )
+        )
+        if description.strip():
+            writeln(description)
+        for opt_key, opt_config in action.get('optlist', {}).items():
+            opt = f"{' '*6}{_format_opt(opt_key, opt_config)}   "
+            write(opt)
+            description = '\n'.join(
+                textwrap.wrap(
+                    opt_config.get('description', ''),
+                    80 - len(opt),
+                    subsequent_indent=' ' * len(opt)
+                )
+            )
+            writeln(description)
+
+        writeln()
     sys.exit(0)
+
+
+def _format_arg(arg):
+    arg_name = getopt.get_arg_name(arg)
+    if getopt.is_optional(arg):
+        return f'[{arg_name}]'
+    return arg_name
+
+
+def _format_opt(opt_key, opt_config):
+    long_opt, short_opt = getopt.parse_opt_key(opt_key)
+    typ = opt_config.get('type', 'str')
+    if typ == 'bool':
+        opt = f'--{long_opt}, -{short_opt}' if short_opt else f'--{long_opt}'
+    else:
+        opt = f'--{long_opt}, -{short_opt}={long_opt}' if short_opt else f'--{long_opt}=long_opt'
+    return f'[{opt}]'

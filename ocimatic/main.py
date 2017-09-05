@@ -1,15 +1,12 @@
-import getopt
 import sys
 import os
 
 import ocimatic
-from ocimatic import core, ui, filesystem
+from ocimatic import core, ui, filesystem, getopt
 from ocimatic.filesystem import Directory, FilePath
 
 OPTS = {
-    'partial': False,
     'task': None,
-    'sample': False,
     'timeout': None,
 }
 
@@ -30,23 +27,34 @@ def new_contest(args):
         ui.fatal_error("Couldn't create contest: %s." % exc)
 
 
-def contest_mode(args):
-    if not args:
-        ui.ocimatic_help()
-
-    actions = {
-        'problemset': 'build_problemset',
-        'package': 'package'
+CONTEST_ACTIONS = {
+    'problemset': {
+        'description': 'Generate problemset.',
+        'method': 'build_problemset'
+    },
+    'package': {
+        'description': 'Generate contest package.',
+        'method': 'package'
     }
+}
+
+
+def contest_mode(args, optlist):
+    if not args:
+        ui.ocimatic_help(CONTEST_ACTIONS)
 
     if args[0] == "new":
         new_contest(args[1:])
-    elif args[0] in actions:
+    elif args[0] in CONTEST_ACTIONS:
+        action_name = args[0]
+        args.pop(0)
+        action = CONTEST_ACTIONS[action_name]
         contest_dir = filesystem.change_directory()[0]
         contest = core.Contest(contest_dir)
-        getattr(contest, actions[args[0]])()
+        getattr(contest, action.get('method', action_name))()
     else:
         ui.fatal_error('Unknown action for contest mode.')
+        ui.ocimatic_help(CONTEST_ACTIONS)
 
 
 def new_task(args):
@@ -64,28 +72,78 @@ def new_task(args):
         ui.fatal_error('Couldn\'t create task: %s' % exc)
 
 
-def task_mode(args):
-    if not args:
-        ui.ocimatic_help()
-
-    actions = {
-        'build': ('build_solutions', ['pattern'], {}),
-        'check': ('check_dataset', [], {}),
-        'expected': ('gen_expected', ['pattern'], {'sample': OPTS['sample']}),
-        'pdf': ('build_statement', [], {}),
-        'run': ('run_solutions', ['pattern'], {'partial': OPTS['partial']}),
-        'compress': ('compress_dataset', [], {}),
-        'normalize': ('normalize', [], {}),
-        'gen-input': ('gen_input', [], {}),
-        'validate-input': ('validate_input', [], {}),
-        'count': ('count', [], {})
+TASK_ACTIONS = {
+    'build': {
+        'description': 'Force a build of all solutions. If pattern is present only '
+                       'solutions matching the pattern will be built.',
+        'method': 'build_solutions',
+        'args': ['pattern?']
+    },
+    'check': {
+        'method': 'check_dataset',
+        'description': 'Check input/output running all correct solutions with all '
+                       'testdata and sample inputs.'
+    },
+    'expected': {
+        'description': 'Generate expected output running some correct solution against '
+                       'input data. If pattern is provided the expected output is '
+                       'generated using the first solution matching the pattern.',
+        'method': 'gen_expected',
+        'args': ['pattern?'],
+        'optlist': {
+            ('sample', 's'): {
+                'type': 'bool',
+                'description': 'Generate expected output for sample input as well.'
+            }
+        }
+    },
+    'pdf': {
+        'description': 'Compile statement pdf',
+        'method': 'build_statement'
+    },
+    'run': {
+        'description': 'Run all solutions with all test data and displays the output of '
+                       'the checker. If pattern is provided only solutions matching the '
+                       'pattern are considered.',
+        'method': 'run_solutions',
+        'args': ['pattern?'],
+        'optlist': {
+            ('partial', 'p'): {
+                'type': 'bool',
+                'description': 'Consider partial solutions as well.'
+            }
+        },
+    },
+    'compress': {
+        'description': 'Generate zip file with all test data.',
+        'method': 'compress_dataset'
+    },
+    'normalize': {
+        'description': 'Normalize input and output with dos2unix.'
+    },
+    'input': {
+        'description': 'Run testplan.',
+        'method': 'gen_input'
+    },
+    'validate-input': {
+        'description': 'Run input checkers.',
+        'method': 'validate_input'
+    },
+    'count': {
+        'description': 'Count number of input tests'
     }
+}
+
+
+def task_mode(args, optlist):
+    if not args:
+        ui.ocimatic_help(TASK_ACTIONS)
 
     (contest_dir, task_call) = filesystem.change_directory()
 
     if args[0] == 'new':
         new_task(args[1:])
-    elif args[0] in actions:
+    elif args[0] in TASK_ACTIONS:
         contest = core.Contest(contest_dir)
         if OPTS['task']:
             tasks = [contest.find_task(OPTS['task'])]
@@ -97,38 +155,30 @@ def task_mode(args):
         if not tasks:
             ui.show_message("Warning", "no tasks", ui.WARNING)
 
-        # actions[args[0]](tasks, *args[1:])
-        action = actions[args[0]]
+        action_name = args[0]
         args.pop(0)
-        kwargs = action[2]
-        if len(args) > len(action[1]):
-            ui.fatal_error(
-                'action %s expects no more than %d argument, %d were given' %
-                (action[0], len(action[1]), len(args))
-            )
-        for (i, arg) in enumerate(args):
-            kwargs[action[1][i]] = arg
+        action = TASK_ACTIONS[action_name]
+        kwargs = getopt.kwargs_from_optlist(action, args, optlist)
         for task in tasks:
-            getattr(task, action[0])(**kwargs)
+            getattr(task, action.get('method', action_name))(**kwargs)
     else:
         ui.fatal_error('Unknown action for task mode.')
+        ui.ocimatic_help(TASK_ACTIONS)
 
 
-def dataset_mode(args):
+DATASET_ACTIONS = {'compress': {'args': ['in_ext?', 'sol_ext?']}}
+
+
+def dataset_mode(args, optlist):
     if not args:
-        ui.ocimatic_help()
-    actions = {
-        'compress': 'compress',
-    }
+        ui.ocimatic_help(DATASET_ACTIONS)
     if args[0] in actions:
-        in_ext = '.in'
-        sol_ext = '.sol'
-        if len(args) > 1:
-            in_ext = args[1]
-        if len(args) > 2:
-            sol_ext = args[2]
-        dataset = core.Dataset(Directory.getcwd(), in_ext=in_ext, sol_ext=sol_ext)
-        getattr(dataset, actions[args[0]])()
+        action_name = args[0]
+        args.pop()
+        action = DATASET_ACTIONS[action_name]
+        kwargs = getopt.kwargs_from_optlist(action, args, optlist)
+        dataset = core.Dataset(Directory.getcwd())
+        getattr(dataset, action.get('method', action_name))(**kwargs)
     else:
         ui.fatal_error('Unknown action for dataset mode.')
 
@@ -136,18 +186,18 @@ def dataset_mode(args):
 def main():
     try:
         optlist, args = getopt.gnu_getopt(sys.argv[1:], 'hpst:',
-                                          ['help', 'partial', 'task=',
-                                           'phase=', 'sample', 'timeout='])
+                                          ['help', 'task=', 'phase=', 'timeout='],
+                                          TASK_ACTIONS, CONTEST_ACTIONS, DATASET_ACTIONS)
     except getopt.GetoptError as err:
         ui.fatal_error(str(err))
 
     if len(args) == 0:
-        ui.ocimatic_help()
+        ui.ocimatic_help(TASK_ACTIONS)
 
     modes = {
-        'contest': contest_mode,
-        'task': task_mode,
-        'dataset': dataset_mode,
+        'contest': (contest_mode, CONTEST_ACTIONS),
+        'task': (task_mode, TASK_ACTIONS),
+        'dataset': (dataset_mode, DATASET_ACTIONS)
     }
 
     # If no mode is provided we assume task
@@ -159,13 +209,9 @@ def main():
     # Process options
     for (key, val) in optlist:
         if key == '-h' or key == '--help':
-            ui.ocimatic_help()
-        elif key == '--partial' or key == '-p':
-            OPTS['partial'] = True
+            ui.ocimatic_help(modes[mode][1])
         elif key == '--task' or key == '-t':
             OPTS['task'] = val
-        elif key == '--sample' or key == '-s':
-            OPTS['sample'] = True
         elif key == '--phase':
             os.environ['OCIMATIC_PHASE'] = val
         elif key == '--timeout':
@@ -174,7 +220,7 @@ def main():
     # Select mode
     # try:
     if mode in modes:
-        modes[mode](args)
+        modes[mode][0](args, optlist)
     else:
         ui.fatal_error('Unknown mode.')
     # except Exception as exc:
