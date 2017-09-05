@@ -13,17 +13,12 @@ $ ./bin/ocimatic
 
 You can also add the `bin` directory to the `PATH`.
 
+optional: install `colorama` to support colors (`pip install colorama`).
+
 Basic Usage
 ----------
 Assuming `ocimatic` is in the `PATH`
 
+```https://github.com/OCIoficial/ocimatic/pull/13
+$ ocimatic -h
 ```
-$ ocimatic contest new test_contest
-$ cd test_contest
-$ ocimatic new problem_a
-$ cd problem_a
-$ ocimatic run
-$ ocimatic check
-$ ocimatic pdf
-```
-
