@@ -122,7 +122,7 @@ class FilePath(object):
         Returns:
             FilePath: file path with the new extension
         """
-        return FilePath(os.path.join(self._directory, self.rootname()+ext))
+        return FilePath(os.path.join(self._directory, self.rootname() + ext))
 
     def splitext(self):
         """Split filename in root name and extension.

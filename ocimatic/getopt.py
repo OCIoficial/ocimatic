@@ -16,6 +16,8 @@ def kwargs_from_optlist(action, args, optlist):
         if opt_value is not None:
             if typ == 'bool':
                 kwargs[arg_name] = True
+            elif typ == 'num':
+                kwargs[arg_name] = int(opt_value)
             else:
                 kwargs[arg_name] = opt_value
     return kwargs

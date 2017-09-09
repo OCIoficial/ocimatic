@@ -172,15 +172,15 @@ class Task(object):
         """
         self._directory = directory
 
-        managers_dir = directory.chdir('managers')
+        self._managers_dir = directory.chdir('managers')
 
         correct_dir = directory.chdir('solutions/correct')
-        self._correct = Solution.get_solutions(correct_dir, managers_dir)
+        self._correct = Solution.get_solutions(correct_dir, self._managers_dir)
         partial_dir = directory.chdir('solutions/partial')
-        self._partial = Solution.get_solutions(partial_dir, managers_dir)
+        self._partial = Solution.get_solutions(partial_dir, self._managers_dir)
 
         self._checker = DiffChecker()
-        custom_checker = managers_dir.find_file('checker.cpp')
+        custom_checker = self._managers_dir.find_file('checker.cpp')
         if custom_checker:
             self._checker = CppChecker(custom_checker)
 
@@ -240,6 +240,9 @@ class Task(object):
             for solution in self._partial:
                 yield solution
 
+    def get_solution(self, file_path):
+        return Solution.get_solution(file_path, self._managers_dir)
+
     @property
     def statement(self):
         """Statement"""
@@ -264,7 +267,10 @@ class Task(object):
         """
         for sol in self.solutions(partial):
             if not pattern or pattern.lower() in sol.name.lower():
-                sol.run(self._dataset, self._checker)
+                self.run_solution(sol)
+
+    def run_solution(self, solution):
+        solution.run(self._dataset, self._checker)
 
     @ui.task('Checking dataset')
     def check_dataset(self):
@@ -323,13 +329,20 @@ class Solution(object):
         Returns:
             List[Solution]: List of solutions.
         """
-        solutions = []
-        for f in solutions_dir.lsfile():
-            if f.ext == CppSolution.ext:
-                solutions.append(CppSolution(f, managers_dir))
-            if f.ext == JavaSolution.ext:
-                solutions.append(JavaSolution(f, managers_dir))
-        return solutions
+        return [
+            solution
+            for file_path in solutions_dir.lsfile()
+            for solution in [Solution.get_solution(file_path, managers_dir)]
+            if solution
+        ]
+
+    @staticmethod
+    def get_solution(file_path, managers_dir):
+        if file_path.ext == CppSolution.ext:
+            return CppSolution(file_path, managers_dir)
+        elif file_path.ext == JavaSolution.ext:
+            return JavaSolution(file_path, managers_dir)
+        return None
 
     @ui.solution_group()
     def run(self, dataset, checker, check=False, sample=False):
@@ -377,7 +390,7 @@ class Solution(object):
             Optional[Runnable]: Runnable file of this solution or None if it fails
           to build"""
         if self.build_time() < self._source.mtime():
-            with ui.capture_works() as works:
+            with ui.capture_io(None), ui.capture_works() as works:
                 self.build()
                 (st, msg) = works[0]
             if not st:
@@ -731,9 +744,9 @@ class Test(object):
                 msg = 'Failed to run checker: %s' % checkmsg
                 return (st, msg)
 
+            st = outcome == 1.0
             if check:
-                msg = 'OK' if outcome == 1.0 else 'FAILED'
-                st = outcome == 1.0
+                msg = 'OK' if st else 'FAILED'
                 return (st, msg)
             else:
                 msg = '%s [%.2fs]' % (outcome, time)

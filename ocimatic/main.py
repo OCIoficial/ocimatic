@@ -2,7 +2,7 @@ import sys
 import os
 
 import ocimatic
-from ocimatic import core, ui, filesystem, getopt
+from ocimatic import core, ui, filesystem, getopt, server
 from ocimatic.filesystem import Directory, FilePath
 
 
@@ -167,7 +167,7 @@ DATASET_ACTIONS = {'compress': {'args': ['in_ext?', 'sol_ext?']}}
 def dataset_mode(args, optlist):
     if not args:
         ui.ocimatic_help(DATASET_ACTIONS)
-    if args[0] in actions:
+    if args[0] in DATASET_ACTIONS:
         action_name = args[0]
         args.pop()
         action = DATASET_ACTIONS[action_name]
@@ -176,6 +176,33 @@ def dataset_mode(args, optlist):
         getattr(dataset, action.get('method', action_name))(**kwargs)
     else:
         ui.fatal_error('Unknown action for dataset mode.')
+
+
+SERVER_ACTIONS = {
+    'start': {
+        'description': 'Start server to run solutions for current contest.',
+        'method': 'run',
+        'optlist': {
+            ('port', 'p'): {
+                'type': 'num',
+                'description': 'Port where the app will run. default: 9999'
+            }
+        }
+    }
+}
+
+
+def server_mode(args, optlist):
+    if not args:
+        ui.ocimatic_help(SERVER_ACTIONS)
+    if args[0] in SERVER_ACTIONS:
+        action_name = args[0]
+        args.pop()
+        action = SERVER_ACTIONS[action_name]
+        kwargs = getopt.kwargs_from_optlist(action, args, optlist)
+        getattr(server, action.get('method', action_name))(**kwargs)
+    else:
+        ui.fatal_error('Unknown action for server mode.')
 
 
 def main():
@@ -192,7 +219,8 @@ def main():
     modes = {
         'contest': (contest_mode, CONTEST_ACTIONS),
         'task': (task_mode, TASK_ACTIONS),
-        'dataset': (dataset_mode, DATASET_ACTIONS)
+        'dataset': (dataset_mode, DATASET_ACTIONS),
+        'server': (server_mode, SERVER_ACTIONS),
     }
 
     # If no mode is provided we assume task

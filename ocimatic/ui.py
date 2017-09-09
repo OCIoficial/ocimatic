@@ -60,12 +60,28 @@ def decolorize(text):
     return re.sub(r'\033\[[0-9]+m', '', text)
 
 
-def writeln(text=''):
-    sys.stdout.write(text + '\n')
+IO_STREAMS = [sys.stdout]
+
+
+@contextmanager
+def capture_io(stream, color=False):
+    IO_STREAMS.append(stream)
+    yield IO_STREAMS[-1]
+    IO_STREAMS.pop()
 
 
 def write(text):
-    sys.stdout.write(text)
+    if IO_STREAMS[-1]:
+        IO_STREAMS[-1].write(text)
+
+
+def flush():
+    if IO_STREAMS[-1]:
+        IO_STREAMS[-1].flush()
+
+
+def writeln(text=''):
+    write(text + '\n')
 
 
 def task_header(name, msg):
@@ -73,7 +89,7 @@ def task_header(name, msg):
     write('\n\n')
     write(colorize('[%s] %s' % (name, msg), BOLD + YELLOW))
     writeln()
-    sys.stdout.flush()
+    flush()
 
 
 def workgroup_header(msg, length=35):
@@ -85,7 +101,7 @@ def workgroup_header(msg, length=35):
         writeln()
     else:
         write(' ')
-    sys.stdout.flush()
+    flush()
 
 
 def contest_group_header(msg, length=35):
@@ -94,7 +110,7 @@ def contest_group_header(msg, length=35):
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
     write(colorize('[%s]' % (msg), INFO + MAGENTA))
     writeln()
-    sys.stdout.flush()
+    flush()
 
 
 def solution_group_header(msg, length=35):
@@ -102,12 +118,12 @@ def solution_group_header(msg, length=35):
     writeln()
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
     write(colorize('[%s]' % (msg), INFO + BLUE) + ' ')
-    sys.stdout.flush()
+    flush()
 
 
 def solution_group_footer():
     writeln()
-    sys.stdout.flush()
+    flush()
 
 
 def start_work(action, msg, length=45, verbosity=True):
@@ -116,7 +132,7 @@ def start_work(action, msg, length=45, verbosity=True):
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
     msg = ' * [' + action + '] ' + msg + '  '
     write(msg)
-    sys.stdout.flush()
+    flush()
 
 
 def end_work(msg, status, verbosity=True):
@@ -126,7 +142,7 @@ def end_work(msg, status, verbosity=True):
         writeln()
     else:
         write(colorize('.', color))
-    sys.stdout.flush()
+    flush()
 
 
 def fatal_error(message):
@@ -157,8 +173,7 @@ def work(action, formatter="{}", verbosity=True):
             (st, msg) = func(*args, **kwargs)
             if CAPTURE_WORKS:
                 CAPTURE_WORKS[-1].append((st, msg))
-            else:
-                end_work(msg, st, verbosity=verbosity)
+            end_work(msg, st, verbosity=verbosity)
             return (st, msg)
         return wrapper
     return decorator
@@ -244,5 +259,8 @@ def _format_opt(opt_key, opt_config):
     if typ == 'bool':
         opt = f'--{long_opt}, -{short_opt}' if short_opt else f'--{long_opt}'
     else:
-        opt = f'--{long_opt}, -{short_opt}={long_opt}' if short_opt else f'--{long_opt}=long_opt'
+        if short_opt:
+            opt = f'--{long_opt}={long_opt}, -{short_opt}={long_opt}'
+        else:
+            opt = f'--{long_opt}=long_opt'
     return f'[{opt}]'

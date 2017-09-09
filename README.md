@@ -5,7 +5,7 @@ Ocimatic
 
 Usage and Installation
 ------------------
-```
+```bash
 $ git clone https://github.com/OCIoficial/ocimatic
 $ cd ocimatic
 $ ./bin/ocimatic
@@ -19,6 +19,19 @@ Basic Usage
 ----------
 Assuming `ocimatic` is in the `PATH`
 
-```https://github.com/OCIoficial/ocimatic/pull/13
+```bash
 $ ocimatic -h
 ```
+
+Run server
+--------
+Assuming you are inside a contest:
+
+```bash
+$ ocimatic server start
+```
+
+This will start a server in port `9999`.
+
+optional: install `colorama` and `ansi2html` to have color support (`pip install colorama ansi2html`)
+
