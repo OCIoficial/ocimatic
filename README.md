@@ -25,7 +25,7 @@ $ ocimatic -h
 
 Run server
 --------
-Assuming you are inside a contest:
+First install `flask` (`pip install flask`). Then, assuming you are inside a contest:
 
 ```bash
 $ ocimatic server start
