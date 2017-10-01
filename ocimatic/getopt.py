@@ -9,9 +9,9 @@ def kwargs_from_optlist(action, args, optlist):
     for opt_key, opt_config in action.get('optlist', {}).items():
         long_opt, short_opt = parse_opt_key(opt_key)
         arg_name = opt_config.get('arg_name', long_opt)
-        opt_value = optlist.get(f'--{long_opt}')
+        opt_value = optlist.get('--{}'.format(long_opt))
         if not opt_value and short_opt:
-            opt_value = optlist.get(f'-{short_opt}')
+            opt_value = optlist.get('-{}'.format(short_opt))
         typ = opt_config.get('type', 'str')
         if opt_value is not None:
             if typ == 'bool':
@@ -90,9 +90,9 @@ def _get_opts(mode):
             typ = opt_config.get('type', 'str')
             if typ != 'bool':
                 long_opt += '='
-            long_opts.append(f'{long_opt}=' if typ != 'bool' else long_opt)
+            long_opts.append('{}='.format(long_opt) if typ != 'bool' else long_opt)
             if short_opt:
-                short_opts.append(f'{short_opt}:' if typ != 'bool' else short_opt)
+                short_opts.append('{}:' .format(short_opt) if typ != 'bool' else short_opt)
     return ''.join(short_opts), long_opts
 
 

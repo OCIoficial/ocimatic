@@ -249,7 +249,7 @@ def ocimatic_help(mode):
 def _format_arg(arg):
     arg_name = getopt.get_arg_name(arg)
     if getopt.is_optional(arg):
-        return f'[{arg_name}]'
+        return '[{}]'.format(arg_name)
     return arg_name
 
 
@@ -257,10 +257,10 @@ def _format_opt(opt_key, opt_config):
     long_opt, short_opt = getopt.parse_opt_key(opt_key)
     typ = opt_config.get('type', 'str')
     if typ == 'bool':
-        opt = f'--{long_opt}, -{short_opt}' if short_opt else f'--{long_opt}'
+        opt = '--{}, -{}'.format(long_opt, short_opt) if short_opt else '--{}'.format(long_opt)
     else:
         if short_opt:
-            opt = f'--{long_opt}={long_opt}, -{short_opt}={long_opt}'
+            opt = '--{long_opt}={long_opt}, -{short_opt}={long_opt}'.format(long_opt=long_opt, short_opt=short_opt)
         else:
-            opt = f'--{long_opt}=long_opt'
-    return f'[{opt}]'
+            opt = '--{long_opt}={long_opt}'.format(long_opt=long_opt)
+    return '[{}]'.format(opt)
