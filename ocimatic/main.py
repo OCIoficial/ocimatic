@@ -246,6 +246,7 @@ def main():
     # try:
     if mode in modes:
         modes[mode][0](args, optlist)
+        print()
     else:
         ui.fatal_error('Unknown mode.')
     # except Exception as exc:
