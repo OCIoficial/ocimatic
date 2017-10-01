@@ -231,7 +231,7 @@ def ocimatic_help(mode):
         if description.strip():
             writeln(description)
         for opt_key, opt_config in action.get('optlist', {}).items():
-            opt = f"{' '*6}{_format_opt(opt_key, opt_config)}   "
+            opt = "{}{}   ".format(' ' * 6, _format_opt(opt_key, opt_config))
             write(opt)
             description = '\n'.join(
                 textwrap.wrap(
