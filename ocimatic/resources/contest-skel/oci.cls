@@ -63,6 +63,7 @@
 \newcommand{\problem}[1]{\def\@problem{#1}}
 
 \global\let\@codename\@empty
+\getenv[\@codename]{OCIMATIC_CODENAME}
 \newcommand{\codename}[1]{\def\@codename{#1}}
 
 
