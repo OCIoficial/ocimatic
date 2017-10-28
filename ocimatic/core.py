@@ -210,7 +210,9 @@ class Task(object):
         if custom_checker:
             self._checker = CppChecker(custom_checker)
 
-        self._statement = Statement(directory.chdir('statement'), num)
+        self._statement = Statement(
+            directory.chdir('statement'), num=num, codename=self._directory.basename
+        )
 
         self._dataset = Dataset(directory.chdir('dataset', create=True),
                                 SampleData(self._statement))
@@ -1253,7 +1255,7 @@ class Statement(object):
     """Represents a statement. A statement is formed by a latex source and a pdf
     file.
     """
-    def __init__(self, directory, num):
+    def __init__(self, directory, num=None, codename=None):
         """
         Args:
             directory (Directory): Directory to search for statement source file.
@@ -1265,6 +1267,7 @@ class Statement(object):
         self._compiler = LatexCompiler()
         self._directory = directory
         self._num = num
+        self._codename = codename
 
     @property
     def pdf(self):
@@ -1292,7 +1295,10 @@ class Statement(object):
            (bool, msg) a tuple containing status code and result message.
 
         """
-        os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A') + self._num)
+        if self._num:
+            os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A') + self._num)
+        if self._codename:
+            os.environ['OCIMATIC_CODENAME'] = self._codename
         if blank_page:
             os.environ['OCIMATIC_BLANK_PAGE'] = 'True'
         st = self._compiler(self._source)
