@@ -1,4 +1,5 @@
 import sys
+import json
 import os
 
 import ocimatic
@@ -6,17 +7,21 @@ from ocimatic import core, ui, filesystem, getopt, server
 from ocimatic.filesystem import Directory, FilePath
 
 
-def new_contest(args):
+def new_contest(args, optlist):
     if len(args) < 1:
         ui.fatal_error('You have to specify a name for the contest.')
     name = args[0]
+
+    contest_config = {}
+    if '--phase' in optlist:
+        contest_config['phase'] = optlist['--phase']
 
     try:
         cwd = Directory.getcwd()
         if cwd.find(name):
             ui.fatal_error("Couldn't create contest. Path already exists")
         contest_path = FilePath(cwd, name)
-        core.Contest.create_layout(contest_path)
+        core.Contest.create_layout(contest_path, contest_config)
         ui.show_message('Info', 'Contest [%s] created' % name)
     except Exception as exc:
         ui.fatal_error("Couldn't create contest: %s." % exc)
@@ -39,7 +44,7 @@ def contest_mode(args, optlist):
         ui.ocimatic_help(CONTEST_ACTIONS)
 
     if args[0] == "new":
-        new_contest(args[1:])
+        new_contest(args[1:], optlist)
     elif args[0] in CONTEST_ACTIONS:
         action_name = args[0]
         args.pop(0)
@@ -57,13 +62,13 @@ def new_task(args):
         ui.fatal_error('You have to specify a name for the task.')
     name = args[0]
     try:
-        cwd = Directory.getcwd()
-        if cwd.find(name):
+        contest_dir = filesystem.change_directory()[0]
+        if contest_dir.find(name):
             ui.fatal_error('Cannot create task in existing directory.')
-        task_dir = FilePath(cwd, name)
-        core.Task.create_layout(task_dir)
+        core.Contest(contest_dir).new_task(name)
         ui.show_message('Info', 'Task [%s] created' % name)
     except Exception as exc:
+        raise
         ui.fatal_error('Couldn\'t create task: %s' % exc)
 
 
@@ -237,8 +242,6 @@ def main():
             ui.ocimatic_help(modes[mode][1])
         elif key == '--task' or key == '-t':
             ocimatic.config['task'] = val
-        elif key == '--phase':
-            os.environ['OCIMATIC_PHASE'] = val
         elif key == '--timeout':
             ocimatic.config['timeout'] = float(val)
 
