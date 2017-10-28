@@ -45,9 +45,8 @@
 \addtolength{\parskip}{0.4\baselineskip}
 
 %% HEADER
-\global\let\@phase\@empty
-\getenv[\@phase]{OCIMATIC_PHASE}
-\newcommand{\phase}[1]{\def\@phase{#1}}
+\global\let\phase\@empty
+\getenv[\phase]{OCIMATIC_PHASE}
 
 \setlength\headheight{54.3pt} 
 \pagestyle{fancy}
@@ -63,8 +62,6 @@
 \getenv[\@problem]{OCIMATIC_PROBLEM_NUMBER}
 \newcommand{\problem}[1]{\def\@problem{#1}}
 
-\newif\ifproblemcnt%
-\problemcntfalse%
 \global\let\@codename\@empty
 \newcommand{\codename}[1]{\def\@codename{#1}}
 

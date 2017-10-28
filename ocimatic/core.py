@@ -3,12 +3,14 @@ import os
 import subprocess
 import re
 import shutil
+import json
 import time as pytime
 from contextlib import ExitStack
 
 import ocimatic
 from ocimatic import ui
 from ocimatic.filesystem import FilePath, Directory
+from ocimatic import pjson
 
 
 class Contest(object):
@@ -22,21 +24,45 @@ class Contest(object):
             directory (Directory): Directory where the contest reside.
         """
         self._directory = directory
-        dirs = [d for d in directory.lsdir() if d.find_file('.ocimatic_task')]
-        self._tasks = [Task(d, i) for (i, d) in enumerate(dirs)]
+        self._config = pjson.load(FilePath(directory, '.ocimatic_contest'))
+
+        self._init_tasks()
+
+        if 'phase' in self._config:
+            os.environ['OCIMATIC_PHASE'] = self._config['phase']
+
         self._titlepage = FilePath(directory, 'titlepage.tex')
         self._compiler = LatexCompiler()
 
+    def _init_tasks(self):
+        keep = []
+        dirs = []
+        for task in self._config.get('tasks', []):
+            path = self._directory.find(task)
+            if path and path.isdir():
+                keep.append(task)
+                dirs.append(path.get_or_create_dir())
+        self._config['tasks'] = keep
+        self._tasks = [Task(d, i) for (i, d) in enumerate(dirs)]
+
     @staticmethod
-    def create_layout(contest_path):
-        """Copies contest skeleton to contest_path.
+    def create_layout(contest_path, config):
+        """Copies contest skeleton to contest_path and saves specified configurations
 
         Args:
-            contest_path (Directory)
+            contest_path (Filepath)
         """
         ocimatic_dir = FilePath(__file__).directory()
         contest_skel = ocimatic_dir.chdir('resources', 'contest-skel')
         contest_skel.copy_tree(contest_path, ['auto'])
+        contest_dir = contest_path.get_or_create_dir()
+        with FilePath(contest_dir, '.ocimatic_contest').open('w') as config_file:
+            json.dump(config, config_file, indent=4)
+
+    def new_task(self, name):
+        task_dir = FilePath(self._directory, name)
+        Task.create_layout(task_dir)
+        self._config.setdefault('tasks', []).append(name)
 
     @property
     def tasks(self):
@@ -701,7 +727,7 @@ class Test(object):
 
     @property
     def directory(self):
-        """Diretory: diretory where this test reside"""
+        """Directory: directory where this test reside"""
         return self._in_path.directory()
 
     @ui.work('Gen')
@@ -1299,7 +1325,7 @@ class LatexCompiler(object):
         self._flags = flags
 
     def __call__(self, source):
-        """It compiles a latex source leaving the pdf in the same diretory of
+        """It compiles a latex source leaving the pdf in the same directory of
         the source.
         Args:
             source (FilePath): path of file to compile
