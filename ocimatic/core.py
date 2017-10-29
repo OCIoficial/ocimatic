@@ -1295,7 +1295,7 @@ class Statement(object):
            (bool, msg) a tuple containing status code and result message.
 
         """
-        if self._num:
+        if self._num is not None:
             os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A') + self._num)
         if self._codename:
             os.environ['OCIMATIC_CODENAME'] = self._codename
