@@ -1,31 +1,20 @@
+import re
 import sys
 import textwrap
-import re
 from contextlib import contextmanager
-from importlib.util import find_spec
 
 import ocimatic
+from colorama import Fore, Style
 from ocimatic import getopt
 
-if find_spec('colorama') is not None:
-    from colorama import Style, Fore
-    RESET = Style.RESET_ALL
-    BOLD = Style.BRIGHT
-    # UNDERLINE = '\x1b[4m'
-    RED = Fore.RED
-    GREEN = Fore.GREEN
-    YELLOW = Fore.YELLOW
-    BLUE = Fore.BLUE
-    MAGENTA = Fore.MAGENTA
-else:
-    RESET = ''
-    BOLD = ''
-    # UNDERLINE = ''
-    RED = ''
-    GREEN = ''
-    YELLOW = ''
-    BLUE = ''
-    MAGENTA = ''
+RESET = Style.RESET_ALL
+BOLD = Style.BRIGHT
+# UNDERLINE = '\x1b[4m'
+RED = Fore.RED
+GREEN = Fore.GREEN
+YELLOW = Fore.YELLOW
+BLUE = Fore.BLUE
+MAGENTA = Fore.MAGENTA
 
 # RESET = '\x1b[0m'
 # BOLD = '\x1b[1m'
@@ -34,7 +23,6 @@ else:
 # GREEN = '\x1b[32m'
 # YELLOW = '\x1b[33m'
 # BLUE = '\x1b[34m'
-
 
 INFO = BOLD
 OK = BOLD + GREEN
@@ -169,13 +157,18 @@ def work(action, formatter="{}", verbosity=True):
     def decorator(func):
         def wrapper(*args, **kwargs):
             if not CAPTURE_WORKS:
-                start_work(action, formatter.format(*args, **kwargs), verbosity=verbosity)
+                start_work(
+                    action,
+                    formatter.format(*args, **kwargs),
+                    verbosity=verbosity)
             (st, msg) = func(*args, **kwargs)
             if CAPTURE_WORKS:
                 CAPTURE_WORKS[-1].append((st, msg))
             end_work(msg, st, verbosity=verbosity)
             return (st, msg)
+
         return wrapper
+
     return decorator
 
 
@@ -186,7 +179,9 @@ def solution_group(formatter="{}"):
             for st, msg in func(*args, **kwargs):
                 end_work(msg, st, verbosity=False)
             solution_group_footer()
+
         return wrapper
+
     return decorator
 
 
@@ -195,7 +190,9 @@ def contest_group(formatter="{}"):
         def wrapper(*args, **kwargs):
             contest_group_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -204,7 +201,9 @@ def workgroup(formatter="{}"):
         def wrapper(*args, **kwargs):
             workgroup_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -213,7 +212,9 @@ def task(action):
         def wrapper(self, *args, **kwargs):
             task_header(str(self), action)
             return func(self, *args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -223,11 +224,10 @@ def ocimatic_help(mode):
         writeln(' '.join(_format_arg(arg) for arg in action.get('args', [])))
         description = '\n'.join(
             textwrap.wrap(
-                action.get('description', ''), 90,
+                action.get('description', ''),
+                90,
                 subsequent_indent=' ' * 4,
-                initial_indent=' ' * 4
-            )
-        )
+                initial_indent=' ' * 4))
         if description.strip():
             writeln(description)
         for opt_key, opt_config in action.get('optlist', {}).items():
@@ -237,9 +237,7 @@ def ocimatic_help(mode):
                 textwrap.wrap(
                     opt_config.get('description', ''),
                     80 - len(opt),
-                    subsequent_indent=' ' * len(opt)
-                )
-            )
+                    subsequent_indent=' ' * len(opt)))
             writeln(description)
 
         writeln()
@@ -257,10 +255,12 @@ def _format_opt(opt_key, opt_config):
     long_opt, short_opt = getopt.parse_opt_key(opt_key)
     typ = opt_config.get('type', 'str')
     if typ == 'bool':
-        opt = '--{}, -{}'.format(long_opt, short_opt) if short_opt else '--{}'.format(long_opt)
+        opt = '--{}, -{}'.format(
+            long_opt, short_opt) if short_opt else '--{}'.format(long_opt)
     else:
         if short_opt:
-            opt = '--{long_opt}={long_opt}, -{short_opt}={long_opt}'.format(long_opt=long_opt, short_opt=short_opt)
+            opt = '--{long_opt}={long_opt}, -{short_opt}={long_opt}'.format(
+                long_opt=long_opt, short_opt=short_opt)
         else:
             opt = '--{long_opt}={long_opt}'.format(long_opt=long_opt)
     return '[{}]'.format(opt)
