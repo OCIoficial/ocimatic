@@ -8,12 +8,11 @@ Usage and Installation
 ```bash
 $ git clone https://github.com/OCIoficial/ocimatic
 $ cd ocimatic
+$ pip install ocimatic colorama
 $ ./bin/ocimatic
 ```
 
 You can also add the `bin` directory to the `PATH`.
-
-optional: install `colorama` to support colors (`pip install colorama`).
 
 Basic Usage
 ----------
