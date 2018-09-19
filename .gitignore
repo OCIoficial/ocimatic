@@ -89,3 +89,6 @@ target/
 _region_*
 auto
 *.fmt
+
+# mypy
+.mypy_cache

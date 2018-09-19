@@ -6,7 +6,7 @@
     :license: Beer-Ware, see LICENSE.rst for more details.
 """
 
-__version__ = 'beta2'
+__version__ = 'beta1'
 
 config = {
     'timeout': 10,

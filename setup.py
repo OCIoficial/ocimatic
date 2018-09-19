@@ -24,7 +24,6 @@ setup(
     name='ocimatic',
     version=__version__,
     author='Nico Lehmann',
-    author_email='nlehmann@dcc.uchile.cl',
     description='Automatize task creation for OCI',
     url='https://github.com/OCIoficial/ocimatic',
     long_description=(open('LICENSE.rst').read()),
@@ -41,5 +40,10 @@ setup(
     classifiers=[
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
+    ],
+    install_requires=[
+        "ansi2html>=1.4.2",
+        "colorama>=0.3.9",
+        "flask>=1.0.2"
     ]
 )
