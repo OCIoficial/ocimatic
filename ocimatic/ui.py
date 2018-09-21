@@ -157,10 +157,7 @@ def work(action, formatter="{}", verbosity=True):
     def decorator(func):
         def wrapper(*args, **kwargs):
             if not CAPTURE_WORKS:
-                start_work(
-                    action,
-                    formatter.format(*args, **kwargs),
-                    verbosity=verbosity)
+                start_work(action, formatter.format(*args, **kwargs), verbosity=verbosity)
             (st, msg) = func(*args, **kwargs)
             if CAPTURE_WORKS:
                 CAPTURE_WORKS[-1].append((st, msg))
@@ -255,8 +252,7 @@ def _format_opt(opt_key, opt_config):
     long_opt, short_opt = getopt.parse_opt_key(opt_key)
     typ = opt_config.get('type', 'str')
     if typ == 'bool':
-        opt = '--{}, -{}'.format(
-            long_opt, short_opt) if short_opt else '--{}'.format(long_opt)
+        opt = '--{}, -{}'.format(long_opt, short_opt) if short_opt else '--{}'.format(long_opt)
     else:
         if short_opt:
             opt = '--{long_opt}={long_opt}, -{short_opt}={long_opt}'.format(

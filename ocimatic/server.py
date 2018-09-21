@@ -10,13 +10,15 @@ from ocimatic import filesystem, core, ui
 from ocimatic.filesystem import Directory, FilePath
 from importlib.util import find_spec
 
-
 if find_spec('ansi2html') is not None:
+
     def ansi2html(ansi):
         return Ansi2HTMLConverter().convert(ansi)
 else:
+
     def ansi2html(ansi):
         return ansi
+
 
 UPLOAD_FOLDER = '/tmp/ocimatic/server/'
 

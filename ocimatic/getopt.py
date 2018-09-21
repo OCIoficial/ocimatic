@@ -65,14 +65,10 @@ def _check_args_len(args, action_args, optional_count):
     mandatory_count = max_count - optional_count
     if len(args) > max_count:
         ui.fatal_error(
-            'action expects no more than %d argument, %d were given' %
-            (max_count, len(args))
-        )
+            'action expects no more than %d argument, %d were given' % (max_count, len(args)))
     if len(args) < mandatory_count:
         ui.fatal_error(
-            'action expects at least %d argument, %d were given' %
-            (mandatory_count, len(args))
-        )
+            'action expects at least %d argument, %d were given' % (mandatory_count, len(args)))
 
 
 def get_arg_name(arg_name):
@@ -92,7 +88,7 @@ def _get_opts(mode):
                 long_opt += '='
             long_opts.append('{}='.format(long_opt) if typ != 'bool' else long_opt)
             if short_opt:
-                short_opts.append('{}:' .format(short_opt) if typ != 'bool' else short_opt)
+                short_opts.append('{}:'.format(short_opt) if typ != 'bool' else short_opt)
     return ''.join(short_opts), long_opts
 
 

@@ -2,13 +2,11 @@
 # from ctypes.util import find_library
 # CLOCK_MONOTONIC = 1
 
-
 # class timespec(Structure):
 #     _fields_ = [
 #         ('tv_sec', c_long),
 #         ('tv_nsec', c_long)
 #     ]
-
 
 # librt_filename = find_library('rt')
 # if not librt_filename:
@@ -18,7 +16,6 @@
 # librt = CDLL(librt_filename)
 # _clock_gettime = librt.clock_gettime
 # _clock_gettime.argtypes = (c_int, POINTER(timespec))
-
 
 # def monotonic_time():
 #     t = timespec()
