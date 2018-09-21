@@ -5,6 +5,11 @@ jobs:
       - image: circleci/python:3.6.1
     steps:
       - checkout
+      - restore_cache:
+          keys:
+          - v1-dependencies-{{ checksum "setup.py" }}
+          # fallback to using the latest cache if no exact match is found
+          - v1-dependencies-
       - run:
           name: Install dependencies
           command: |
@@ -12,6 +17,11 @@ jobs:
             . venv/bin/activate
             pip install --upgrade pip
             pip install -e ".[dev]"
+      - save_cache:
+          paths:
+            - ./venv
+          key: v1-dependencies-{{ checksum "setup.py" }}
+          
       - run:
           name: Check Formatting
           command: |
