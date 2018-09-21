@@ -25,4 +25,4 @@ jobs:
           name: Check Formatting
           command: |
             . venv/bin/activate
-            yapf --parallel --recursive --diff . || ( ! echo "Run yapf before committing (yapf -pri .)" )
+            yapf --parallel --recursive --diff ocimatic || ( ! echo "Run yapf before committing (yapf -pri .)" )
