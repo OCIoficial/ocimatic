@@ -66,10 +66,9 @@ confidence=
 # no Warning level messages displayed, use"--disable=all --enable=classes
 # --disable=W"
 #disable=setslice-method,nonzero-method,standarderror-builtin,input-builtin,print-statement,raising-string,reduce-builtin,backtick,long-builtin,unichr-builtin,using-cmp-argument,dict-view-method,useless-suppression,hex-method,xrange-builtin,long-suffix,getslice-method,intern-builtin,coerce-method,unpacking-in-except,reload-builtin,old-ne-operator,raw_input-builtin,zip-builtin-not-iterating,map-builtin-not-iterating,old-raise-syntax,basestring-builtin,next-method-called,old-octal-literal,filter-builtin-not-iterating,range-builtin-not-iterating,parameter-unpacking,import-star-module-level,cmp-builtin,unicode-builtin,apply-builtin,file-builtin,no-absolute-import,suppressed-message,cmp-method,buffer-builtin,dict-iter-method,execfile-builtin,metaclass-assignment,old-division,indexing-exception,oct-method,delslice-method,coerce-builtin,round-builtin,missing-docstring
-# FIXME: Split core module and remove too-many-lines
 # FIXME: Remove clases only with __call__ method when it makes sense
 # FIXME: Refactor testplan generator class, this should allow to remove no-self-use
-disable=fixme,missing-docstring,line-too-long,too-many-lines,too-few-public-methods,no-self-use
+disable=fixme,missing-docstring,line-too-long,too-few-public-methods,no-self-use
 
 
 [REPORTS]
