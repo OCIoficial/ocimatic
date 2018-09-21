@@ -26,3 +26,8 @@ jobs:
           command: |
             . venv/bin/activate
             yapf --parallel --recursive --diff ocimatic || ( ! echo "Run yapf before committing (yapf -pri .)" )
+      - run:
+          name: Check Pylint
+          command: |
+            . venv/bin/activate
+            pylint -j 4 ocimatic

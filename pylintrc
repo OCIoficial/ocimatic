@@ -69,7 +69,7 @@ confidence=
 # FIXME: Split core module and remove too-many-lines
 # FIXME: Remove clases only with __call__ method when it makes sense
 # FIXME: Refactor testplan generator class, this should allow to remove no-self-use
-disable=missing-docstring,line-too-long,too-many-lines,too-few-public-methods,no-self-use
+disable=fixme,missing-docstring,line-too-long,too-many-lines,too-few-public-methods,no-self-use
 
 
 [REPORTS]
