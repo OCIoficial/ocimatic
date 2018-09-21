@@ -21,7 +21,6 @@ jobs:
           paths:
             - ./venv
           key: v1-dependencies-{{ checksum "setup.py" }}
-          
       - run:
           name: Check Formatting
           command: |
