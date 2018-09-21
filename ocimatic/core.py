@@ -480,10 +480,8 @@ class CppSolution(Solution):
 class CppCompiler:
     """Compiles C++ code
     """
-    _flags = ['-std=c++11', '-O2']
 
-    def __init__(self, flags=None):
-        flags = list(set(self._flags + (flags or [])))
+    def __init__(self, flags=('-std=c++11', '-O2')):
         self._cmd_template = 'g++ %s -o %%s %%s' % ' '.join(flags)
 
     def __call__(self, sources, out):
@@ -548,10 +546,8 @@ class JavaSolution(Solution):
 class JavaCompiler:
     """Compiles Java code
     """
-    _flags = []
 
-    def __init__(self, flags=None):
-        flags = list(set(self._flags + (flags or [])))
+    def __init__(self, flags=()):
         self._cmd_template = 'javac %s %%s' % ' '.join(flags)
 
     def __call__(self, sources):
