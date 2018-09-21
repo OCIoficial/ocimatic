@@ -35,12 +35,12 @@ class PJSONFile:
         self._dump_json(root)
 
     def load(self):
-        return self.toPJSON(self._load_json(), [])
+        return self.to_pjson(self._load_json(), [])
 
-    def toPJSON(self, val, path):
+    def to_pjson(self, val, path):
         if isinstance(val, list):
             return PJSONArray(self, path)
-        elif isinstance(val, dict):
+        if isinstance(val, dict):
             return PJSONMap(self, path)
         return val
 
@@ -57,7 +57,7 @@ class PJSONBase:
         self._json_file.set_path(self._path, val)
 
     def __getitem__(self, key):
-        return self._json_file.toPJSON(self._get_self_path()[key], self._path + [key])
+        return self._json_file.to_pjson(self._get_self_path()[key], self._path + [key])
 
     def __setitem__(self, key, val):
         obj = self._get_self_path()

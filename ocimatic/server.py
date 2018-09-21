@@ -1,27 +1,20 @@
-import os
 from io import StringIO
 
 from ansi2html import Ansi2HTMLConverter
-
-from flask import Flask, render_template, request, redirect, flash
+from flask import Flask, flash, redirect, render_template, request
 from werkzeug.utils import secure_filename
+
 import ocimatic
-from ocimatic import filesystem, core, ui
-from ocimatic.filesystem import Directory, FilePath
-from importlib.util import find_spec
+from ocimatic import core, filesystem, ui
 
-if find_spec('ansi2html') is not None:
 
-    def ansi2html(ansi):
-        return Ansi2HTMLConverter().convert(ansi)
-else:
-
-    def ansi2html(ansi):
-        return ansi
+def ansi2html(ansi):
+    return Ansi2HTMLConverter().convert(ansi)
 
 
 UPLOAD_FOLDER = '/tmp/ocimatic/server/'
 
+contest = None
 app = Flask(__name__)
 app.secret_key = 'M\xf2\xba\xc0\xe3\xe55\xa0"\xff\x96\xba\xb8Jn\xc6#S\xa0t\xda\xb5[\r'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -30,14 +23,13 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 def save_file(uploaded_file):
     dst_dir = filesystem.Directory(UPLOAD_FOLDER, create=True)
     filename = secure_filename(uploaded_file.filename)
-    filepath = FilePath(dst_dir, filename)
-    uploaded_file.save(str(FilePath(dst_dir, filename)))
+    filepath = filesystem.FilePath(dst_dir, filename)
+    uploaded_file.save(str(filesystem.FilePath(dst_dir, filename)))
     return filepath
 
 
 @app.route('/', methods=['POST', 'GET'])
 def server():
-    global contest
     result = ''
     if request.method == 'POST':
         uploaded_file = request.files.get('solution')
@@ -49,7 +41,7 @@ def server():
         solution = task.get_solution(filepath)
         if solution:
             stream = StringIO()
-            with ui.capture_io(stream) as output:
+            with ui.capture_io(stream):
                 task.run_solution(solution)
             result = stream.getvalue()
         else:
@@ -64,7 +56,7 @@ def submit():
 
 
 def run(port=9999):
-    global contest
+    global contest  # pylint: disable=global-statement
     contest_dir = filesystem.change_directory()[0]
     contest = core.Contest(contest_dir)
     ocimatic.config['verbosity'] = 1

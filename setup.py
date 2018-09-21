@@ -42,4 +42,4 @@ setup(
         'Programming Language :: Python :: 3',
     ],
     install_requires=["ansi2html>=1.4.2", "colorama>=0.3.9", "flask>=1.0.2"],
-    extras_require={'dev': ['yapf']})
+    extras_require={'dev': ['yapf, pylint-yapf']})

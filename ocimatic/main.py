@@ -1,14 +1,13 @@
+import getopt
 import sys
-import json
-import os
 
 import ocimatic
-from ocimatic import core, ui, filesystem, getopt, server
+from ocimatic import core, filesystem, parseopt, server, ui
 from ocimatic.filesystem import Directory, FilePath
 
 
 def new_contest(args, optlist):
-    if len(args) < 1:
+    if not args:
         ui.fatal_error('You have to specify a name for the contest.')
     name = args[0]
 
@@ -23,7 +22,7 @@ def new_contest(args, optlist):
         contest_path = FilePath(cwd, name)
         core.Contest.create_layout(contest_path, contest_config)
         ui.show_message('Info', 'Contest [%s] created' % name)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-except
         ui.fatal_error("Couldn't create contest: %s." % exc)
 
 
@@ -58,7 +57,7 @@ def contest_mode(args, optlist):
 
 
 def new_task(args):
-    if len(args) < 1:
+    if not args:
         ui.fatal_error('You have to specify a name for the task.')
     name = args[0]
     try:
@@ -67,8 +66,7 @@ def new_task(args):
             ui.fatal_error('Cannot create task in existing directory.')
         core.Contest(contest_dir).new_task(name)
         ui.show_message('Info', 'Task [%s] created' % name)
-    except Exception as exc:
-        raise
+    except Exception as exc:  # pylint: disable=broad-except
         ui.fatal_error('Couldn\'t create task: %s' % exc)
 
 
@@ -166,7 +164,7 @@ def task_mode(args, optlist):
         action_name = args[0]
         args.pop(0)
         action = TASK_ACTIONS[action_name]
-        kwargs = getopt.kwargs_from_optlist(action, args, optlist)
+        kwargs = parseopt.kwargs_from_optlist(action, args, optlist)
         for task in tasks:
             getattr(task, action.get('method', action_name))(**kwargs)
     else:
@@ -184,7 +182,7 @@ def dataset_mode(args, optlist):
         action_name = args[0]
         args.pop()
         action = DATASET_ACTIONS[action_name]
-        kwargs = getopt.kwargs_from_optlist(action, args, optlist)
+        kwargs = parseopt.kwargs_from_optlist(action, args, optlist)
         dataset = core.Dataset(Directory.getcwd())
         getattr(dataset, action.get('method', action_name))(**kwargs)
     else:
@@ -212,7 +210,7 @@ def server_mode(args, optlist):
         action_name = args[0]
         args.pop()
         action = SERVER_ACTIONS[action_name]
-        kwargs = getopt.kwargs_from_optlist(action, args, optlist)
+        kwargs = parseopt.kwargs_from_optlist(action, args, optlist)
         getattr(server, action.get('method', action_name))(**kwargs)
     else:
         ui.fatal_error('Unknown action for server mode.')
@@ -220,13 +218,13 @@ def server_mode(args, optlist):
 
 def main():
     try:
-        optlist, args = getopt.gnu_getopt(sys.argv[1:], 'hvt:',
-                                          ['help', 'task=', 'phase=', 'timeout='], TASK_ACTIONS,
-                                          CONTEST_ACTIONS, DATASET_ACTIONS)
+        optlist, args = parseopt.gnu_getopt(sys.argv[1:], 'hvt:',
+                                            ['help', 'task=', 'phase=', 'timeout='], TASK_ACTIONS,
+                                            CONTEST_ACTIONS, DATASET_ACTIONS)
     except getopt.GetoptError as err:
         ui.fatal_error(str(err))
 
-    if len(args) == 0:
+    if not args:
         ui.ocimatic_help(TASK_ACTIONS)
 
     modes = {
@@ -246,9 +244,9 @@ def main():
     for key, val in optlist.items():
         if key == '-v':
             ocimatic.config['verbosity'] += 1
-        if key == '-h' or key == '--help':
+        if key in ('--help', '-h'):
             ui.ocimatic_help(modes[mode][1])
-        elif key == '--task' or key == '-t':
+        elif key in ('--task', 't'):
             ocimatic.config['task'] = val
         elif key == '--timeout':
             ocimatic.config['timeout'] = float(val)
