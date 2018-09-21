@@ -1,6 +1,8 @@
-import os
 import fnmatch
+import os
+
 from setuptools import setup
+
 from ocimatic import __version__
 
 
@@ -34,16 +36,10 @@ setup(
             'ocimatic=ocimatic.main:main',
         ],
     },
-    package_data={
-        'ocimatic': get_resources('ocimatic')
-    },
+    package_data={'ocimatic': get_resources('ocimatic')},
     classifiers=[
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
     ],
-    install_requires=[
-        "ansi2html>=1.4.2",
-        "colorama>=0.3.9",
-        "flask>=1.0.2"
-    ]
-)
+    install_requires=["ansi2html>=1.4.2", "colorama>=0.3.9", "flask>=1.0.2"],
+    extras_require={'dev': ['yapf']})

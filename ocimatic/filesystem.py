@@ -35,6 +35,7 @@ class FilePath(object):
     """Represents a path to a file. The file may not exist in the
     file system.
     """
+
     @staticmethod
     def tmpfile():
         tmp_path = mkstemp()[1]
@@ -168,6 +169,7 @@ class Directory(object):
     """Represent a directory in the filesystem. The directory must always
     exist.
     """
+
     @staticmethod
     def tmpdir():
         """Returns a temporary directory. The user is responsible
@@ -189,11 +191,11 @@ class Directory(object):
             create (bool): Whether the directory should be created if it doesn't exists.
         """
         if os.path.exists(path):
-            assert(os.path.isdir(path))
+            assert (os.path.isdir(path))
         elif create:
             os.makedirs(path)
         else:
-            assert(os.path.exists(path))
+            assert (os.path.exists(path))
 
         self._path = os.path.abspath(path)
 
@@ -206,7 +208,7 @@ class Directory(object):
             Directory: the created directory
         """
         path = os.path.join(str(self.path()), name)
-        assert(not os.path.exists(path))
+        assert (not os.path.exists(path))
         os.mkdir(path)
         return Directory(path)
 

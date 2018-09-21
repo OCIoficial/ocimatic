@@ -18,6 +18,7 @@ class Contest(object):
     tasks and a titlepage. A contest is associated to a directory in the
     filesystem.
     """
+
     def __init__(self, directory):
         """
         Args:
@@ -138,25 +139,21 @@ class Contest(object):
         if not shutil.which('gs'):
             return (False, 'Cannot find gs')
 
-        pdfs = ' '.join('"%s"' % t.statement.pdf for t in self._tasks
-                        if t.statement.pdf)
+        pdfs = ' '.join('"%s"' % t.statement.pdf for t in self._tasks if t.statement.pdf)
         titlepage = FilePath(self._directory, 'titlepage.pdf')
         if titlepage.exists():
             pdfs = '"%s" %s' % (titlepage, pdfs)
 
-        cmd = (
-            'gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite'
-            ' -dPDFSETTINGS=/prepress -sOutputFile=%s %s'
-        ) % (
-            FilePath(self._directory, filename),
-            pdfs
-        )
-        complete = subprocess.run(cmd,
-                                  shell=True,
-                                  timeout=20,
-                                  stdin=subprocess.DEVNULL,
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+        cmd = ('gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite'
+               ' -dPDFSETTINGS=/prepress -sOutputFile=%s %s') % (FilePath(
+                   self._directory, filename), pdfs)
+        complete = subprocess.run(
+            cmd,
+            shell=True,
+            timeout=20,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
         st = complete.returncode == 0
         return (st, 'OK' if st else 'FAILED')
 
@@ -184,6 +181,7 @@ class Task(object):
     a list of correct and partial solutions and a dataset. A task is
     associated to a directory in the filesystem.
     """
+
     @staticmethod
     def create_layout(task_path):
         ocimatic_dir = FilePath(__file__).directory()
@@ -211,11 +209,10 @@ class Task(object):
             self._checker = CppChecker(custom_checker)
 
         self._statement = Statement(
-            directory.chdir('statement'), num=num, codename=self._directory.basename
-        )
+            directory.chdir('statement'), num=num, codename=self._directory.basename)
 
-        self._dataset = Dataset(directory.chdir('dataset', create=True),
-                                SampleData(self._statement))
+        self._dataset = Dataset(
+            directory.chdir('dataset', create=True), SampleData(self._statement))
 
     @ui.task('Building package')
     def copy_to(self, directory):
@@ -235,16 +232,14 @@ class Task(object):
 
     @ui.task('Generating dataset input files')
     def gen_input(self):
-        testplan = DatasetPlan(self._directory.chdir('attic'),
-                               self._directory,
-                               self._directory.chdir('dataset'))
+        testplan = DatasetPlan(
+            self._directory.chdir('attic'), self._directory, self._directory.chdir('dataset'))
         testplan.run()
 
     @ui.task('Validating dataset input files')
     def validate_input(self):
-        testplan = DatasetPlan(self._directory.chdir('attic'),
-                               self._directory,
-                               self._directory.chdir('dataset'))
+        testplan = DatasetPlan(
+            self._directory.chdir('attic'), self._directory, self._directory.chdir('dataset'))
         testplan.validate_input()
 
     @ui.work('ZIP')
@@ -344,6 +339,7 @@ class Task(object):
 class Solution(object):
     """Abstract class to represent a solution
     """
+
     @staticmethod
     def get_solutions(solutions_dir, managers_dir):
         """Search for solutions in a directory.
@@ -358,10 +354,8 @@ class Solution(object):
             List[Solution]: List of solutions.
         """
         return [
-            solution
-            for file_path in solutions_dir.lsfile()
-            for solution in [Solution.get_solution(file_path, managers_dir)]
-            if solution
+            solution for file_path in solutions_dir.lsfile()
+            for solution in [Solution.get_solution(file_path, managers_dir)] if solution
         ]
 
     @staticmethod
@@ -426,12 +420,12 @@ class Solution(object):
         return (self.get_runnable(), 'OK')
 
     def get_runnable(self):
-        raise NotImplementedError("Class %s doesn't implement get_runnable()" % (
-            self.__class__.__name__))
+        raise NotImplementedError(
+            "Class %s doesn't implement get_runnable()" % (self.__class__.__name__))
 
     def build_time(self):
-        raise NotImplementedError("Class %s doesn't implement build_time()" % (
-            self.__class__.__name__))
+        raise NotImplementedError(
+            "Class %s doesn't implement build_time()" % (self.__class__.__name__))
 
     @property
     def name(self):
@@ -500,10 +494,8 @@ class CppCompiler(object):
         sources = ' '.join('"%s"' % w for w in sources)
         cmd = self._cmd_template % (out, sources)
 
-        complete = subprocess.run(cmd,
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL,
-                                  shell=True)
+        complete = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
         return complete.returncode == 0
 
 
@@ -528,8 +520,7 @@ class JavaSolution(Solution):
         self._bytecode = self._source.chext('.class')
 
     def get_runnable(self):
-        return Runnable('java', ['-cp', str(self._classpath),
-                                 str(self._classname)])
+        return Runnable('java', ['-cp', str(self._classpath), str(self._classname)])
 
     def build_time(self):
         return self._bytecode.mtime()
@@ -570,15 +561,14 @@ class JavaCompiler(object):
         sources = ' '.join('"%s"' % w for w in sources)
         cmd = self._cmd_template % sources
 
-        complete = subprocess.run(cmd,
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL,
-                                  shell=True)
+        complete = subprocess.run(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
         return complete.returncode == 0
 
 
 class Dataset(object):
     """Test data"""
+
     def __init__(self, directory, sampledata=None, in_ext='.in', sol_ext='.sol'):
         """
         Args:
@@ -709,6 +699,7 @@ class SampleData(Subtask):
 
 class Test(object):
     """A single test file. Expected output file may not exist"""
+
     def __init__(self, in_path, expected_path):
         """
         Args:
@@ -740,8 +731,8 @@ class Test(object):
         Returns:
             (bool, msg): A tuple containing status and result message.
         """
-        (st, _, errmsg) = runnable.run(self.in_path, self.expected_path,
-                                       timeout=ocimatic.config['timeout'])
+        (st, _, errmsg) = runnable.run(
+            self.in_path, self.expected_path, timeout=ocimatic.config['timeout'])
         msg = 'OK' if st else errmsg
         return (st, msg)
 
@@ -756,8 +747,8 @@ class Test(object):
         """
         out_path = FilePath.tmpfile()
         if self.expected_path.exists():
-            (st, time, errmsg) = runnable.run(self.in_path, out_path,
-                                              timeout=ocimatic.config['timeout'])
+            (st, time, errmsg) = runnable.run(
+                self.in_path, out_path, timeout=ocimatic.config['timeout'])
 
             # Execution failed
             if not st:
@@ -884,8 +875,7 @@ class DatasetPlan(object):
             dire.clear()
 
         if not cmds:
-            ui.show_message("Warning", 'no commands were executed for the plan.',
-                            ui.WARNING)
+            ui.show_message("Warning", 'no commands were executed for the plan.', ui.WARNING)
 
         for (stn, subtask) in sorted(cmds.items()):
             self.run_subtask(stn, subtask)
@@ -1002,20 +992,14 @@ class DatasetPlan(object):
                     found_st = int(header_match.group(1))
                     validator = header_match.group(2)
                     if st + 1 != found_st:
-                        ui.fatal_error(
-                            'line %d: found subtask %d, but subtask %d was expected' %
-                            (lineno, found_st, st + 1)
-                        )
+                        ui.fatal_error('line %d: found subtask %d, but subtask %d was expected' %
+                                       (lineno, found_st, st + 1))
                     st += 1
-                    cmds[st] = {
-                        'validator': validator,
-                        'groups': {}
-                    }
+                    cmds[st] = {'validator': validator, 'groups': {}}
                 elif cmd_match:
                     if st == 0:
                         ui.fatal_error(
-                            'line %d: found command before declaring a subtask.' % lineno
-                        )
+                            'line %d: found command before declaring a subtask.' % lineno)
                     group = cmd_match.group(1)
                     cmd = cmd_match.group(2)
                     args = (cmd_match.group(3) or '').split()
@@ -1025,17 +1009,13 @@ class DatasetPlan(object):
                     if cmd == 'copy':
                         if len(args) > 2:
                             ui.fatal_error(
-                                'line %d: command copy expects exactly one argument.' % lineno
-                            )
+                                'line %d: command copy expects exactly one argument.' % lineno)
                         cmds[st]['groups'][group].append({
                             'cmd': 'copy',
                             'file': args[0],
                         })
                     elif cmd == 'echo':
-                        cmds[st]['groups'][group].append({
-                            'cmd': 'echo',
-                            'args': args
-                        })
+                        cmds[st]['groups'][group].append({'cmd': 'echo', 'args': args})
                     else:
                         f = FilePath(self._directory, cmd)
                         if f.ext in ['.cpp', '.java', '.py', '.py2', '.py3']:
@@ -1058,6 +1038,7 @@ class DatasetPlan(object):
 class Checker(object):
     """Check solutions
     """
+
     def __call__(self, in_path, expected_path, out_path):
         """Check outcome.
 
@@ -1069,13 +1050,13 @@ class Checker(object):
         Returns:
             float: Float between 0.0 and 1.0 indicating result.
         """
-        NotImplementedError("Class %s doesn't implement __call__()" % (
-            self.__class__.__name__))
+        NotImplementedError("Class %s doesn't implement __call__()" % (self.__class__.__name__))
 
 
 class DiffChecker(Checker):
     """White diff checker
     """
+
     def __call__(self, in_path, expected_path, out_path):
         """Performs a white diff between expected output and output files
         Parameters correspond to convention for checker in cms.
@@ -1088,11 +1069,10 @@ class DiffChecker(Checker):
         assert in_path.exists()
         assert expected_path.exists()
         assert out_path.exists()
-        complete = subprocess.run(['diff',
-                                   str(expected_path),
-                                   str(out_path)],
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+        complete = subprocess.run(
+            ['diff', str(expected_path), str(out_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
         # @TODO(NL 20/10/1990) Check if returncode is nonzero because there
         # is a difference between files or because there was an error executing
         # diff.
@@ -1125,13 +1105,13 @@ class CppChecker(Checker):
         if self._binary_path.mtime() < self._source.mtime():
             if not self.build():
                 return (False, 0.0, "Failed to build checker")
-        complete = subprocess.run([str(self._binary_path),
-                                   str(in_path),
-                                   str(expected_path),
-                                   str(out_path)],
-                                  universal_newlines=True,
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE)
+        complete = subprocess.run(
+            [str(self._binary_path),
+             str(in_path), str(expected_path),
+             str(out_path)],
+            universal_newlines=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
         ret = complete.returncode
         st = ret == 0
         if st:
@@ -1162,13 +1142,37 @@ class CppChecker(Checker):
 
 
 SIGNALS = {
-    1: 'SIGHUP', 2: 'SIGINT', 3: 'SIGQUIT', 4: 'SIGILL', 5: 'SIGTRAP',
-    6: 'SIGABRT', 7: 'SIGEMT', 8: 'SIGFPE', 9: 'SIGKILL', 10: 'SIGBUS',
-    11: 'SIGSEGV', 12: 'SIGSYS', 13: 'SIGPIPE', 14: 'SIGALRM', 15: 'SIGTERM',
-    16: 'SIGURG', 17: 'SIGSTOP', 18: 'SIGTSTP', 19: 'SIGCONT', 20: 'SIGCHLD',
-    21: 'SIGTTIN', 22: 'SIGTTOU', 23: 'SIGIO', 24: 'SIGXCPU', 25: 'SIGXFSZ',
-    26: 'SIGVTALRM', 27: 'SIGPROF', 28: 'SIGWINCH', 29: 'SIGINFO',
-    30: 'SIGUSR1', 31: 'SIGUSR2',
+    1: 'SIGHUP',
+    2: 'SIGINT',
+    3: 'SIGQUIT',
+    4: 'SIGILL',
+    5: 'SIGTRAP',
+    6: 'SIGABRT',
+    7: 'SIGEMT',
+    8: 'SIGFPE',
+    9: 'SIGKILL',
+    10: 'SIGBUS',
+    11: 'SIGSEGV',
+    12: 'SIGSYS',
+    13: 'SIGPIPE',
+    14: 'SIGALRM',
+    15: 'SIGTERM',
+    16: 'SIGURG',
+    17: 'SIGSTOP',
+    18: 'SIGTSTP',
+    19: 'SIGCONT',
+    20: 'SIGCHLD',
+    21: 'SIGTTIN',
+    22: 'SIGTTOU',
+    23: 'SIGIO',
+    24: 'SIGXCPU',
+    25: 'SIGXFSZ',
+    26: 'SIGVTALRM',
+    27: 'SIGPROF',
+    28: 'SIGWINCH',
+    29: 'SIGINFO',
+    30: 'SIGUSR1',
+    31: 'SIGUSR2',
 }
 
 
@@ -1224,12 +1228,13 @@ class Runnable(object):
             start = pytime.monotonic()
             self._cmd.extend(args)
             try:
-                complete = subprocess.run(self._cmd,
-                                          timeout=timeout,
-                                          stdin=in_file,
-                                          stdout=out_file,
-                                          universal_newlines=True,
-                                          stderr=subprocess.PIPE)
+                complete = subprocess.run(
+                    self._cmd,
+                    timeout=timeout,
+                    stdin=in_file,
+                    stdout=out_file,
+                    universal_newlines=True,
+                    stderr=subprocess.PIPE)
             except subprocess.TimeoutExpired:
                 return (False, pytime.monotonic() - start, 'Execution timed out')
             time = pytime.monotonic() - start
@@ -1255,6 +1260,7 @@ class Statement(object):
     """Represents a statement. A statement is formed by a latex source and a pdf
     file.
     """
+
     def __init__(self, directory, num=None, codename=None):
         """
         Args:
@@ -1320,8 +1326,8 @@ class Statement(object):
 
 class LatexCompiler(object):
     """Compiles latex source"""
-    def __init__(self, cmd='pdflatex',
-                 flags=['--shell-escape', '-interaction=batchmode']):
+
+    def __init__(self, cmd='pdflatex', flags=['--shell-escape', '-interaction=batchmode']):
         """
         Args:
             cmd (str): command to compile files. default to pdflatex
@@ -1337,11 +1343,11 @@ class LatexCompiler(object):
             source (FilePath): path of file to compile
         """
         flags = ' '.join(self._flags)
-        cmd = 'cd "%s" && %s %s "%s"' % (
-            source.directory(), self._cmd, flags, source.name)
-        complete = subprocess.run(cmd,
-                                  shell=True,
-                                  stdin=subprocess.DEVNULL,
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+        cmd = 'cd "%s" && %s %s "%s"' % (source.directory(), self._cmd, flags, source.name)
+        complete = subprocess.run(
+            cmd,
+            shell=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
         return complete.returncode == 0

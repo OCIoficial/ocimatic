@@ -8,9 +8,4 @@
 
 __version__ = 'beta1'
 
-config = {
-    'timeout': 10,
-    'last_blank_page': True,
-    'task': None,
-    'verbosity': 0
-}
+config = {'timeout': 10, 'last_blank_page': True, 'task': None, 'verbosity': 0}

@@ -74,21 +74,27 @@ def new_task(args):
 
 TASK_ACTIONS = {
     'build': {
-        'description': 'Force a build of all solutions. If pattern is present only '
-                       'solutions matching the pattern will be built.',
-        'method': 'build_solutions',
+        'description':
+        'Force a build of all solutions. If pattern is present only '
+        'solutions matching the pattern will be built.',
+        'method':
+        'build_solutions',
         'args': ['pattern?']
     },
     'check': {
-        'method': 'check_dataset',
-        'description': 'Check input/output running all correct solutions with all '
-                       'testdata and sample inputs.'
+        'method':
+        'check_dataset',
+        'description':
+        'Check input/output running all correct solutions with all '
+        'testdata and sample inputs.'
     },
     'expected': {
-        'description': 'Generate expected output running some correct solution against '
-                       'input data. If pattern is provided the expected output is '
-                       'generated using the first solution matching the pattern.',
-        'method': 'gen_expected',
+        'description':
+        'Generate expected output running some correct solution against '
+        'input data. If pattern is provided the expected output is '
+        'generated using the first solution matching the pattern.',
+        'method':
+        'gen_expected',
         'args': ['pattern?'],
         'optlist': {
             ('sample', 's'): {
@@ -102,10 +108,12 @@ TASK_ACTIONS = {
         'method': 'build_statement'
     },
     'run': {
-        'description': 'Run all solutions with all test data and displays the output of '
-                       'the checker. If pattern is provided only solutions matching the '
-                       'pattern are considered.',
-        'method': 'run_solutions',
+        'description':
+        'Run all solutions with all test data and displays the output of '
+        'the checker. If pattern is provided only solutions matching the '
+        'pattern are considered.',
+        'method':
+        'run_solutions',
         'args': ['pattern?'],
         'optlist': {
             ('partial', 'p'): {
@@ -213,8 +221,8 @@ def server_mode(args, optlist):
 def main():
     try:
         optlist, args = getopt.gnu_getopt(sys.argv[1:], 'hvt:',
-                                          ['help', 'task=', 'phase=', 'timeout='],
-                                          TASK_ACTIONS, CONTEST_ACTIONS, DATASET_ACTIONS)
+                                          ['help', 'task=', 'phase=', 'timeout='], TASK_ACTIONS,
+                                          CONTEST_ACTIONS, DATASET_ACTIONS)
     except getopt.GetoptError as err:
         ui.fatal_error(str(err))
 
