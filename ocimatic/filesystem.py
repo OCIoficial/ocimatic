@@ -2,7 +2,7 @@ import glob
 import os
 import shutil
 from functools import total_ordering
-from tempfile import mkstemp, mkdtemp
+from tempfile import mkdtemp, mkstemp
 
 from ocimatic import ui
 
@@ -31,7 +31,7 @@ def change_directory():
     return (Directory(os.getcwd()), task_call)
 
 
-class FilePath(object):
+class FilePath:
     """Represents a path to a file. The file may not exist in the
     file system.
     """
@@ -144,8 +144,7 @@ class FilePath(object):
         """
         if self.exists():
             return os.path.getmtime(str(self))
-        else:
-            return float('-Inf')
+        return float('-Inf')
 
     def directory(self):
         """Returns the directory where the file resides.
@@ -165,7 +164,7 @@ class FilePath(object):
 
 
 @total_ordering
-class Directory(object):
+class Directory:
     """Represent a directory in the filesystem. The directory must always
     exist.
     """
@@ -191,11 +190,11 @@ class Directory(object):
             create (bool): Whether the directory should be created if it doesn't exists.
         """
         if os.path.exists(path):
-            assert (os.path.isdir(path))
+            assert os.path.isdir(path)
         elif create:
             os.makedirs(path)
         else:
-            assert (os.path.exists(path))
+            assert os.path.exists(path)
 
         self._path = os.path.abspath(path)
 
@@ -208,7 +207,7 @@ class Directory(object):
             Directory: the created directory
         """
         path = os.path.join(str(self.path()), name)
-        assert (not os.path.exists(path))
+        assert not os.path.exists(path)
         os.mkdir(path)
         return Directory(path)
 
@@ -285,7 +284,7 @@ class Directory(object):
 
     def find(self, name):
         files = self.ls(name)
-        return files[0] if len(files) > 0 else None
+        return files[0] if files else None
 
     def find_file(self, filename):
         """Finds a file by name in this directory.
@@ -295,7 +294,7 @@ class Directory(object):
                 with the provided name or None otherwise.
         """
         files = self.lsfile(filename)
-        return files[0] if len(files) > 0 else None
+        return files[0] if files else None
 
     def copy_tree(self, dst, ignore=None):
         """

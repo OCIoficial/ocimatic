@@ -1,19 +1,18 @@
 # coding=UTF-8
+import json
 import os
-import subprocess
 import re
 import shutil
-import json
+import subprocess
 import time as pytime
 from contextlib import ExitStack
 
 import ocimatic
-from ocimatic import ui
-from ocimatic.filesystem import FilePath, Directory
-from ocimatic import pjson
+from ocimatic import pjson, ui
+from ocimatic.filesystem import Directory, FilePath
 
 
-class Contest(object):
+class Contest:
     """This class represents a contest. A contest is formed by a list of
     tasks and a titlepage. A contest is associated to a directory in the
     filesystem.
@@ -176,7 +175,7 @@ class Contest(object):
         return next((p for p in self._tasks if p.name == name), None)
 
 
-class Task(object):
+class Task:
     """This class represents a task. A task consists of a statement,
     a list of correct and partial solutions and a dataset. A task is
     associated to a directory in the filesystem.
@@ -336,9 +335,12 @@ class Task(object):
         return self._statement.build(blank_page=blank_page)
 
 
-class Solution(object):
+class Solution:
     """Abstract class to represent a solution
     """
+
+    def __init__(self, source):
+        self._source = source
 
     @staticmethod
     def get_solutions(solutions_dir, managers_dir):
@@ -362,7 +364,7 @@ class Solution(object):
     def get_solution(file_path, managers_dir):
         if file_path.ext == CppSolution.ext:
             return CppSolution(file_path, managers_dir)
-        elif file_path.ext == JavaSolution.ext:
+        if file_path.ext == JavaSolution.ext:
             return JavaSolution(file_path, managers_dir)
         return None
 
@@ -395,6 +397,10 @@ class Solution(object):
         yield (runnable is not None, msg)
         if runnable:
             dataset.gen_expected(runnable, sample=sample)
+
+    def _build(self):
+        raise NotImplementedError(
+            "Class %s doesn't implement get_runnable()" % (self.__class__.__name__))
 
     @ui.work('Build', verbosity=False)
     def build(self):
@@ -431,6 +437,9 @@ class Solution(object):
     def name(self):
         return self._source.name
 
+    def __str__(self):
+        return str(self._source)
+
 
 class CppSolution(Solution):
     """Solution written in C++. This solutions is compiled with
@@ -445,6 +454,7 @@ class CppSolution(Solution):
             managers (Directory): Directory where managers reside.
         """
         assert source.ext == self.ext
+        super().__init__(source)
 
         self._source = source
         self._compiler = CppCompiler(['-I"%s"' % managers])
@@ -457,9 +467,6 @@ class CppSolution(Solution):
     def build_time(self):
         return self._bin_path.mtime()
 
-    def __str__(self):
-        return str(self._source)
-
     def _build(self):
         """Compile solution with a CppCompiler. Solutions is compiled with a
         grader if present.
@@ -470,13 +477,11 @@ class CppSolution(Solution):
         return self._compiler(sources, self._bin_path)
 
 
-class CppCompiler(object):
+class CppCompiler:
     """Compiles C++ code
     """
-    _flags = ['-std=c++11', '-O2']
 
-    def __init__(self, flags=[]):
-        flags = list(set(self._flags + flags))
+    def __init__(self, flags=('-std=c++11', '-O2')):
         self._cmd_template = 'g++ %s -o %%s %%s' % ' '.join(flags)
 
     def __call__(self, sources, out):
@@ -511,6 +516,9 @@ class JavaSolution(Solution):
             source (FilePath): Source code.
             managers (Directory): Directory where managers reside.
         """
+        # TODO: implement managers for java
+        del managers
+        super().__init__(source)
         assert source.ext == self.ext
         self._source = source
         self._compiler = JavaCompiler()
@@ -525,9 +533,6 @@ class JavaSolution(Solution):
     def build_time(self):
         return self._bytecode.mtime()
 
-    def __str__(self):
-        return str(self._source)
-
     def _build(self):
         """Compile solution with the JavaCompiler.
         @TODO (NL: 26/09/2016) Compile solutions with a grader if present.
@@ -538,13 +543,11 @@ class JavaSolution(Solution):
         return self._compiler(sources)
 
 
-class JavaCompiler(object):
+class JavaCompiler:
     """Compiles Java code
     """
-    _flags = []
 
-    def __init__(self, flags=[]):
-        flags = list(set(self._flags + flags))
+    def __init__(self, flags=()):
         self._cmd_template = 'javac %s %%s' % ' '.join(flags)
 
     def __call__(self, sources):
@@ -566,7 +569,7 @@ class JavaCompiler(object):
         return complete.returncode == 0
 
 
-class Dataset(object):
+class Dataset:
     """Test data"""
 
     def __init__(self, directory, sampledata=None, in_ext='.in', sol_ext='.sol'):
@@ -638,7 +641,7 @@ class Dataset(object):
         self._sampledata.normalize()
 
 
-class Subtask(object):
+class Subtask:
     def __init__(self, directory, in_ext='.in', sol_ext='.sol'):
         self._tests = []
         self._in_ext = in_ext
@@ -687,7 +690,9 @@ class Subtask(object):
 
 
 class SampleData(Subtask):
-    def __init__(self, statement, in_ext='.in', sol_ext='.sol'):
+    # FIXME: this shouldn't inherit directly from Subtask as the initializer is completely different.
+    # Maybe both should a have a common parent.
+    def __init__(self, statement, in_ext='.in', sol_ext='.sol'):  # pylint: disable=super-init-not-called
         self._in_ext = in_ext
         self._sol_ext = sol_ext
         tests = statement.io_samples() if statement else []
@@ -697,7 +702,7 @@ class SampleData(Subtask):
         return 'Sample'
 
 
-class Test(object):
+class Test:
     """A single test file. Expected output file may not exist"""
 
     def __init__(self, in_path, expected_path):
@@ -746,36 +751,34 @@ class Test(object):
                 correspond to binary execution output.
         """
         out_path = FilePath.tmpfile()
-        if self.expected_path.exists():
-            (st, time, errmsg) = runnable.run(
-                self.in_path, out_path, timeout=ocimatic.config['timeout'])
-
-            # Execution failed
-            if not st:
-                if check:
-                    return (st, errmsg)
-                else:
-                    return (st, '%s' % errmsg)
-
-            (st, outcome, checkmsg) = checker(self.in_path, self.expected_path, out_path)
-            # Checker failed
-            if not st:
-                msg = 'Failed to run checker: %s' % checkmsg
-                return (st, msg)
-
-            st = outcome == 1.0
-            if check:
-                msg = 'OK' if st else 'FAILED'
-                return (st, msg)
-            else:
-                msg = '%s [%.2fs]' % (outcome, time)
-                if checkmsg:
-                    msg += ' - %s' % checkmsg
-                return (st, msg)
-
-        else:
+        if not self.expected_path.exists():
             out_path.remove()
             return (False, 'No expected output file')
+
+        (st, time, errmsg) = runnable.run(
+            self.in_path, out_path, timeout=ocimatic.config['timeout'])
+
+        # Execution failed
+        if not st:
+            if check:
+                return (st, errmsg)
+            return (st, '%s' % errmsg)
+
+        (st, outcome, checkmsg) = checker(self.in_path, self.expected_path, out_path)
+        # Checker failed
+        if not st:
+            msg = 'Failed to run checker: %s' % checkmsg
+            return (st, msg)
+
+        st = outcome == 1.0
+        if check:
+            msg = 'OK' if st else 'FAILED'
+            return (st, msg)
+
+        msg = '%s [%.2fs]' % (outcome, time)
+        if checkmsg:
+            msg += ' - %s' % checkmsg
+        return (st, msg)
 
     @property
     def in_path(self):
@@ -806,7 +809,8 @@ class Test(object):
         return (st == 0, 'OK' if st == 0 else 'FAILED')
 
 
-class DatasetPlan(object):
+# FIXME: Refactor class. This should allow to re-enable some pylint checks
+class DatasetPlan:
     """Functionality to read and run a plan for generating dataset."""
 
     def __init__(self, directory, task_directory, dataset_directory, filename='testplan.txt'):
@@ -824,7 +828,7 @@ class DatasetPlan(object):
         return FilePath(st_dir, '%s-%d.in' % (group, i))
 
     def validate_input(self):
-        (subtasks, cmds) = self.parse_file()
+        (_, cmds) = self.parse_file()
         for (st, subtask) in sorted(cmds.items()):
             self.validate_subtask(st, subtask)
 
@@ -839,7 +843,7 @@ class DatasetPlan(object):
             ui.show_message('Info', 'No validator specified', ui.INFO)
         if validator:
             for (group, tests) in sorted(subtask['groups'].items()):
-                for (i, test) in enumerate(tests, 1):
+                for (i, _) in enumerate(tests, 1):
                     test_file = self.test_filepath(stn, group, i)
                     self.validate_test_input(test_file, validator)
 
@@ -847,7 +851,7 @@ class DatasetPlan(object):
     def validate_test_input(self, test_file, validator):
         if not test_file.exists():
             return False, 'Test file does not exist'
-        (st, time, msg) = validator.run(test_file, None)
+        (st, _time, msg) = validator.run(test_file, None)
         return st, msg
 
     def build_validator(self, source):
@@ -856,16 +860,14 @@ class DatasetPlan(object):
             return (None, 'File does not exists.')
         if fp.ext == '.cpp':
             binary = fp.chext('.bin')
-            if binary.mtime() < fp.mtime():
-                if not self._cpp_compiler(fp, binary):
-                    return (None, 'Failed to build validator.')
+            if binary.mtime() < fp.mtime() and not self._cpp_compiler(fp, binary):
+                return (None, 'Failed to build validator.')
             return (Runnable(binary), 'OK')
-        elif fp.ext in ['.py', '.py3']:
+        if fp.ext in ['.py', '.py3']:
             return (Runnable('python3', [str(source)]), 'OK')
-        elif fp.ext == '.py2':
+        if fp.ext == '.py2':
             return (Runnable('python2', [str(source)]), 'OK')
-        else:
-            return (None, 'Not supported source file.')
+        return (None, 'Not supported source file.')
 
     def run(self):
         (subtasks, cmds) = self.parse_file()
@@ -915,7 +917,7 @@ class DatasetPlan(object):
             fp.copy(dst)
             (st, msg) = (True, 'OK')
             return (st, msg)
-        except:
+        except Exception:  # pylint: disable=broad-except
             return (False, 'Error when copying file')
 
     @ui.work('Echo', '{1}')
@@ -935,7 +937,7 @@ class DatasetPlan(object):
             if not st:
                 return (st, 'Failed to build generator')
 
-        (st, time, msg) = Runnable(binary).run(None, dst, args)
+        (st, _time, msg) = Runnable(binary).run(None, dst, args)
         return (st, msg)
 
     @ui.work('Gen', '{1}')
@@ -943,7 +945,7 @@ class DatasetPlan(object):
         if not source.exists():
             return (False, 'No such file')
         python = 'python2' if cmd == 'py2' else 'python3'
-        (st, time, msg) = Runnable(python, [str(source)]).run(None, dst, args)
+        (st, _time, msg) = Runnable(python, [str(source)]).run(None, dst, args)
         return (st, msg)
 
     @ui.work('Gen', '{1}')
@@ -958,7 +960,7 @@ class DatasetPlan(object):
 
         classname = bytecode.rootname()
         classpath = str(bytecode.directory().path())
-        (st, time, msg) = Runnable('java', ['-cp', classpath, classname]).run(None, dst, args)
+        (st, _time, msg) = Runnable('java', ['-cp', classpath, classname]).run(None, dst, args)
         return (st, msg)
 
     @ui.work('Gen', '{1}')
@@ -967,10 +969,10 @@ class DatasetPlan(object):
             return (False, 'No such file')
         if not Runnable.is_callable(bin_path):
             return (False, 'Cannot run file, it may not have correct permissions')
-        (st, time, msg) = Runnable(bin_path).run(None, dst, args)
+        (st, _time, msg) = Runnable(bin_path).run(None, dst, args)
         return (st, msg)
 
-    def parse_file(self):
+    def parse_file(self):  # pylint: disable=too-many-locals,too-many-branches
         """
         Args:
             path (FilePath)
@@ -981,7 +983,7 @@ class DatasetPlan(object):
             line = line.strip()
             subtask_header = re.compile(r'\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*')
             cmd_line = re.compile(r'\s*([^;\s]+)\s*;\s*(\S+)(:?\s+(.*))?')
-            comment = re.compile('\s*#.*')
+            comment = re.compile(r'\s*#.*')
 
             if not line:
                 continue
@@ -1035,7 +1037,7 @@ class DatasetPlan(object):
         return (st, cmds)
 
 
-class Checker(object):
+class Checker:
     """Check solutions
     """
 
@@ -1120,7 +1122,7 @@ class CppChecker(Checker):
         else:
             stderr = complete.stderr.strip('\n')
             outcome = 0.0
-            if 0 < len(stderr) < 75:
+            if stderr and len(stderr) < 75:
                 msg = stderr
             else:
                 if ret < 0:
@@ -1176,7 +1178,7 @@ SIGNALS = {
 }
 
 
-class Runnable(object):
+class Runnable:
     """An entity that may be executed redirecting stdin and stdout to specific
     files.
     """
@@ -1185,12 +1187,13 @@ class Runnable(object):
     def is_callable(file_path):
         return shutil.which(str(file_path)) is not None
 
-    def __init__(self, command, args=[]):
+    def __init__(self, command, args=None):
         """
         Args:
             bin_path (FilePath|string): Command to execute.
             args (List[string]): List of arguments to pass to the command.
         """
+        args = args or []
         command = str(command)
         assert shutil.which(command)
         self._cmd = [command] + args
@@ -1198,7 +1201,7 @@ class Runnable(object):
     def __str__(self):
         return self._cmd[0]
 
-    def run(self, in_path, out_path, args=[], timeout=None):
+    def run(self, in_path, out_path, args=None, timeout=None):  # pylint: disable=too-many-locals
         """Run binary redirecting standard input and output.
 
         Args:
@@ -1216,6 +1219,7 @@ class Runnable(object):
                 if status is False errmsg contains an explanatory error
                 message, otherwise it contains a success message.
         """
+        args = args or []
         assert in_path is None or in_path.exists()
         with ExitStack() as stack:
             if in_path is None:
@@ -1243,7 +1247,7 @@ class Runnable(object):
             msg = 'OK'
             if not status:
                 stderr = complete.stderr.strip('\n')
-                if 0 < len(stderr) < 100:
+                if stderr and len(stderr) < 100:
                     msg = stderr
                 else:
                     if ret < 0:
@@ -1256,7 +1260,7 @@ class Runnable(object):
             return (status, time, msg)
 
 
-class Statement(object):
+class Statement:
     """Represents a statement. A statement is formed by a latex source and a pdf
     file.
     """
@@ -1283,7 +1287,7 @@ class Statement(object):
                 if the pdf file cannot be generated.
         """
         if self._pdf.mtime() < self._source.mtime():
-            (st, msg) = self.build()
+            (st, _msg) = self.build()
             if not st:
                 return None
         return self._pdf
@@ -1319,15 +1323,16 @@ class Statement(object):
         samples = set()
         for line in latex_file:
             m = re.match(r'[^%]*\\sampleIO(\[[^\]]*\]){0,2}{([^}]+)}', line)
-            m and samples.add(m.group(2))
+            if m:
+                samples.add(m.group(2))
         latex_file.close()
         return [FilePath(self._directory, s) for s in samples]
 
 
-class LatexCompiler(object):
+class LatexCompiler:
     """Compiles latex source"""
 
-    def __init__(self, cmd='pdflatex', flags=['--shell-escape', '-interaction=batchmode']):
+    def __init__(self, cmd='pdflatex', flags=('--shell-escape', '-interaction=batchmode')):
         """
         Args:
             cmd (str): command to compile files. default to pdflatex

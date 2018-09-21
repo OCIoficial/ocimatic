@@ -3,9 +3,10 @@ import sys
 import textwrap
 from contextlib import contextmanager
 
-import ocimatic
 from colorama import Fore, Style
-from ocimatic import getopt
+
+import ocimatic
+from ocimatic import parseopt
 
 RESET = Style.RESET_ALL
 BOLD = Style.BRIGHT
@@ -52,7 +53,7 @@ IO_STREAMS = [sys.stdout]
 
 
 @contextmanager
-def capture_io(stream, color=False):
+def capture_io(stream):
     IO_STREAMS.append(stream)
     yield IO_STREAMS[-1]
     IO_STREAMS.pop()
@@ -242,14 +243,14 @@ def ocimatic_help(mode):
 
 
 def _format_arg(arg):
-    arg_name = getopt.get_arg_name(arg)
-    if getopt.is_optional(arg):
+    arg_name = parseopt.get_arg_name(arg)
+    if parseopt.is_optional(arg):
         return '[{}]'.format(arg_name)
     return arg_name
 
 
 def _format_opt(opt_key, opt_config):
-    long_opt, short_opt = getopt.parse_opt_key(opt_key)
+    long_opt, short_opt = parseopt.parse_opt_key(opt_key)
     typ = opt_config.get('type', 'str')
     if typ == 'bool':
         opt = '--{}, -{}'.format(long_opt, short_opt) if short_opt else '--{}'.format(long_opt)

@@ -1,5 +1,4 @@
 import getopt
-from getopt import GetoptError
 
 from ocimatic import ui
 
@@ -95,5 +94,4 @@ def _get_opts(mode):
 def parse_opt_key(opt_key):
     if isinstance(opt_key, tuple):
         return opt_key
-    else:
-        return opt_key, None
+    return opt_key, None
