@@ -8,6 +8,7 @@
 \LoadClass[11pt]{article}
 
 \RequirePackage{fancyhdr}
+\RequirePackage{xcolor}
 \RequirePackage{graphicx}
 \RequirePackage{verbatim}
 \RequirePackage{enumitem}
@@ -45,7 +46,6 @@
 \addtolength{\parskip}{0.4\baselineskip}
 
 %% HEADER
-\global\let\phase\@empty
 \getenv[\phase]{OCIMATIC_PHASE}
 
 \setlength\headheight{54.3pt} 
@@ -59,23 +59,22 @@
 
 %% TITLE
 \getenv[\@problem]{OCIMATIC_PROBLEM_NUMBER}
-\ifdefempty{\@problem}{\def\@problem{\texttt{<\hspace{0.5em}>}}}
+\def\@theproblem{\ifdefempty{\@problem}{{\tt <\hspace{0.5em}>}}{\@problem}}
 
 \getenv[\@codename]{OCIMATIC_CODENAME}
-\ifdefempty{\@codename}{\def\@codename{<\hspace{4em}>}}
+\def\@thecodename{\ifdefempty{\@codename}{<\hspace{4em}>}{\detokenize\expandafter{\@codename}}}
 
 
 \newcommand{\mymaketitle}{
     \begin{center}
-      {\huge\bf \sf Problema \@problem}\\
+      {\huge\bf \sf Problema \@theproblem}\\
     \LARGE{\sf \@title}\\[2mm]
-    \normalsize {\em nombre clave:} {\tt \@codename}
+    \normalsize {\em nombre clave:} {\tt \@thecodename}
     \vspace{6pt}
     \end{center}
 }
 
 %% Sideness
-\def\@sideness{oneside}
 \getenv[\@sideness]{OCIMATIC_SIDENESS}
 
 \renewcommand*{\cleardoublepage}{
