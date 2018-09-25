@@ -25,7 +25,7 @@ jobs:
           name: Check Formatting
           command: |
             . venv/bin/activate
-            yapf --parallel --recursive --diff ocimatic || ( ! echo "Run yapf before committing (yapf -pri .)" )
+            yapf --recursive --diff ocimatic || ( ! echo "Run yapf before committing (yapf -pri .)" )
       - run:
           name: Check Pylint
           command: |
