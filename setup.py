@@ -17,7 +17,7 @@ def recursive_glob(treeroot, pattern):
 def get_resources(package):
     curr_path = os.getcwd()
     os.chdir(package)
-    resources = recursive_glob('resources', '*')
+    resources = recursive_glob('resources', '*') + recursive_glob('templates', '*')
     os.chdir(curr_path)
     return resources
 
