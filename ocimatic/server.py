@@ -1,5 +1,3 @@
-import os
-from importlib.util import find_spec
 from io import StringIO
 
 from ansi2html import Ansi2HTMLConverter
