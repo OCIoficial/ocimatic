@@ -1,3 +1,5 @@
+import os
+from importlib.util import find_spec
 from io import StringIO
 
 from ansi2html import Ansi2HTMLConverter
@@ -6,6 +8,7 @@ from werkzeug.utils import secure_filename
 
 import ocimatic
 from ocimatic import core, filesystem, ui
+from ocimatic.filesystem import Directory, FilePath
 
 
 def ansi2html(ansi):
@@ -28,15 +31,30 @@ def save_file(uploaded_file):
     return filepath
 
 
+def upload_solution(request):
+    solution_text = request.form.get('solutionText')
+    if solution_text:
+        ext = request.form.get('lang')
+        dst_dir = filesystem.Directory(UPLOAD_FOLDER, create=True)
+        filepath = FilePath(dst_dir, f'solution.{ext}')
+        with filepath.open('w') as f:
+            f.write(solution_text)
+        return filepath
+
+    uploaded_file = request.files.get('solutionFile')
+    if not uploaded_file or uploaded_file.filename == '':
+        return False
+    return save_file(uploaded_file)
+
+
 @app.route('/', methods=['POST', 'GET'])
 def server():
     result = ''
     if request.method == 'POST':
-        uploaded_file = request.files.get('solution')
-        if not uploaded_file or uploaded_file.filename == '':
-            flash('Please select a file')
+        filepath = upload_solution(request)
+        if not filepath:
+            flash('Please provide a solution')
             return redirect(request.url)
-        filepath = save_file(uploaded_file)
         task = contest.find_task(request.form.get('task'))
         solution = task.get_solution(filepath)
         if solution:
@@ -45,7 +63,7 @@ def server():
                 task.run_solution(solution)
             result = stream.getvalue()
         else:
-            result = 'Invalid file'
+            result = 'Invalid solution'
     result = ansi2html(result)
     return render_template('index.html', tasks=contest.tasks, result=result)
 
