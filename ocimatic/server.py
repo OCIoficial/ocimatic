@@ -6,7 +6,6 @@ from werkzeug.utils import secure_filename
 
 import ocimatic
 from ocimatic import core, filesystem, ui
-from ocimatic.filesystem import Directory, FilePath
 
 
 def ansi2html(ansi):
@@ -29,12 +28,12 @@ def save_file(uploaded_file):
     return filepath
 
 
-def upload_solution(request):
+def upload_solution():
     solution_text = request.form.get('solutionText')
     if solution_text:
         ext = request.form.get('lang')
         dst_dir = filesystem.Directory(UPLOAD_FOLDER, create=True)
-        filepath = FilePath(dst_dir, f'solution.{ext}')
+        filepath = filesystem.FilePath(dst_dir, f'solution.{ext}')
         with filepath.open('w') as f:
             f.write(solution_text)
         return filepath
@@ -49,7 +48,7 @@ def upload_solution(request):
 def server():
     result = ''
     if request.method == 'POST':
-        filepath = upload_solution(request)
+        filepath = upload_solution()
         if not filepath:
             flash('Please provide a solution')
             return redirect(request.url)
