@@ -197,20 +197,21 @@ class Task:
         """
         self._directory = directory
 
+        self._codename = self._directory.basename
+
         self._managers_dir = directory.chdir('managers')
 
         correct_dir = directory.chdir('solutions/correct')
-        self._correct = Solution.get_solutions(correct_dir, self._managers_dir)
+        self._correct = Solution.get_solutions(self._codename, correct_dir, self._managers_dir)
         partial_dir = directory.chdir('solutions/partial')
-        self._partial = Solution.get_solutions(partial_dir, self._managers_dir)
+        self._partial = Solution.get_solutions(self._codename, partial_dir, self._managers_dir)
 
         self._checker = DiffChecker()
         custom_checker = self._managers_dir.find_file('checker.cpp')
         if custom_checker:
             self._checker = CppChecker(custom_checker)
 
-        self._statement = Statement(
-            directory.chdir('statement'), num=num, codename=self._directory.basename)
+        self._statement = Statement(directory.chdir('statement'), num=num, codename=self._codename)
 
         self._dataset = Dataset(
             directory.chdir('dataset', create=True), SampleData(self._statement))
@@ -265,7 +266,7 @@ class Task:
                 yield solution
 
     def get_solution(self, file_path):
-        return Solution.get_solution(file_path, self._managers_dir)
+        return Solution.get_solution(self._codename, file_path, self._managers_dir)
 
     @property
     def statement(self):

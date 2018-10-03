@@ -11,7 +11,7 @@ class Solution:
         self._source = source
 
     @staticmethod
-    def get_solutions(solutions_dir, managers_dir):
+    def get_solutions(codename, solutions_dir, managers_dir):
         """Search for solutions in a directory.
 
         Args:
@@ -25,15 +25,15 @@ class Solution:
         """
         return [
             solution for file_path in solutions_dir.lsfile()
-            for solution in [Solution.get_solution(file_path, managers_dir)] if solution
+            for solution in [Solution.get_solution(codename, file_path, managers_dir)] if solution
         ]
 
     @staticmethod
-    def get_solution(file_path, managers_dir):
+    def get_solution(codename, file_path, managers_dir):
         if file_path.ext == CppSolution.ext:
             return CppSolution(file_path, managers_dir)
         if file_path.ext == JavaSolution.ext:
-            return JavaSolution(file_path, managers_dir)
+            return JavaSolution(codename, file_path, managers_dir)
         return None
 
     @ui.solution_group()
@@ -151,7 +151,7 @@ class JavaSolution(Solution):
     """
     ext = '.java'
 
-    def __init__(self, source, managers):
+    def __init__(self, codename, source, managers):
         """
         Args:
             source (FilePath): Source code.
@@ -164,7 +164,7 @@ class JavaSolution(Solution):
         self._source = source
         self._compiler = JavaCompiler()
         # self._grader = managers.find_file('grader.cpp')
-        self._classname = self._source.rootname()
+        self._classname = codename
         self._classpath = self._source.directory().path()
         self._bytecode = self._source.chext('.class')
 
