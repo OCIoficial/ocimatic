@@ -200,20 +200,23 @@ class Task:
         self._managers_dir = directory.chdir('managers')
 
         correct_dir = directory.chdir('solutions/correct')
-        self._correct = Solution.get_solutions(correct_dir, self._managers_dir)
+        self._correct = Solution.get_solutions(self.codename, correct_dir, self._managers_dir)
         partial_dir = directory.chdir('solutions/partial')
-        self._partial = Solution.get_solutions(partial_dir, self._managers_dir)
+        self._partial = Solution.get_solutions(self.codename, partial_dir, self._managers_dir)
 
         self._checker = DiffChecker()
         custom_checker = self._managers_dir.find_file('checker.cpp')
         if custom_checker:
             self._checker = CppChecker(custom_checker)
 
-        self._statement = Statement(
-            directory.chdir('statement'), num=num, codename=self._directory.basename)
+        self._statement = Statement(directory.chdir('statement'), num=num, codename=self.codename)
 
         self._dataset = Dataset(
             directory.chdir('dataset', create=True), SampleData(self._statement))
+
+    @property
+    def codename(self):
+        return self._directory.basename
 
     @ui.task('Building package')
     def copy_to(self, directory):
@@ -265,7 +268,7 @@ class Task:
                 yield solution
 
     def get_solution(self, file_path):
-        return Solution.get_solution(file_path, self._managers_dir)
+        return Solution.get_solution(self.codename, file_path, self._managers_dir)
 
     @property
     def statement(self):
