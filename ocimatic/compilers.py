@@ -7,8 +7,8 @@ class CppCompiler:
     """Compiles C++ code
     """
 
-    def __init__(self, flags=('-std=c++11', '-O2')):
-        self._cmd_template = 'g++ %s -o %%s %%s' % ' '.join(flags)
+    def __init__(self, flags=()):
+        self._cmd_template = 'g++ -std=c++11 -O2 %s -o %%s %%s' % ' '.join(flags)
 
     def __call__(self, sources, out):
         """Compiles a list of C++ sources.
