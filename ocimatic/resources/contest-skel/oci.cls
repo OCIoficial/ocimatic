@@ -143,8 +143,9 @@
   \vskip 12pt
 }
 
-\newenvironment{scoreDescription}{\subsection*{Subtareas y puntaje}\begin{description}[leftmargin=0pt]\itemsep 0pt}{\end{description}}
-\newcommand{\score}[1]{\item[#1 puntos]}
+\newcounter{subtaskcnt}
+\newenvironment{scoreDescription}{\subsection*{Subtareas y puntaje}\setcounter{subtaskcnt}{1}}{}
+\newcommand{\subtask}[1]{\subsubsection*{Subtarea \arabic{subtaskcnt} (#1 puntos)}\stepcounter{subtaskcnt}}
 
 \newenvironment{sampleDescription}{\subsection*{Ejemplos de entrada y salida}}{}
 
