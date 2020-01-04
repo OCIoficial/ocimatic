@@ -45,20 +45,22 @@ Esta página muestra información general que se aplica a todos los problemas.
 \begin{enumerate}
 % \itemsep 0em
 \item Los participantes deben enviar {\bf un solo archivo} con el código fuente de su solución.
-\item El nombre del archivo debe tener la extensión \verb+.c+, \verb+.cpp+ o
-  \verb+.java+ dependiendo de si la solución está escrita en \verb|C|,
+\item El nombre del archivo debe tener la extensión \verb+.cpp+ o
+  \verb+.java+ dependiendo de si la solución está escrita en,
   \verb|C++| o \verb|Java| respectivamente.
 Para enviar una solución en Java hay que seguir algunos pasos adicionales. Ver detalles más abajo.
 \end{enumerate}
 
-\subsection*{Casos de prueba y subtareas}
+\subsection*{Casos de prueba, subtareas y puntaje}
 \begin{enumerate}
 % \itemsep 0em
 \item La solución enviada por los participantes será ejecutada varias veces con
   distintos casos de prueba.
-\item Cada problema define diferentes subtareas que restringen el problema y se
-  asignará puntaje de acuerdo a la cantidad de subtareas que logre solucionar de
-  manera correcta.
+\item A menos que se indique lo contrario cada problema define diferentes
+  subtareas que restringen el problema y se asignará puntaje de acuerdo a la
+  cantidad de subtareas que logre solucionar de manera correcta.
+\item A menos que se indique lo contrario para obtener el puntaje en una
+  subtarea se debe tener todos los casos de prueba en este correctos.
 \item Una solución puede resolver al mismo tiempo más de una subtarea.
 \item La solución es ejecutada con cada caso de prueba de manera independiente y
   por tanto puede fallar en algunas subtareas sin influir en la ejecución de
@@ -69,7 +71,7 @@ Para enviar una solución en Java hay que seguir algunos pasos adicionales. Ver 
 \begin{enumerate}
 % \itemsep 0em
 \item Toda lectura debe ser hecha desde la {\bf entrada estándar} usando, por
-  ejemplo, las funciones \verb+scanf+ o \verb+std::cin+ en C/C++ o la clase
+  ejemplo, las funciones \verb+scanf+ o \verb+std::cin+ en C++ o la clase
   \verb+BufferedReader+ en Java.
 \item La entrada corresponde a un solo caso de prueba el cual está descrito en
   varias líneas dependiendo del problema.
@@ -82,7 +84,7 @@ Para enviar una solución en Java hay que seguir algunos pasos adicionales. Ver 
 \begin{enumerate}
 % \itemsep 0em
 \item Toda escritura debe ser hecha hacia la {\bf salida estándar} usando, por
-  ejemplo, las funciones \verb+printf+, \verb+std::cout+ en C/C++  o
+  ejemplo, las funciones \verb+printf+, \verb+std::cout+ en C++ o
   \verb+System.out.println+ en Java.
 \item El formato de salida es explicado en el enunciado de cada problema.
 \item {\bf El formato de salida debe ser seguido de manera estricta}

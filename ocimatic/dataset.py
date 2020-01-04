@@ -1,6 +1,7 @@
 import re
 import shutil
 import subprocess
+import shlex
 
 import ocimatic
 from ocimatic import ui
@@ -444,7 +445,7 @@ class DatasetPlan:
                             'line %d: found command before declaring a subtask.' % lineno)
                     group = cmd_match.group(1)
                     cmd = cmd_match.group(2)
-                    args = (cmd_match.group(3) or '').split()
+                    args = _parse_args(cmd_match.group(3) or '')
                     if group not in cmds[st]['groups']:
                         cmds[st]['groups'][group] = []
 
@@ -475,3 +476,7 @@ class DatasetPlan:
                 else:
                     ui.fatal_error('line %d: error while parsing line `%s`\n' % (lineno, line))
         return (st, cmds)
+
+def _parse_args(args):
+    args = args.strip()
+    return [a.encode().decode("unicode_escape") for a in shlex.split(args)]
