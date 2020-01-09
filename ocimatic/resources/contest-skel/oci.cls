@@ -50,7 +50,7 @@
 
 \setlength\headheight{54.3pt} 
 \pagestyle{fancy}
-\lhead{\includegraphics[height=37.5pt]{logo.eps}}
+\lhead{\includegraphics[height=34pt]{logo.eps}}
 \rhead{\phase\ \the\year}
 \renewcommand{\headrulewidth}{0.2pt}
 
@@ -59,17 +59,19 @@
 
 %% TITLE
 \getenv[\@problem]{OCIMATIC_PROBLEM_NUMBER}
-\def\@theproblem{\ifdefempty{\@problem}{{\tt <\hspace{0.5em}>}}{\@problem}}
+% \def\@theproblem{\ifdefempty{\@problem}{{\tt <\hspace{0.5em}>}}{\@problem}}
+\def\@theproblem{\ifdefempty{\@problem}{{\tt <\raisebox{0.05em}{\parbox[c]{1.5em}{\centering\tiny filled by ocimatic}}>}}{\@problem}}
 
 \getenv[\@codename]{OCIMATIC_CODENAME}
-\def\@thecodename{\ifdefempty{\@codename}{<\hspace{4em}>}{\detokenize\expandafter{\@codename}}}
+% \def\@thecodename{\ifdefempty{\@codename}{<\hspace{4em}>}{\detokenize\expandafter{\@codename}}}
+\def\@thecodename{\ifdefempty{\@codename}{{\tt <\raisebox{0.15em}{\tiny filled by ocimatic}>}}{{\tt \detokenize\expandafter{\@codename}}}}
 
 
 \newcommand{\mymaketitle}{
     \begin{center}
       {\huge\bf \sf Problema \@theproblem}\\
     \LARGE{\sf \@title}\\[2mm]
-    \normalsize {\em nombre clave:} {\tt \@thecodename}
+    \normalsize {\em nombre clave:} \@thecodename
     \vspace{6pt}
     \end{center}
 }
