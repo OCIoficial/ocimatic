@@ -72,11 +72,9 @@ def new_task(args):
 
 TASK_ACTIONS = {
     'build': {
-        'description':
-        'Force a build of all solutions. If pattern is present only '
+        'description': 'Force a build of all solutions. If pattern is present only '
         'solutions matching the pattern will be built.',
-        'method':
-        'build_solutions',
+        'method': 'build_solutions',
         'args': ['pattern?']
     },
     'check': {
@@ -122,7 +120,15 @@ TASK_ACTIONS = {
     },
     'compress': {
         'description': 'Generate zip file with all test data.',
-        'method': 'compress_dataset'
+        'method': 'compress_dataset',
+        'optlist': {
+            ('random_sort', 'r'): {
+                'type':
+                'bool',
+                'description':
+                'Add random prefix to output filenames to sort testcases whithin a subtask randomly'
+            }
+        }
     },
     'normalize': {
         'description': 'Normalize input and output with dos2unix.'

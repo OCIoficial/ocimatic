@@ -1,7 +1,9 @@
+import random
 import re
-import shutil
-import subprocess
 import shlex
+import shutil
+import string
+import subprocess
 
 import ocimatic
 from ocimatic import ui
@@ -12,7 +14,6 @@ from ocimatic.runnable import Runnable
 
 class Dataset:
     """Test data"""
-
     def __init__(self, directory, sampledata=None, in_ext='.in', sol_ext='.sol'):
         """
         Args:
@@ -43,7 +44,7 @@ class Dataset:
             mtime = max(mtime, subtask.mtime())
         return mtime
 
-    def compress(self, in_ext=None, sol_ext=None):
+    def compress(self, in_ext=None, sol_ext=None, random_sort=False):
         """Compress all test cases in this dataset in a single zip file.
         The basename of the corresponding subtask subdirectory is prepended
         to each file.
@@ -58,7 +59,7 @@ class Dataset:
         try:
             copied = 0
             for subtask in self._subtasks:
-                copied += subtask.copy_to(tmpdir)
+                copied += subtask.copy_to(tmpdir, random_sort=random_sort)
 
             if not copied:
                 # ui.show_message("Warning", "no files in dataset", ui.WARNING)
@@ -91,12 +92,19 @@ class Subtask:
             self._tests.append(Test(f, f.chext(sol_ext)))
         self._name = directory.basename
 
-    def copy_to(self, directory):
+    def copy_to(self, directory, random_sort=False):
         copied = 0
         for test in self._tests:
             if test.expected_path.exists():
-                in_name = "%s-%s" % (self._name, test.in_path.name)
-                sol_name = "%s-%s" % (self._name, test.expected_path.name)
+                # Sort testcases withing a subtask randomly
+                if random_sort:
+                    choices = string.ascii_lowercase
+                    rnd_str = ''.join(random.choice(choices) for _ in range(3))
+                    in_name = "%s-%s-%s" % (self._name, rnd_str, test.in_path.name)
+                    sol_name = "%s-%s-%s" % (self._name, rnd_str, test.expected_path.name)
+                else:
+                    in_name = "%s-%s-%s" % (self._name, rnd_str, test.in_path.name)
+                    sol_name = "%s-%s-%s" % (self._name, rnd_str, test.expected_path.name)
                 test.in_path.copy(FilePath(directory, in_name))
                 test.expected_path.copy(FilePath(directory, sol_name))
                 copied += 1
@@ -145,7 +153,6 @@ class SampleData(Subtask):
 
 class Test:
     """A single test file. Expected output file may not exist"""
-
     def __init__(self, in_path, expected_path):
         """
         Args:
@@ -177,8 +184,9 @@ class Test:
         Returns:
             (bool, msg): A tuple containing status and result message.
         """
-        (st, _, errmsg) = runnable.run(
-            self.in_path, self.expected_path, timeout=ocimatic.config['timeout'])
+        (st, _, errmsg) = runnable.run(self.in_path,
+                                       self.expected_path,
+                                       timeout=ocimatic.config['timeout'])
         msg = 'OK' if st else errmsg
         return (st, msg)
 
@@ -196,8 +204,9 @@ class Test:
             out_path.remove()
             return (False, 'No expected output file')
 
-        (st, time, errmsg) = runnable.run(
-            self.in_path, out_path, timeout=ocimatic.config['timeout'])
+        (st, time, errmsg) = runnable.run(self.in_path,
+                                          out_path,
+                                          timeout=ocimatic.config['timeout'])
 
         # Execution failed
         if not st:
@@ -253,7 +262,6 @@ class Test:
 # FIXME: Refactor class. This should allow to re-enable some pylint checks
 class DatasetPlan:
     """Functionality to read and run a plan for generating dataset."""
-
     def __init__(self, directory, task_directory, dataset_directory, filename='testplan.txt'):
         self._directory = directory
         self._testplan_path = FilePath(directory, filename)
@@ -441,8 +449,8 @@ class DatasetPlan:
                     cmds[st] = {'validator': validator, 'groups': {}}
                 elif cmd_match:
                     if st == 0:
-                        ui.fatal_error(
-                            'line %d: found command before declaring a subtask.' % lineno)
+                        ui.fatal_error('line %d: found command before declaring a subtask.' %
+                                       lineno)
                     group = cmd_match.group(1)
                     cmd = cmd_match.group(2)
                     args = _parse_args(cmd_match.group(3) or '')
@@ -451,8 +459,8 @@ class DatasetPlan:
 
                     if cmd == 'copy':
                         if len(args) > 2:
-                            ui.fatal_error(
-                                'line %d: command copy expects exactly one argument.' % lineno)
+                            ui.fatal_error('line %d: command copy expects exactly one argument.' %
+                                           lineno)
                         cmds[st]['groups'][group].append({
                             'cmd': 'copy',
                             'file': args[0],
@@ -476,6 +484,7 @@ class DatasetPlan:
                 else:
                     ui.fatal_error('line %d: error while parsing line `%s`\n' % (lineno, line))
         return (st, cmds)
+
 
 def _parse_args(args):
     args = args.strip()

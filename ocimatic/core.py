@@ -19,7 +19,6 @@ class Contest:
     tasks and a titlepage. A contest is associated to a directory in the
     filesystem.
     """
-
     def __init__(self, directory):
         """
         Args:
@@ -148,13 +147,12 @@ class Contest:
         cmd = ('gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite'
                ' -dPDFSETTINGS=/prepress -sOutputFile=%s %s') % (FilePath(
                    self._directory, filename), pdfs)
-        complete = subprocess.run(
-            cmd,
-            shell=True,
-            timeout=20,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL)
+        complete = subprocess.run(cmd,
+                                  shell=True,
+                                  timeout=20,
+                                  stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
         st = complete.returncode == 0
         return (st, 'OK' if st else 'FAILED')
 
@@ -182,7 +180,6 @@ class Task:
     a list of correct and partial solutions and a dataset. A task is
     associated to a directory in the filesystem.
     """
-
     @staticmethod
     def create_layout(task_path):
         ocimatic_dir = FilePath(__file__).directory()
@@ -211,8 +208,8 @@ class Task:
 
         self._statement = Statement(directory.chdir('statement'), num=num, codename=self.codename)
 
-        self._dataset = Dataset(
-            directory.chdir('dataset', create=True), SampleData(self._statement))
+        self._dataset = Dataset(directory.chdir('dataset', create=True),
+                                SampleData(self._statement))
 
     @property
     def codename(self):
@@ -236,20 +233,20 @@ class Task:
 
     @ui.task('Generating dataset input files')
     def gen_input(self):
-        testplan = DatasetPlan(
-            self._directory.chdir('attic'), self._directory, self._directory.chdir('dataset'))
+        testplan = DatasetPlan(self._directory.chdir('attic'), self._directory,
+                               self._directory.chdir('dataset'))
         testplan.run()
 
     @ui.task('Validating dataset input files')
     def validate_input(self):
-        testplan = DatasetPlan(
-            self._directory.chdir('attic'), self._directory, self._directory.chdir('dataset'))
+        testplan = DatasetPlan(self._directory.chdir('attic'), self._directory,
+                               self._directory.chdir('dataset'))
         testplan.validate_input()
 
     @ui.work('ZIP')
-    def compress_dataset(self):
+    def compress_dataset(self, random_sort=False):
         """Compress dataset in a single file data.zip"""
-        st = self._dataset.compress()
+        st = self._dataset.compress(random_sort=random_sort)
         return (st, 'OK' if st else 'FAILED')
 
     @property
@@ -292,6 +289,8 @@ class Task:
             pattern (Optional[string]): If present it only runs the solutions that
                 contain pattern as substring.
         """
+        # FIXME: hack to always `run` verbose
+        ocimatic.config['verbosity'] = 1
         for sol in self.solutions(partial):
             if not pattern or pattern.lower() in sol.name.lower():
                 self.run_solution(sol)
@@ -344,7 +343,6 @@ class Statement:
     """Represents a statement. A statement is formed by a latex source and a pdf
     file.
     """
-
     def __init__(self, directory, num=None, codename=None):
         """
         Args:
