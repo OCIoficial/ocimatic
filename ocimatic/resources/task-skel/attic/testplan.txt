@@ -9,7 +9,7 @@
 # Additionally, an argument which is different for every test case, is passed
 # at the beginning. Arguments should be used to generate a uniquely random seed
 # inside the generator.
-# To generate test cases using test plan use `ocimatic gen-input`
+# To generate test cases using test plan use `ocimatic input`
 
 
 [Subtask 1]
