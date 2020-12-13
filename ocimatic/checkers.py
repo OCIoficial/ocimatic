@@ -41,7 +41,8 @@ class DiffChecker(Checker):
         complete = subprocess.run(
             ['diff', str(expected_path), str(out_path)],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL)
+            stderr=subprocess.DEVNULL,
+            check=False)
         # @TODO(NL 20/10/1990) Check if returncode is nonzero because there
         # is a difference between files or because there was an error executing
         # diff.
@@ -80,7 +81,8 @@ class CppChecker(Checker):
              str(out_path)],
             universal_newlines=True,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
+            stderr=subprocess.PIPE,
+            check=False)
         ret = complete.returncode
         st = ret == 0
         if st:

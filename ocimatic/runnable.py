@@ -98,7 +98,8 @@ class Runnable:
                                           stdin=in_file,
                                           stdout=out_file,
                                           universal_newlines=True,
-                                          stderr=subprocess.PIPE)
+                                          stderr=subprocess.PIPE,
+                                          check=False)
             except subprocess.TimeoutExpired:
                 return (False, pytime.monotonic() - start, 'Execution timed out')
             time = pytime.monotonic() - start

@@ -27,7 +27,8 @@ class CppCompiler:
         complete = subprocess.run(cmd,
                                   stdout=subprocess.DEVNULL,
                                   stderr=subprocess.DEVNULL,
-                                  shell=True)
+                                  shell=True,
+                                  check=False)
         return complete.returncode == 0
 
 
@@ -54,7 +55,8 @@ class JavaCompiler:
         complete = subprocess.run(cmd,
                                   stdout=subprocess.DEVNULL,
                                   stderr=subprocess.DEVNULL,
-                                  shell=True)
+                                  shell=True,
+                                  check=False)
         return complete.returncode == 0
 
 
@@ -81,5 +83,6 @@ class LatexCompiler:
                                   shell=True,
                                   stdin=subprocess.DEVNULL,
                                   stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+                                  stderr=subprocess.DEVNULL,
+                                  check=False)
         return complete.returncode == 0

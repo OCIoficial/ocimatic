@@ -152,7 +152,8 @@ class Contest:
                                   timeout=20,
                                   stdin=subprocess.DEVNULL,
                                   stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+                                  stderr=subprocess.DEVNULL,
+                                  check=False)
         st = complete.returncode == 0
         return (st, 'OK' if st else 'FAILED')
 
