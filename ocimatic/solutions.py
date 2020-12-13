@@ -6,7 +6,6 @@ from ocimatic.runnable import Runnable
 class Solution:
     """Abstract class to represent a solution
     """
-
     def __init__(self, source):
         self._source = source
 
@@ -67,8 +66,8 @@ class Solution:
             dataset.gen_expected(runnable, sample=sample)
 
     def _build(self):
-        raise NotImplementedError(
-            "Class %s doesn't implement get_runnable()" % (self.__class__.__name__))
+        raise NotImplementedError("Class %s doesn't implement get_runnable()" %
+                                  (self.__class__.__name__))
 
     @ui.work('Build', verbosity=False)
     def build(self):
@@ -94,12 +93,12 @@ class Solution:
         return (self.get_runnable(), 'OK')
 
     def get_runnable(self):
-        raise NotImplementedError(
-            "Class %s doesn't implement get_runnable()" % (self.__class__.__name__))
+        raise NotImplementedError("Class %s doesn't implement get_runnable()" %
+                                  (self.__class__.__name__))
 
     def build_time(self):
-        raise NotImplementedError(
-            "Class %s doesn't implement build_time()" % (self.__class__.__name__))
+        raise NotImplementedError("Class %s doesn't implement build_time()" %
+                                  (self.__class__.__name__))
 
     @property
     def name(self):

@@ -35,7 +35,6 @@ class FilePath:
     """Represents a path to a file. The file may not exist in the
     file system.
     """
-
     @staticmethod
     def tmpfile():
         tmp_path = mkstemp()[1]
@@ -168,7 +167,6 @@ class Directory:
     """Represent a directory in the filesystem. The directory must always
     exist.
     """
-
     @staticmethod
     def tmpdir():
         """Returns a temporary directory. The user is responsible

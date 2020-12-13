@@ -9,7 +9,6 @@ from ocimatic.runnable import SIGNALS
 class Checker:
     """Check solutions
     """
-
     def __call__(self, in_path, expected_path, out_path):
         """Check outcome.
 
@@ -27,7 +26,6 @@ class Checker:
 class DiffChecker(Checker):
     """White diff checker
     """
-
     def __call__(self, in_path, expected_path, out_path):
         """Performs a white diff between expected output and output files
         Parameters correspond to convention for checker in cms.

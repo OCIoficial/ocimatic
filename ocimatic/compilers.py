@@ -6,7 +6,6 @@ from ocimatic.filesystem import FilePath
 class CppCompiler:
     """Compiles C++ code
     """
-
     def __init__(self, flags=()):
         self._cmd_template = 'g++ -std=c++11 -O2 %s -o %%s %%s' % ' '.join(flags)
 
@@ -25,15 +24,16 @@ class CppCompiler:
         sources = ' '.join('"%s"' % w for w in sources)
         cmd = self._cmd_template % (out, sources)
 
-        complete = subprocess.run(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+        complete = subprocess.run(cmd,
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL,
+                                  shell=True)
         return complete.returncode == 0
 
 
 class JavaCompiler:
     """Compiles Java code
     """
-
     def __init__(self, flags=()):
         self._cmd_template = 'javac %s %%s' % ' '.join(flags)
 
@@ -51,14 +51,15 @@ class JavaCompiler:
         sources = ' '.join('"%s"' % w for w in sources)
         cmd = self._cmd_template % sources
 
-        complete = subprocess.run(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+        complete = subprocess.run(cmd,
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL,
+                                  shell=True)
         return complete.returncode == 0
 
 
 class LatexCompiler:
     """Compiles latex source"""
-
     def __init__(self, cmd='pdflatex', flags=('--shell-escape', '-interaction=batchmode')):
         """
         Args:
@@ -76,10 +77,9 @@ class LatexCompiler:
         """
         flags = ' '.join(self._flags)
         cmd = 'cd "%s" && %s %s "%s"' % (source.directory(), self._cmd, flags, source.name)
-        complete = subprocess.run(
-            cmd,
-            shell=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL)
+        complete = subprocess.run(cmd,
+                                  shell=True,
+                                  stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
         return complete.returncode == 0

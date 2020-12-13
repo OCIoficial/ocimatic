@@ -44,7 +44,6 @@ class Runnable:
     """An entity that may be executed redirecting stdin and stdout to specific
     files.
     """
-
     @staticmethod
     def is_callable(file_path):
         return shutil.which(str(file_path)) is not None
@@ -94,13 +93,12 @@ class Runnable:
             start = pytime.monotonic()
             self._cmd.extend(args)
             try:
-                complete = subprocess.run(
-                    self._cmd,
-                    timeout=timeout,
-                    stdin=in_file,
-                    stdout=out_file,
-                    universal_newlines=True,
-                    stderr=subprocess.PIPE)
+                complete = subprocess.run(self._cmd,
+                                          timeout=timeout,
+                                          stdin=in_file,
+                                          stdout=out_file,
+                                          universal_newlines=True,
+                                          stderr=subprocess.PIPE)
             except subprocess.TimeoutExpired:
                 return (False, pytime.monotonic() - start, 'Execution timed out')
             time = pytime.monotonic() - start

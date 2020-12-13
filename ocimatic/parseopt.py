@@ -63,11 +63,11 @@ def _check_args_len(args, action_args, optional_count):
     max_count = len(action_args)
     mandatory_count = max_count - optional_count
     if len(args) > max_count:
-        ui.fatal_error(
-            'action expects no more than %d argument, %d were given' % (max_count, len(args)))
+        ui.fatal_error('action expects no more than %d argument, %d were given' %
+                       (max_count, len(args)))
     if len(args) < mandatory_count:
-        ui.fatal_error(
-            'action expects at least %d argument, %d were given' % (mandatory_count, len(args)))
+        ui.fatal_error('action expects at least %d argument, %d were given' %
+                       (mandatory_count, len(args)))
 
 
 def get_arg_name(arg_name):

@@ -221,21 +221,19 @@ def ocimatic_help(mode):
         write(' ' * 2 + bold(action_name) + ' ')
         writeln(' '.join(_format_arg(arg) for arg in action.get('args', [])))
         description = '\n'.join(
-            textwrap.wrap(
-                action.get('description', ''),
-                90,
-                subsequent_indent=' ' * 4,
-                initial_indent=' ' * 4))
+            textwrap.wrap(action.get('description', ''),
+                          90,
+                          subsequent_indent=' ' * 4,
+                          initial_indent=' ' * 4))
         if description.strip():
             writeln(description)
         for opt_key, opt_config in action.get('optlist', {}).items():
             opt = "{}{}   ".format(' ' * 6, _format_opt(opt_key, opt_config))
             write(opt)
             description = '\n'.join(
-                textwrap.wrap(
-                    opt_config.get('description', ''),
-                    80 - len(opt),
-                    subsequent_indent=' ' * len(opt)))
+                textwrap.wrap(opt_config.get('description', ''),
+                              80 - len(opt),
+                              subsequent_indent=' ' * len(opt)))
             writeln(description)
 
         writeln()
@@ -256,8 +254,8 @@ def _format_opt(opt_key, opt_config):
         opt = '--{}, -{}'.format(long_opt, short_opt) if short_opt else '--{}'.format(long_opt)
     else:
         if short_opt:
-            opt = '--{long_opt}={long_opt}, -{short_opt}={long_opt}'.format(
-                long_opt=long_opt, short_opt=short_opt)
+            opt = '--{long_opt}={long_opt}, -{short_opt}={long_opt}'.format(long_opt=long_opt,
+                                                                            short_opt=short_opt)
         else:
             opt = '--{long_opt}={long_opt}'.format(long_opt=long_opt)
     return '[{}]'.format(opt)
