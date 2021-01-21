@@ -168,7 +168,7 @@ class JavaSolution(Solution):
         self._bytecode = self._source.chext('.class')
 
     def get_runnable(self):
-        return Runnable('java', ['-cp', str(self._classpath), str(self._classname)])
+        return Runnable('java', ['-cp', str(self._classpath), '-Xss1g', str(self._classname)])
 
     def build_time(self):
         return self._bytecode.mtime()

@@ -117,26 +117,41 @@
 %% Ejemplo Input/Output
 
 \definecolor{samplegray}{rgb}{0.3,0.3,0.3}
-\NewDocumentCommand{\sampleIO}{O{0.45}O{0.45}m}{%
+\NewDocumentCommand{\sampleIO}{sO{0.45}O{0.45}m}{%
   \begin{minipage}[c]{\textwidth}
     \begin{center}
-      \begin{tabu}{|l|} 
+      \begin{tabu}{|l|}
         \taburulecolor{samplegray}
         \hline
-        \begin{minipage}[t]{#1\textwidth}
+        \IfBooleanTF{#1}{%
+          \begin{minipage}[t]{#2\textwidth}
             \vskip 0.3pt
             \bf{Entrada de ejemplo}
             \vskip 12pt
-\verbatiminput{#3.in}
+\verbatiminput{#4.in}
             \vskip 4pt
-        \end{minipage}
-        \begin{minipage}[t]{#2\textwidth}
-            \vskip 0.3pt
             \bf{Salida de ejemplo}
             \vskip 12pt
-\verbatiminput{#3.sol}
+\verbatiminput{#4.sol}
             \vskip 4pt
-        \end{minipage}
+          \end{minipage}
+        }
+        {%
+          \begin{minipage}[t]{#2\textwidth}
+              \vskip 0.3pt
+              \bf{Entrada de ejemplo}
+              \vskip 12pt
+\verbatiminput{#4.in}
+              \vskip 4pt
+          \end{minipage}
+          \begin{minipage}[t]{#3\textwidth}
+              \vskip 0.3pt
+              \bf{Salida de ejemplo}
+              \vskip 12pt
+\verbatiminput{#4.sol}
+              \vskip 4pt
+          \end{minipage}
+        }
         \\
         \hline
       \end{tabu}
@@ -145,9 +160,10 @@
   \vskip 12pt
 }
 
+
 \newcounter{subtaskcnt}
 \newenvironment{scoreDescription}{\subsection*{Subtareas y puntaje}\setcounter{subtaskcnt}{1}}{}
-\newcommand{\subtask}[1]{\subsubsection*{Subtarea \arabic{subtaskcnt} (#1 puntos)}\stepcounter{subtaskcnt}}
+\newcommand{\subtask}[1]{\subsubsection*{Subtarea \arabic{subtaskcnt} (#1 puntos)}\vspace{-1em}\stepcounter{subtaskcnt}}
 
 \newenvironment{sampleDescription}{\subsection*{Ejemplos de entrada y salida}}{}
 

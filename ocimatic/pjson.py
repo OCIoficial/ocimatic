@@ -10,6 +10,8 @@ class PJSONFile:
         self._file_path = file_path
 
     def _load_json(self):
+        if not self._file_path.exists():
+            return {}
         with self._file_path.open('r') as json_file:
             return json.load(json_file)
 
