@@ -74,8 +74,7 @@ class Dataset:
         return st == 0
 
     def count(self):
-        for st in self._subtasks:
-            st.count()
+        return [st.count() for st in self._subtasks]
 
     def normalize(self):
         for subtask in self._subtasks:
@@ -103,8 +102,8 @@ class Subtask:
                     in_name = "%s-%s-%s" % (self._name, rnd_str, test.in_path.name)
                     sol_name = "%s-%s-%s" % (self._name, rnd_str, test.expected_path.name)
                 else:
-                    in_name = "%s-%s-%s" % (self._name, rnd_str, test.in_path.name)
-                    sol_name = "%s-%s-%s" % (self._name, rnd_str, test.expected_path.name)
+                    in_name = "%s-%s" % (self._name, test.in_path.name)
+                    sol_name = "%s-%s" % (self._name, test.expected_path.name)
                 test.in_path.copy(FilePath(directory, in_name))
                 test.expected_path.copy(FilePath(directory, sol_name))
                 copied += 1
@@ -120,9 +119,8 @@ class Subtask:
         for test in self._tests:
             test.normalize()
 
-    @ui.work('Gen')
     def count(self):
-        return (True, len(self._tests))
+        return len(self._tests)
 
     @ui.workgroup()
     def run(self, runnable, checker, check=False):
@@ -395,6 +393,7 @@ class DatasetPlan:
             return (False, 'No such file')
         python = 'python2' if cmd == 'py2' else 'python3'
         (st, _time, msg) = Runnable(python, [str(source)]).run(None, dst, args)
+        # print(' '.join(args))
         return (st, msg)
 
     @ui.work('Gen', '{1}')

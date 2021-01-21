@@ -197,6 +197,8 @@ class Task:
 
         self._managers_dir = directory.chdir('managers')
 
+        self._config = pjson.load(FilePath(directory, ".ocimatic_task"))
+
         correct_dir = directory.chdir('solutions/correct')
         self._correct = Solution.get_solutions(self.codename, correct_dir, self._managers_dir)
         partial_dir = directory.chdir('solutions/partial')
@@ -234,6 +236,8 @@ class Task:
 
     @ui.task('Generating dataset input files')
     def gen_input(self):
+        if self._config.get("static_dataset", False):
+            ui.fatal_error("Task has a static dataset.")
         testplan = DatasetPlan(self._directory.chdir('attic'), self._directory,
                                self._directory.chdir('dataset'))
         testplan.run()
@@ -273,9 +277,19 @@ class Task:
         """Statement"""
         return self._statement
 
-    @ui.task('Counting')
-    def count(self):
-        self._dataset.count()
+    def score(self):
+        counts = self._dataset.count()
+        scores = self._statement.scores()
+        if len(scores) != len(counts):
+            ui.show_message(
+                'Warning',
+                "The number of subtasks in the statement doesn't match with the number of " +
+                "subtasks in the testplan.", ui.WARNING)
+            return
+
+        if len(counts) == len(scores) == 1:
+            ui.show_message('Sum', scores[0] / counts[0])
+        ui.show_message('GroupMin', [[m, t] for (m, t) in zip(scores, counts)])
 
     @ui.task('Normalizing')
     def normalize(self):
@@ -319,6 +333,8 @@ class Task:
         """Generate expected outputs files for dataset by running one of the
         correct solutions.
         """
+        if self._config.get("static_dataset", False):
+            ui.fatal_error("Task has a static dataset.")
         if not self._correct:
             ui.fatal_error('No correct solution.')
         generator = None
@@ -398,11 +414,31 @@ class Statement:
         Returns:
             List[FilePath]: list of paths
         """
-        latex_file = self._source.open('r')
         samples = set()
-        for line in latex_file:
+        for line in self._iter_file():
             m = re.match(r'[^%]*\\sampleIO(\[[^\]]*\]){0,2}{([^}]+)}', line)
             if m:
                 samples.add(m.group(2))
-        latex_file.close()
         return [FilePath(self._directory, s) for s in samples]
+
+    def scores(self):
+        """Finds the scores for the subtasks
+        Returns:
+            List[int]: List with the scores for each subtask
+        """
+        scores = []
+        for line in self._iter_file():
+            m = re.match(r'[^%]*\\subtask{([^}]+)}', line)
+            if m:
+                scores.append(int(m.group(1)))
+        if not scores:
+            ui.show_message('Warning', "Couldn't infer the score from the statement, assuming 100.",
+                            ui.WARNING)
+            scores = [100]
+
+        return scores
+
+    def _iter_file(self):
+        latex_file = self._source.open('r')
+        yield from latex_file
+        latex_file.close()

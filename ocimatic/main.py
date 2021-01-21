@@ -141,8 +141,8 @@ TASK_ACTIONS = {
         'description': 'Run input checkers.',
         'method': 'validate_input'
     },
-    'count': {
-        'description': 'Count number of input tests'
+    'score': {
+        'description': 'Print the score parameters for cms.'
     }
 }
 

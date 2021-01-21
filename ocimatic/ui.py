@@ -135,13 +135,13 @@ def end_work(msg, status, verbosity=True):
 
 
 def fatal_error(message):
-    writeln('ocimatic: ' + message)
+    writeln(colorize('ocimatic: ' + message, INFO + RED))
     writeln()
     sys.exit(1)
 
 
 def show_message(label, msg, color=INFO):
-    write(' %s \n' % colorize(label + ': ' + msg, color))
+    write(' %s \n' % colorize(label + ': ' + str(msg), color))
 
 
 CAPTURE_WORKS = []

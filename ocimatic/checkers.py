@@ -86,8 +86,13 @@ class CppChecker(Checker):
         ret = complete.returncode
         st = ret == 0
         if st:
-            outcome = float(complete.stdout)
-            msg = complete.stderr
+            try:
+                outcome = float(complete.stdout)
+                msg = complete.stderr
+            except ValueError:
+                outcome = 0.0
+                msg = 'Output must be a valid float'
+                st = False
         else:
             stderr = complete.stderr.strip('\n')
             outcome = 0.0
