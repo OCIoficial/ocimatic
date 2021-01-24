@@ -42,7 +42,7 @@ SIGNALS = {
 
 
 class Result(NamedTuple):
-    status: bool
+    success: bool
     time: float
     err_msg: Optional[str]
     stderr: str
@@ -113,7 +113,7 @@ class Runnable:
                                           stderr=subprocess.PIPE,
                                           check=False)
             except subprocess.TimeoutExpired:
-                return Result(status=False,
+                return Result(success=False,
                               time=pytime.monotonic() - start,
                               err_msg='Execution timed out',
                               stderr='')
@@ -129,5 +129,5 @@ class Runnable:
                         msg += ': %s' % SIGNALS[sig]
                 else:
                     msg = 'Execution ended with error (return code %d)' % ret
-            return Result(status=status, time=time, err_msg=msg, stderr=complete.stderr)
+            return Result(success=status, time=time, err_msg=msg, stderr=complete.stderr)
         assert False

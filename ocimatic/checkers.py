@@ -9,7 +9,7 @@ from ocimatic.runnable import SIGNALS
 
 
 class CheckerResult(NamedTuple):
-    status: bool
+    success: bool
     outcome: float
     msg: str
 
@@ -60,7 +60,7 @@ class DiffChecker(Checker):
         # diff.
         st = complete.returncode == 0
         outcome = 1.0 if st else 0.0
-        return CheckerResult(status=True, outcome=outcome, msg='')
+        return CheckerResult(success=True, outcome=outcome, msg='')
 
 
 class CppChecker(Checker):
@@ -87,7 +87,7 @@ class CppChecker(Checker):
         assert out_path.exists()
         if self._binary_path.mtime() < self._source.mtime():
             if not self.build():
-                return CheckerResult(status=False, outcome=0.0, msg="Failed to build checker")
+                return CheckerResult(success=False, outcome=0.0, msg="Failed to build checker")
         complete = subprocess.run(
             [str(self._binary_path),
              str(in_path), str(expected_path),
@@ -120,7 +120,7 @@ class CppChecker(Checker):
                 else:
                     msg = 'Execution ended with error (return code %d)' % ret
 
-        return CheckerResult(status=st, outcome=outcome, msg=msg)
+        return CheckerResult(success=st, outcome=outcome, msg=msg)
 
     def build(self) -> bool:
         """Build source of the checker

@@ -44,7 +44,7 @@ IO_STREAMS = [sys.stdout]
 
 
 class WorkResult(NamedTuple):
-    status: bool
+    success: bool
     short_msg: Optional[str] = None
     long_msg: Optional[str] = None
 
@@ -157,7 +157,7 @@ def start_work(action, msg, length=45):
 
 
 def end_work(result: WorkResult) -> None:
-    color = OK if result.status else ERROR
+    color = OK if result.success else ERROR
     if ocimatic.config['verbosity'] < 0:
         write(colorize('.', color))
     else:

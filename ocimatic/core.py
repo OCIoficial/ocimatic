@@ -5,10 +5,10 @@ import re
 import shutil
 import subprocess
 import fnmatch
-from typing import Iterable, List, Optional, Tuple, TypedDict
+from typing import Iterable, List, Optional, TypedDict
 
 import ocimatic
-from ocimatic import Config, pjson, ui
+from ocimatic import pjson, ui
 from ocimatic.checkers import Checker, CppChecker, DiffChecker
 from ocimatic.compilers import LatexCompiler
 from ocimatic.dataset import Dataset, DatasetPlan, SampleData
@@ -137,13 +137,13 @@ class Contest:
             (bool, msg): Status and result message
         """
         st = self._compiler(self._titlepage)
-        return ui.WorkResult(status=st, short_msg='OK' if st else 'FAILED')
+        return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
 
     @ui.work('MERGE', '{1}')
     def merge_pdfs(self, filename) -> ui.WorkResult:
         """Merges statements and title page in a single file """
         if not shutil.which('gs'):
-            return ui.WorkResult(status=False, short_msg='Cannot find gs')
+            return ui.WorkResult(success=False, short_msg='Cannot find gs')
 
         pdfs = ' '.join('"%s"' % t.statement.pdf for t in self._tasks if t.statement.pdf)
         titlepage = FilePath(self._directory, 'titlepage.pdf')
@@ -161,7 +161,7 @@ class Contest:
                                   stderr=subprocess.DEVNULL,
                                   check=False)
         st = complete.returncode == 0
-        return ui.WorkResult(status=st, short_msg='OK' if st else 'FAILED')
+        return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
 
     @property
     def name(self) -> str:
@@ -229,14 +229,14 @@ class Task:
         new_dir = directory.mkdir(str(self))
 
         result = self.compress_dataset()
-        if result.status:
+        if result.success:
             dataset = FilePath(self._directory.chdir('dataset'), 'data.zip')
             dataset_dst = FilePath(new_dir, 'data.zip')
             if dataset.exists():
                 dataset.copy(dataset_dst)
 
         result = self.build_statement()
-        if result.status:
+        if result.success:
             statement = FilePath(new_dir, 'statement.pdf')
             FilePath(self._directory.chdir('statement'), 'statement.pdf').copy(statement)
 
@@ -258,7 +258,7 @@ class Task:
     def compress_dataset(self, random_sort=False) -> ui.WorkResult:
         """Compress dataset in a single file data.zip"""
         st = self._dataset.compress(random_sort=random_sort)
-        return ui.WorkResult(status=st, short_msg='OK' if st else 'FAILED')
+        return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
 
     @property
     def name(self) -> str:
@@ -389,7 +389,7 @@ class Statement:
         """
         if self._pdf.mtime() < self._source.mtime():
             result = self.build()
-            if not result.status:
+            if not result.success:
                 return None
         return self._pdf
 
@@ -413,7 +413,7 @@ class Statement:
         if blank_page:
             os.environ['OCIMATIC_BLANK_PAGE'] = 'True'
         st = self._compiler(self._source)
-        return ui.WorkResult(status=st, short_msg='OK' if st else 'FAILED')
+        return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
 
     def io_samples(self) -> List[FilePath]:
         """Find sample input data in the satement

@@ -58,7 +58,7 @@ class Solution(ABC):
                 statement.
         """
         runnable, msg = self.get_and_build()
-        yield ui.WorkResult(status=runnable is not None, short_msg=msg)
+        yield ui.WorkResult(success=runnable is not None, short_msg=msg)
         if runnable:
             dataset.run(runnable, checker, sample=sample, check=check)
 
@@ -72,7 +72,7 @@ class Solution(ABC):
                 sample test data from statement.
         """
         runnable, msg = self.get_and_build()
-        yield ui.WorkResult(status=runnable is not None, short_msg=msg)
+        yield ui.WorkResult(success=runnable is not None, short_msg=msg)
         if runnable:
             dataset.gen_expected(runnable, sample=sample)
 
@@ -84,7 +84,7 @@ class Solution(ABC):
         """
         st = self._build()
         msg = 'OK' if st else 'FAILED'
-        return ui.WorkResult(status=st, short_msg=msg)
+        return ui.WorkResult(success=st, short_msg=msg)
 
     def get_and_build(self) -> Tuple[Optional[Runnable], str]:
         """

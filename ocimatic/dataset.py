@@ -1,4 +1,3 @@
-from ocimatic.core import Statement
 from typing import Any, Dict, List, Optional, Tuple
 from ocimatic.checkers import Checker
 import random
@@ -149,7 +148,7 @@ class Subtask:
 class SampleData(Subtask):
     # FIXME: this shouldn't inherit directly from Subtask as the initializer is completely different.
     # Maybe both should a have a common parent.
-    def __init__(self, statement: Statement, in_ext: str = '.in', sol_ext: str = '.sol'):
+    def __init__(self, statement, in_ext: str = '.in', sol_ext: str = '.sol'):
         self._in_ext = in_ext
         self._sol_ext = sol_ext
         tests = statement.io_samples() if statement else []
@@ -196,7 +195,7 @@ class Test:
                                                self.expected_path,
                                                timeout=ocimatic.config['timeout'])
         msg = 'OK' if st else errmsg
-        return WorkResult(status=st, short_msg=msg, long_msg=stderr)
+        return WorkResult(success=st, short_msg=msg, long_msg=stderr)
 
     @ui.work('Run')
     def run(self, runnable: Runnable, checker: Checker, check: bool = False) -> WorkResult:
@@ -210,7 +209,7 @@ class Test:
         out_path = FilePath.tmpfile()
         if not self.expected_path.exists():
             out_path.remove()
-            return WorkResult(status=False, short_msg='No expected output file')
+            return WorkResult(success=False, short_msg='No expected output file')
 
         (st, time, errmsg, stderr) = runnable.run(self.in_path,
                                                   out_path,
@@ -218,23 +217,23 @@ class Test:
 
         # Execution failed
         if not st:
-            return WorkResult(status=st, short_msg=errmsg, long_msg=stderr)
+            return WorkResult(success=st, short_msg=errmsg, long_msg=stderr)
 
         (st, outcome, checkmsg) = checker(self.in_path, self.expected_path, out_path)
         # Checker failed
         if not st:
             msg = 'Failed to run checker: %s' % checkmsg
-            return WorkResult(status=st, short_msg=msg)
+            return WorkResult(success=st, short_msg=msg)
 
         st = outcome == 1.0
         if check:
             msg = 'OK' if st else 'FAILED'
-            return WorkResult(status=st, short_msg=msg)
+            return WorkResult(success=st, short_msg=msg)
 
         msg = '%s [%.2fs]' % (outcome, time)
         if checkmsg:
             msg += ' - %s' % checkmsg
-        return WorkResult(status=st, short_msg=msg, long_msg=stderr)
+        return WorkResult(success=st, short_msg=msg, long_msg=stderr)
 
     @property
     def in_path(self) -> FilePath:
@@ -249,9 +248,9 @@ class Test:
     @ui.work('Normalize')
     def normalize(self) -> WorkResult:
         if not shutil.which('dos2unix'):
-            return WorkResult(status=False, short_msg='Cannot find dos2unix')
+            return WorkResult(success=False, short_msg='Cannot find dos2unix')
         if not shutil.which('sed'):
-            return WorkResult(status=False, short_msg='Cannot find sed')
+            return WorkResult(success=False, short_msg='Cannot find sed')
         tounix_input = 'dos2unix "%s"' % self.in_path
         tounix_expected = 'dos2unix "%s"' % self.expected_path
         sed_input = "sed -i -e '$a\\' \"%s\"" % self.in_path
@@ -262,7 +261,7 @@ class Test:
         if self.expected_path.exists():
             st += subprocess.call(tounix_expected, stdout=null, stderr=null, shell=True)
             st += subprocess.call(sed_expected, stdout=null, stderr=null, shell=True)
-        return WorkResult(status=st == 0, short_msg='OK' if st == 0 else 'FAILED')
+        return WorkResult(success=st == 0, short_msg='OK' if st == 0 else 'FAILED')
 
 
 # FIXME: Refactor class. This should allow to re-enable some pylint checks
@@ -309,9 +308,9 @@ class DatasetPlan:
     @ui.work('Validating', '{1}')
     def validate_test_input(self, test_file, validator) -> WorkResult:
         if not test_file.exists():
-            return WorkResult(status=False, short_msg='Test file does not exist')
+            return WorkResult(success=False, short_msg='Test file does not exist')
         (st, _time, msg) = validator.run(test_file, None)
-        return WorkResult(status=st, short_msg=msg)
+        return WorkResult(success=st, short_msg=msg)
 
     def build_validator(self, source: str) -> Tuple[Optional[Runnable], str]:
         fp = FilePath(self._directory, source)
@@ -371,38 +370,38 @@ class DatasetPlan:
     def copy(self, src: str, dst: FilePath) -> WorkResult:
         fp = FilePath(self._task_directory, src)
         if not fp.exists():
-            return WorkResult(status=False, short_msg='No such file')
+            return WorkResult(success=False, short_msg='No such file')
         try:
             fp.copy(dst)
             (st, msg) = (True, 'OK')
-            return WorkResult(status=st, short_msg=msg)
+            return WorkResult(success=st, short_msg=msg)
         except Exception:  # pylint: disable=broad-except
-            return WorkResult(status=False, short_msg='Error when copying file')
+            return WorkResult(success=False, short_msg='Error when copying file')
 
     @ui.work('Echo', '{1}')
     def echo(self, args: List[str], dst: FilePath) -> WorkResult:
         with dst.open('w') as test_file:
             test_file.write(' '.join(args) + '\n')
-            return WorkResult(status=True, short_msg='Ok')
+            return WorkResult(success=True, short_msg='Ok')
 
     @ui.work('Gen', '{1}')
     def run_cpp_generator(self, source: FilePath, args: List[str], dst: FilePath) -> WorkResult:
         if not source.exists():
-            return WorkResult(status=False, short_msg='No such file')
+            return WorkResult(success=False, short_msg='No such file')
         binary = source.chext('.bin')
         if binary.mtime() < source.mtime():
             st = self._cpp_compiler(source, binary)
             if not st:
-                return WorkResult(status=st, short_msg='Failed to build generator')
+                return WorkResult(success=st, short_msg='Failed to build generator')
 
         (st, _, msg, _) = Runnable(binary).run(None, dst, args)
-        return WorkResult(status=st, short_msg=msg)
+        return WorkResult(success=st, short_msg=msg)
 
     @ui.work('Gen', '{1}')
     def run_py_generator(self, source: FilePath, args: List[str], dst: FilePath,
                          cmd: FilePath) -> WorkResult:
         if not source.exists():
-            return WorkResult(status=False, short_msg='No such file')
+            return WorkResult(success=False, short_msg='No such file')
         python = 'python2' if cmd == 'py2' else 'python3'
         (st, _time, msg, stderr) = Runnable(python, [str(source)]).run(None, dst, args)
         return WorkResult(st, msg, stderr)
@@ -410,28 +409,28 @@ class DatasetPlan:
     @ui.work('Gen', '{1}')
     def run_java_generator(self, source: FilePath, args: List[str], dst: FilePath) -> WorkResult:
         if not source.exists():
-            return WorkResult(status=False, short_msg='No such file')
+            return WorkResult(success=False, short_msg='No such file')
         bytecode = source.chext('.class')
         if bytecode.mtime() < source.mtime():
             st = self._java_compiler(source)
             if not st:
-                return WorkResult(status=st, short_msg='Failed to build generator')
+                return WorkResult(success=st, short_msg='Failed to build generator')
 
         classname = bytecode.rootname()
         classpath = str(bytecode.directory().path())
         (st, _time, msg, stderr) = Runnable('java',
                                             ['-cp', classpath, classname]).run(None, dst, args)
-        return WorkResult(status=st, short_msg=msg, long_msg=stderr)
+        return WorkResult(success=st, short_msg=msg, long_msg=stderr)
 
     @ui.work('Gen', '{1}')
     def run_bin_generator(self, bin_path: FilePath, args: List[str], dst: FilePath) -> WorkResult:
         if not bin_path.exists():
-            return WorkResult(status=False, short_msg='No such file')
+            return WorkResult(success=False, short_msg='No such file')
         if not Runnable.is_callable(bin_path):
-            return WorkResult(status=False,
+            return WorkResult(success=False,
                               short_msg='Cannot run file, it may not have correct permissions')
         (st, _time, msg, stderr) = Runnable(bin_path).run(None, dst, args)
-        return WorkResult(status=st, short_msg=msg, long_msg=stderr)
+        return WorkResult(success=st, short_msg=msg, long_msg=stderr)
 
     def parse_file(self) -> Tuple[int, Dict[int, Any]]:
         """
