@@ -1,3 +1,4 @@
+from typing import NamedTuple, Optional, List
 import contextlib
 import shutil
 import subprocess
@@ -40,6 +41,13 @@ SIGNALS = {
 }
 
 
+class Result(NamedTuple):
+    status: bool
+    time: float
+    err_msg: Optional[str]
+    stderr: str
+
+
 class Runnable:
     """An entity that may be executed redirecting stdin and stdout to specific
     files.
@@ -62,7 +70,11 @@ class Runnable:
     def __str__(self):
         return self._cmd[0]
 
-    def run(self, in_path, out_path, args=None, timeout=None):  # pylint: disable=too-many-locals
+    def run(self,
+            in_path: Optional[FilePath],
+            out_path: Optional[FilePath],
+            args: List[str] = [],
+            timeout: Optional[float] = None) -> Result:
         """Run binary redirecting standard input and output.
 
         Args:
@@ -101,21 +113,21 @@ class Runnable:
                                           stderr=subprocess.PIPE,
                                           check=False)
             except subprocess.TimeoutExpired:
-                return (False, pytime.monotonic() - start, 'Execution timed out')
+                return Result(status=False,
+                              time=pytime.monotonic() - start,
+                              err_msg='Execution timed out',
+                              stderr='')
             time = pytime.monotonic() - start
             ret = complete.returncode
             status = ret == 0
             msg = 'OK'
             if not status:
-                stderr = complete.stderr.strip('\n')
-                if stderr and len(stderr) < 100:
-                    msg = stderr
+                if ret < 0:
+                    sig = -ret
+                    msg = 'Execution killed with signal %d' % sig
+                    if sig in SIGNALS:
+                        msg += ': %s' % SIGNALS[sig]
                 else:
-                    if ret < 0:
-                        sig = -ret
-                        msg = 'Execution killed with signal %d' % sig
-                        if sig in SIGNALS:
-                            msg += ': %s' % SIGNALS[sig]
-                    else:
-                        msg = 'Execution ended with error (return code %d)' % ret
-            return (status, time, msg)
+                    msg = 'Execution ended with error (return code %d)' % ret
+            return Result(status=status, time=time, err_msg=msg, stderr=complete.stderr)
+        assert False

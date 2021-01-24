@@ -22,24 +22,23 @@ def get_resources(package):
     return resources
 
 
-setup(
-    name='ocimatic',
-    version=__version__,
-    author='Nico Lehmann',
-    description='Automatize task creation for OCI',
-    url='https://github.com/OCIoficial/ocimatic',
-    long_description=(open('LICENSE.rst').read()),
-    license='Beer-Ware',
-    packages=['ocimatic'],
-    entry_points={
-        'console_scripts': [
-            'ocimatic=ocimatic.main:main',
-        ],
-    },
-    package_data={'ocimatic': get_resources('ocimatic')},
-    classifiers=[
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 3',
-    ],
-    install_requires=["ansi2html>=1.4.2", "colorama>=0.3.9", "flask>=1.0.2"],
-    extras_require={'dev': ['yapf', 'pylint-flask']})
+setup(name='ocimatic',
+      version=__version__,
+      author='Nico Lehmann',
+      description='Automatize task creation for OCI',
+      url='https://github.com/OCIoficial/ocimatic',
+      long_description=(open('LICENSE.rst').read()),
+      license='Beer-Ware',
+      packages=['ocimatic'],
+      entry_points={
+          'console_scripts': [
+              'ocimatic=ocimatic.main:main',
+          ],
+      },
+      package_data={'ocimatic': get_resources('ocimatic')},
+      classifiers=[
+          'Programming Language :: Python',
+          'Programming Language :: Python :: 3',
+      ],
+      install_requires=["ansi2html>=1.4.2", "colorama>=0.3.9", "flask>=1.0.2"],
+      extras_require={'dev': ['yapf', 'mypy']})

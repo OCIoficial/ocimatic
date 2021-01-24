@@ -1,16 +1,22 @@
+from abc import ABC, abstractmethod
+from ocimatic.filesystem import Directory, FilePath
+from typing import Iterable, List, Optional, Tuple
 from ocimatic import ui
 from ocimatic.compilers import CppCompiler, JavaCompiler
 from ocimatic.runnable import Runnable
+from ocimatic.dataset import Dataset
+from ocimatic.checkers import Checker
 
 
-class Solution:
+class Solution(ABC):
     """Abstract class to represent a solution
     """
-    def __init__(self, source):
+    def __init__(self, source: FilePath):
         self._source = source
 
     @staticmethod
-    def get_solutions(codename, solutions_dir, managers_dir):
+    def get_solutions(codename: str, solutions_dir: Directory,
+                      managers_dir: Directory) -> List['Solution']:
         """Search for solutions in a directory.
 
         Args:
@@ -28,7 +34,8 @@ class Solution:
         ]
 
     @staticmethod
-    def get_solution(codename, file_path, managers_dir):
+    def get_solution(codename: str, file_path: FilePath,
+                     managers_dir: Directory) -> Optional['Solution']:
         if file_path.ext == CppSolution.ext:
             return CppSolution(file_path, managers_dir)
         if file_path.ext == JavaSolution.ext:
@@ -36,7 +43,11 @@ class Solution:
         return None
 
     @ui.solution_group()
-    def run(self, dataset, checker, check=False, sample=False):
+    def run(self,
+            dataset: Dataset,
+            checker: Checker,
+            check: bool = False,
+            sample: bool = False) -> Iterable[ui.WorkResult]:
         """Run this solution for all test cases in the given dataset.
         Args:
             dataset (Dataset)
@@ -47,12 +58,12 @@ class Solution:
                 statement.
         """
         runnable, msg = self.get_and_build()
-        yield (runnable is not None, msg)
+        yield ui.WorkResult(status=runnable is not None, short_msg=msg)
         if runnable:
             dataset.run(runnable, checker, sample=sample, check=check)
 
     @ui.solution_group()
-    def gen_expected(self, dataset, sample=False):
+    def gen_expected(self, dataset: Dataset, sample: bool = False) -> Iterable[ui.WorkResult]:
         """Generate expected output files for all test cases in the given dataset
         running this solution.
         Args:
@@ -61,25 +72,21 @@ class Solution:
                 sample test data from statement.
         """
         runnable, msg = self.get_and_build()
-        yield (runnable is not None, msg)
+        yield ui.WorkResult(status=runnable is not None, short_msg=msg)
         if runnable:
             dataset.gen_expected(runnable, sample=sample)
 
-    def _build(self):
-        raise NotImplementedError("Class %s doesn't implement get_runnable()" %
-                                  (self.__class__.__name__))
-
-    @ui.work('Build', verbosity=False)
-    def build(self):
+    @ui.work('Build')
+    def build(self) -> ui.WorkResult:
         """Build solution.
         Returns:
             (bool, str): A tuple containing status and result message.
         """
         st = self._build()
         msg = 'OK' if st else 'FAILED'
-        return (st, msg)
+        return ui.WorkResult(status=st, short_msg=msg)
 
-    def get_and_build(self):
+    def get_and_build(self) -> Tuple[Optional[Runnable], str]:
         """
         Returns:
             Optional[Runnable]: Runnable file of this solution or None if it fails
@@ -92,19 +99,26 @@ class Solution:
                 return (None, msg)
         return (self.get_runnable(), 'OK')
 
-    def get_runnable(self):
+    @abstractmethod
+    def get_runnable(self) -> Optional[Runnable]:
         raise NotImplementedError("Class %s doesn't implement get_runnable()" %
                                   (self.__class__.__name__))
 
-    def build_time(self):
+    @abstractmethod
+    def _build(self) -> bool:
+        raise NotImplementedError("Class %s doesn't implement get_runnable()" %
+                                  (self.__class__.__name__))
+
+    @abstractmethod
+    def build_time(self) -> float:
         raise NotImplementedError("Class %s doesn't implement build_time()" %
                                   (self.__class__.__name__))
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._source.name
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self._source)
 
 
@@ -114,7 +128,7 @@ class CppSolution(Solution):
     """
     ext = '.cpp'
 
-    def __init__(self, source, managers):
+    def __init__(self, source: FilePath, managers: Directory):
         """
         Args:
             source (FilePath): Source code.
@@ -128,13 +142,13 @@ class CppSolution(Solution):
         self._grader = managers.find_file('grader.cpp')
         self._bin_path = self._source.chext('.bin')
 
-    def get_runnable(self):
+    def get_runnable(self) -> Runnable:
         return Runnable(self._bin_path)
 
-    def build_time(self):
+    def build_time(self) -> float:
         return self._bin_path.mtime()
 
-    def _build(self):
+    def _build(self) -> bool:
         """Compile solution with a CppCompiler. Solutions is compiled with a
         grader if present.
         """
@@ -150,7 +164,7 @@ class JavaSolution(Solution):
     """
     ext = '.java'
 
-    def __init__(self, codename, source, managers):
+    def __init__(self, codename: str, source: FilePath, managers: Directory):
         """
         Args:
             source (FilePath): Source code.
@@ -167,13 +181,13 @@ class JavaSolution(Solution):
         self._classpath = self._source.directory().path()
         self._bytecode = self._source.chext('.class')
 
-    def get_runnable(self):
+    def get_runnable(self) -> Runnable:
         return Runnable('java', ['-cp', str(self._classpath), '-Xss1g', str(self._classname)])
 
-    def build_time(self):
+    def build_time(self) -> float:
         return self._bytecode.mtime()
 
-    def _build(self):
+    def _build(self) -> bool:
         """Compile solution with the JavaCompiler.
         @TODO (NL: 26/09/2016) Compile solutions with a grader if present.
         """

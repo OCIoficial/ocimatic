@@ -8,4 +8,14 @@
 
 __version__ = 'beta1'
 
-config = {'timeout': 10, 'last_blank_page': True, 'task': None, 'verbosity': 0}
+from typing import Optional, TypedDict
+
+
+class Config(TypedDict):
+    timeout: int
+    last_blank_page: bool
+    task: Optional[str]
+    verbosity: int
+
+
+config: Config = {'timeout': 10, 'last_blank_page': True, 'task': None, 'verbosity': 0}

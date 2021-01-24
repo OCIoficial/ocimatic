@@ -1,4 +1,5 @@
 import subprocess
+from typing import List, Union
 
 from ocimatic.filesystem import FilePath
 
@@ -6,10 +7,10 @@ from ocimatic.filesystem import FilePath
 class CppCompiler:
     """Compiles C++ code
     """
-    def __init__(self, flags=()):
+    def __init__(self, flags: List[str] = []):
         self._cmd_template = 'g++ -std=c++11 -O2 %s -o %%s %%s' % ' '.join(flags)
 
-    def __call__(self, sources, out):
+    def __call__(self, sources: Union[FilePath, List[FilePath]], out: FilePath) -> bool:
         """Compiles a list of C++ sources.
 
         Args:
@@ -19,10 +20,10 @@ class CppCompiler:
         Returns:
             bool: True if compilations succeed, False otherwise.
         """
-        out = '"%s"' % out
+        out_str = '"%s"' % out
         sources = [sources] if isinstance(sources, FilePath) else sources
-        sources = ' '.join('"%s"' % w for w in sources)
-        cmd = self._cmd_template % (out, sources)
+        sources_str = ' '.join('"%s"' % w for w in sources)
+        cmd = self._cmd_template % (out_str, sources_str)
 
         complete = subprocess.run(cmd,
                                   stdout=subprocess.DEVNULL,
@@ -35,10 +36,10 @@ class CppCompiler:
 class JavaCompiler:
     """Compiles Java code
     """
-    def __init__(self, flags=()):
+    def __init__(self, flags: List[str] = []):
         self._cmd_template = 'javac %s %%s' % ' '.join(flags)
 
-    def __call__(self, sources):
+    def __call__(self, sources: Union[FilePath, List[FilePath]]) -> bool:
         """Compiles a list of Java sources.
 
         Args:
@@ -49,8 +50,8 @@ class JavaCompiler:
             bool: True if compilation succeed, False otherwise.
         """
         sources = [sources] if isinstance(sources, FilePath) else sources
-        sources = ' '.join('"%s"' % w for w in sources)
-        cmd = self._cmd_template % sources
+        sources_str = ' '.join('"%s"' % w for w in sources)
+        cmd = self._cmd_template % sources_str
 
         complete = subprocess.run(cmd,
                                   stdout=subprocess.DEVNULL,
@@ -62,7 +63,9 @@ class JavaCompiler:
 
 class LatexCompiler:
     """Compiles latex source"""
-    def __init__(self, cmd='pdflatex', flags=('--shell-escape', '-interaction=batchmode')):
+    def __init__(self,
+                 cmd: str = 'pdflatex',
+                 flags: List[str] = ['--shell-escape', '-interaction=batchmode']):
         """
         Args:
             cmd (str): command to compile files. default to pdflatex
@@ -71,7 +74,7 @@ class LatexCompiler:
         self._cmd = cmd
         self._flags = flags
 
-    def __call__(self, source):
+    def __call__(self, source: FilePath) -> bool:
         """It compiles a latex source leaving the pdf in the same directory of
         the source.
         Args:
