@@ -3,7 +3,7 @@ from typing import Any, Optional, Tuple
 from pathlib import Path
 
 import ocimatic
-from ocimatic import core, filesystem, ui
+from ocimatic import core, ui
 
 CONTEST_COMMAND = {'problemset': 'build_problemset', 'package': 'package'}
 

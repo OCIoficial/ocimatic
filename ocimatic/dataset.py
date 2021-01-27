@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 from ocimatic.checkers import Checker
@@ -15,24 +16,21 @@ from ocimatic.ui import WorkResult
 from ocimatic.compilers import CppCompiler, JavaCompiler
 from ocimatic.runnable import Runnable
 
+IN = ".in"
+SOL = ".sol"
+
 
 class Dataset:
     """Test data"""
-    def __init__(self,
-                 directory: Path,
-                 sampledata: 'SampleData',
-                 in_ext: str = '.in',
-                 sol_ext: str = '.sol'):
+    def __init__(self, directory: Path, sampledata: List['Test']):
         """
         Args:
             directory (Directory): dataset directory.
             sampledata (Optional[SampleData]): optional sampledata
         """
         self._directory = directory
-        self._in_ext = in_ext
-        self._sol_ext = sol_ext
-        self._subtasks = [Subtask(d, in_ext, sol_ext) for d in directory.iterdir() if d.is_dir()]
-        self._sampledata = sampledata
+        self._subtasks = [Subtask(d) for d in directory.iterdir() if d.is_dir()]
+        self._sampledata = TestGroup('sample', sampledata)
 
     def gen_expected(self, runnable: Runnable, sample: bool = False) -> None:
         for subtask in self._subtasks:
@@ -75,7 +73,7 @@ class Dataset:
                 # ui.show_message("Warning", "no files in dataset", ui.WARNING)
                 return True
 
-            cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir, self._in_ext, self._sol_ext)
+            cmd = f'cd {tmpdir} && zip data.zip *{IN} *{SOL}'
             st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
             shutil.copy2(Path(tmpdir, 'data.zip'), dst_file)
         finally:
@@ -92,14 +90,10 @@ class Dataset:
         self._sampledata.normalize()
 
 
-class Subtask:
-    def __init__(self, directory: Path, in_ext: str = '.in', sol_ext: str = '.sol'):
-        self._tests = []
-        self._in_ext = in_ext
-        self._sol_ext = sol_ext
-        for f in directory.glob('*' + self._in_ext):
-            self._tests.append(Test(f, f.with_suffix(sol_ext)))
-        self._name = directory.name
+class TestGroup:
+    def __init__(self, name: str, tests: List['Test']):
+        self._name = name
+        self._tests = tests
 
     def copy_to(self, directory: Path, random_sort: bool = False) -> int:
         copied = 0
@@ -146,17 +140,10 @@ class Subtask:
         return self._name
 
 
-class SampleData(Subtask):
-    # FIXME: this shouldn't inherit directly from Subtask as the initializer is completely different.
-    # Maybe both should a have a common parent.
-    def __init__(self, statement, in_ext: str = '.in', sol_ext: str = '.sol'):
-        self._in_ext = in_ext
-        self._sol_ext = sol_ext
-        tests = statement.io_samples() if statement else []
-        self._tests = [Test(f.with_suffix(in_ext), f.with_suffix(sol_ext)) for f in tests]
-
-    def __str__(self) -> str:
-        return 'Sample'
+class Subtask(TestGroup):
+    def __init__(self, directory: Path):
+        super().__init__(directory.name,
+                         [Test(f, f.with_suffix(SOL)) for f in directory.glob(f'*{IN}')])
 
 
 class Test:
@@ -178,11 +165,6 @@ class Test:
         if self._expected_path.exists():
             return max(self._in_path.stat().st_mtime, self._expected_path.stat().st_mtime)
         return self._in_path.stat().st_mtime
-
-    # @property
-    # def directory(self) -> Directory:
-    #     """Directory: directory where this test reside"""
-    #     return self._in_path.directory()
 
     @ui.work('Gen')
     def gen_expected(self, runnable: Runnable) -> WorkResult:

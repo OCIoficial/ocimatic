@@ -13,7 +13,7 @@ import ocimatic
 from ocimatic import pjson, ui
 from ocimatic.checkers import Checker, CppChecker, DiffChecker
 from ocimatic.compilers import LatexCompiler
-from ocimatic.dataset import Dataset, DatasetPlan, SampleData
+from ocimatic.dataset import Dataset, DatasetPlan, Test
 from ocimatic.solutions import CppSolution, Solution
 
 
@@ -220,7 +220,7 @@ class Task:
 
         self._statement = Statement(Path(directory, 'statement'), num=num, codename=self.codename)
 
-        self._dataset = Dataset(Path(directory, 'dataset'), SampleData(self._statement))
+        self._dataset = Dataset(Path(directory, 'dataset'), self._statement.io_samples())
 
     @property
     def codename(self) -> str:
@@ -415,7 +415,7 @@ class Statement:
         st = self._compiler(self._source)
         return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
 
-    def io_samples(self) -> List[Path]:
+    def io_samples(self) -> List[Test]:
         """Find sample input data in the satement
         Returns:
             List[FilePath]: list of paths
@@ -425,7 +425,10 @@ class Statement:
             m = re.match(r'[^%]*\\sampleIO(\[[^\]]*\]){0,2}{([^}]+)}', line)
             if m:
                 samples.add(m.group(2))
-        return [Path(self._directory, s) for s in samples]
+        return [
+            Test(Path(self._directory, f"{s}.in"), Path(self._directory, f"{s}.sol"))
+            for s in samples
+        ]
 
     def scores(self) -> List[int]:
         """Finds the scores for the subtasks
