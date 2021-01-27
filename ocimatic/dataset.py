@@ -289,10 +289,10 @@ class DatasetPlan:
                     self.validate_test_input(test_file, validator)
 
     @ui.work('Validating', '{1}')
-    def validate_test_input(self, test_file, validator) -> WorkResult:
+    def validate_test_input(self, test_file: Path, validator: Runnable) -> WorkResult:
         if not test_file.exists():
             return WorkResult(success=False, short_msg='Test file does not exist')
-        (st, _time, msg) = validator.run(test_file, None)
+        (st, _time, msg, _) = validator.run(test_file, None)
         return WorkResult(success=st, short_msg=msg)
 
     def build_validator(self, source: str) -> Tuple[Optional[Runnable], str]:
@@ -301,7 +301,8 @@ class DatasetPlan:
             return (None, 'File does not exists.')
         if fp.suffix == '.cpp':
             binary = fp.with_suffix('.bin')
-            if binary.stat().st_mtime < fp.stat().st_mtime and not self._cpp_compiler(fp, binary):
+            binary_mtime = binary.stat().st_mtime if binary.exists() else float("-inf")
+            if binary_mtime < fp.stat().st_mtime and not self._cpp_compiler(fp, binary):
                 return (None, 'Failed to build validator.')
             return (Runnable(binary), 'OK')
         if fp.suffix in ['.py', '.py3']:
