@@ -1,11 +1,27 @@
 import argparse
-from typing import Any
+from typing import Any, Optional, Tuple
+from pathlib import Path
 
 import ocimatic
-from ocimatic import core, filesystem, server, ui
-from ocimatic.filesystem import Directory, FilePath
+from ocimatic import core, filesystem, ui
 
 CONTEST_COMMAND = {'problemset': 'build_problemset', 'package': 'package'}
+
+
+def change_directory() -> Tuple[Path, Optional[Path]]:
+    """Changes directory to the contest root and returns the absolute path of the
+    last directory before reaching the root, this correspond to the directory
+    of the problem in which ocimatic was called. If the function reach system
+    root the program exists with an error.
+    """
+    last_dir = None
+    curr_dir = Path.cwd()
+    while not Path(curr_dir, '.ocimatic_contest').exists():
+        last_dir = curr_dir
+        curr_dir = curr_dir.parent
+        if curr_dir.samefile(last_dir):
+            ui.fatal_error('ocimatic was not called inside a contest.')
+    return (curr_dir, last_dir)
 
 
 def new_contest(args: argparse.Namespace) -> None:
@@ -16,10 +32,9 @@ def new_contest(args: argparse.Namespace) -> None:
         contest_config['phase'] = args.phase
 
     try:
-        cwd = Directory.getcwd()
-        if cwd.find(name):
+        contest_path = Path(Path.cwd(), name)
+        if contest_path.exists():
             ui.fatal_error("Couldn't create contest. Path already exists")
-        contest_path = FilePath(cwd, name)
         core.Contest.create_layout(contest_path, contest_config)
         ui.show_message('Info', 'Contest [%s] created' % name)
     except Exception as exc:  # pylint: disable=broad-except
@@ -28,15 +43,15 @@ def new_contest(args: argparse.Namespace) -> None:
 
 def contest_mode(args: argparse.Namespace) -> None:
     action = CONTEST_COMMAND[args.command]
-    contest_dir = filesystem.change_directory()[0]
+    contest_dir = change_directory()[0]
     contest = core.Contest(contest_dir)
     getattr(contest, action)()
 
 
 def new_task(args: argparse.Namespace) -> None:
     try:
-        contest_dir = filesystem.change_directory()[0]
-        if contest_dir.find(args.name):
+        contest_dir = change_directory()[0]
+        if Path(contest_dir, args.name).exists():
             ui.fatal_error('Cannot create task in existing directory.')
         core.Contest(contest_dir).new_task(args.name)
         ui.show_message('Info', f'Task [{args.name}] created')
@@ -59,7 +74,7 @@ TASK_COMMAND = {
 
 
 def task_mode(args: argparse.Namespace) -> None:
-    (contest_dir, task_call) = filesystem.change_directory()
+    (contest_dir, last_dir) = change_directory()
 
     contest = core.Contest(contest_dir)
     if args.command == "check":
@@ -67,8 +82,8 @@ def task_mode(args: argparse.Namespace) -> None:
 
     method = TASK_COMMAND[args.command]
 
-    if task_call:
-        task = contest.find_task(task_call.basename)
+    if last_dir:
+        task = contest.find_task(last_dir.name)
         assert task
         tasks = [task]
     else:

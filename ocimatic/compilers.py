@@ -1,7 +1,6 @@
 import subprocess
 from typing import List, Union
-
-from ocimatic.filesystem import FilePath
+from pathlib import Path
 
 
 class CppCompiler:
@@ -10,7 +9,7 @@ class CppCompiler:
     def __init__(self, flags: List[str] = []):
         self._cmd_template = 'g++ -std=c++11 -O2 %s -o %%s %%s' % ' '.join(flags)
 
-    def __call__(self, sources: Union[FilePath, List[FilePath]], out: FilePath) -> bool:
+    def __call__(self, sources: Union[Path, List[Path]], out: Path) -> bool:
         """Compiles a list of C++ sources.
 
         Args:
@@ -21,7 +20,7 @@ class CppCompiler:
             bool: True if compilations succeed, False otherwise.
         """
         out_str = '"%s"' % out
-        sources = [sources] if isinstance(sources, FilePath) else sources
+        sources = [sources] if isinstance(sources, Path) else sources
         sources_str = ' '.join('"%s"' % w for w in sources)
         cmd = self._cmd_template % (out_str, sources_str)
 
@@ -39,7 +38,7 @@ class JavaCompiler:
     def __init__(self, flags: List[str] = []):
         self._cmd_template = 'javac %s %%s' % ' '.join(flags)
 
-    def __call__(self, sources: Union[FilePath, List[FilePath]]) -> bool:
+    def __call__(self, sources: Union[Path, List[Path]]) -> bool:
         """Compiles a list of Java sources.
 
         Args:
@@ -49,7 +48,7 @@ class JavaCompiler:
         Returns:
             bool: True if compilation succeed, False otherwise.
         """
-        sources = [sources] if isinstance(sources, FilePath) else sources
+        sources = [sources] if isinstance(sources, Path) else sources
         sources_str = ' '.join('"%s"' % w for w in sources)
         cmd = self._cmd_template % sources_str
 
@@ -74,14 +73,14 @@ class LatexCompiler:
         self._cmd = cmd
         self._flags = flags
 
-    def __call__(self, source: FilePath) -> bool:
+    def __call__(self, source: Path) -> bool:
         """It compiles a latex source leaving the pdf in the same directory of
         the source.
         Args:
             source (FilePath): path of file to compile
         """
         flags = ' '.join(self._flags)
-        cmd = 'cd "%s" && %s %s "%s"' % (source.directory(), self._cmd, flags, source.name)
+        cmd = 'cd "%s" && %s %s "%s"' % (source.parent, self._cmd, flags, source.name)
         complete = subprocess.run(cmd,
                                   shell=True,
                                   stdin=subprocess.DEVNULL,

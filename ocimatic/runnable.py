@@ -1,10 +1,10 @@
-from typing import NamedTuple, Optional, List
 import contextlib
+import os
 import shutil
 import subprocess
 import time as pytime
-
-from ocimatic.filesystem import FilePath
+from pathlib import Path
+from typing import List, NamedTuple, Optional
 
 SIGNALS = {
     1: 'SIGHUP',
@@ -71,8 +71,8 @@ class Runnable:
         return self._cmd[0]
 
     def run(self,
-            in_path: Optional[FilePath],
-            out_path: Optional[FilePath],
+            in_path: Optional[Path],
+            out_path: Optional[Path],
             args: List[str] = [],
             timeout: Optional[float] = None) -> Result:
         """Run binary redirecting standard input and output.
@@ -95,11 +95,12 @@ class Runnable:
         args = args or []
         assert in_path is None or in_path.exists()
         with contextlib.ExitStack() as stack:
-            if in_path is None:
-                in_path = FilePath('/dev/null')
+            if not in_path:
+                in_path = Path(os.devnull)
             in_file = stack.enter_context(in_path.open('r'))
+
             if not out_path:
-                out_path = FilePath('/dev/null')
+                out_path = Path(os.devnull)
             out_file = stack.enter_context(out_path.open('w'))
 
             start = pytime.monotonic()

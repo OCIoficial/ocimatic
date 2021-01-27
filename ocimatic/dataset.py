@@ -1,3 +1,4 @@
+import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 from ocimatic.checkers import Checker
 import random
@@ -6,19 +7,19 @@ import shlex
 import shutil
 import string
 import subprocess
+from pathlib import Path
 
 import ocimatic
 from ocimatic import ui
 from ocimatic.ui import WorkResult
 from ocimatic.compilers import CppCompiler, JavaCompiler
-from ocimatic.filesystem import Directory, FilePath
 from ocimatic.runnable import Runnable
 
 
 class Dataset:
     """Test data"""
     def __init__(self,
-                 directory: Directory,
+                 directory: Path,
                  sampledata: 'SampleData',
                  in_ext: str = '.in',
                  sol_ext: str = '.sol'):
@@ -30,7 +31,7 @@ class Dataset:
         self._directory = directory
         self._in_ext = in_ext
         self._sol_ext = sol_ext
-        self._subtasks = [Subtask(d, in_ext, sol_ext) for d in directory.lsdir()]
+        self._subtasks = [Subtask(d, in_ext, sol_ext) for d in directory.iterdir() if d.is_dir()]
         self._sampledata = sampledata
 
     def gen_expected(self, runnable: Runnable, sample: bool = False) -> None:
@@ -60,11 +61,11 @@ class Dataset:
         The basename of the corresponding subtask subdirectory is prepended
         to each file.
         """
-        dst_file = FilePath(self._directory, 'data.zip')
-        if dst_file.exists() and dst_file.mtime() >= self.mtime():
+        dst_file = Path(self._directory, 'data.zip')
+        if dst_file.exists() and dst_file.stat().st_mtime >= self.mtime():
             return True
 
-        tmpdir = Directory.tmpdir()
+        tmpdir = Path(tempfile.mkdtemp())
         try:
             copied = 0
             for subtask in self._subtasks:
@@ -76,9 +77,9 @@ class Dataset:
 
             cmd = 'cd %s && zip data.zip *%s *%s' % (tmpdir, self._in_ext, self._sol_ext)
             st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
-            FilePath(tmpdir, 'data.zip').copy(dst_file)
+            shutil.copy2(Path(tmpdir, 'data.zip'), dst_file)
         finally:
-            tmpdir.rmtree()
+            shutil.rmtree(tmpdir)
 
         return st == 0
 
@@ -92,15 +93,15 @@ class Dataset:
 
 
 class Subtask:
-    def __init__(self, directory: Directory, in_ext: str = '.in', sol_ext: str = '.sol'):
+    def __init__(self, directory: Path, in_ext: str = '.in', sol_ext: str = '.sol'):
         self._tests = []
         self._in_ext = in_ext
         self._sol_ext = sol_ext
-        for f in directory.lsfile('*' + self._in_ext):
-            self._tests.append(Test(f, f.chext(sol_ext)))
-        self._name = directory.basename
+        for f in directory.glob('*' + self._in_ext):
+            self._tests.append(Test(f, f.with_suffix(sol_ext)))
+        self._name = directory.name
 
-    def copy_to(self, directory: Directory, random_sort: bool = False) -> int:
+    def copy_to(self, directory: Path, random_sort: bool = False) -> int:
         copied = 0
         for test in self._tests:
             if test.expected_path.exists():
@@ -113,8 +114,8 @@ class Subtask:
                 else:
                     in_name = "%s-%s" % (self._name, test.in_path.name)
                     sol_name = "%s-%s" % (self._name, test.expected_path.name)
-                test.in_path.copy(FilePath(directory, in_name))
-                test.expected_path.copy(FilePath(directory, sol_name))
+                shutil.copy(test.in_path, Path(directory, in_name))
+                shutil.copy(test.expected_path, Path(directory, sol_name))
                 copied += 1
         return copied
 
@@ -152,7 +153,7 @@ class SampleData(Subtask):
         self._in_ext = in_ext
         self._sol_ext = sol_ext
         tests = statement.io_samples() if statement else []
-        self._tests = [Test(f.chext(in_ext), f.chext(sol_ext)) for f in tests]
+        self._tests = [Test(f.with_suffix(in_ext), f.with_suffix(sol_ext)) for f in tests]
 
     def __str__(self) -> str:
         return 'Sample'
@@ -160,7 +161,7 @@ class SampleData(Subtask):
 
 class Test:
     """A single test file. Expected output file may not exist"""
-    def __init__(self, in_path: FilePath, expected_path: FilePath):
+    def __init__(self, in_path: Path, expected_path: Path):
         """
         Args:
             in_path (FilePath)
@@ -175,13 +176,13 @@ class Test:
 
     def mtime(self) -> float:
         if self._expected_path.exists():
-            return max(self._in_path.mtime(), self._expected_path.mtime())
-        return self._in_path.mtime()
+            return max(self._in_path.stat().st_mtime, self._expected_path.stat().st_mtime)
+        return self._in_path.stat().st_mtime
 
-    @property
-    def directory(self) -> Directory:
-        """Directory: directory where this test reside"""
-        return self._in_path.directory()
+    # @property
+    # def directory(self) -> Directory:
+    #     """Directory: directory where this test reside"""
+    #     return self._in_path.directory()
 
     @ui.work('Gen')
     def gen_expected(self, runnable: Runnable) -> WorkResult:
@@ -206,10 +207,10 @@ class Test:
             check  (bool): If true this only report if expected output
                 correspond to binary execution output.
         """
-        out_path = FilePath.tmpfile()
         if not self.expected_path.exists():
-            out_path.remove()
             return WorkResult(success=False, short_msg='No expected output file')
+
+        out_path = Path(tempfile.mkstemp()[1])
 
         (st, time, errmsg, stderr) = runnable.run(self.in_path,
                                                   out_path,
@@ -236,12 +237,12 @@ class Test:
         return WorkResult(success=st, short_msg=msg, long_msg=stderr)
 
     @property
-    def in_path(self) -> FilePath:
+    def in_path(self) -> Path:
         """FilePath: Input file path"""
         return self._in_path
 
     @property
-    def expected_path(self) -> FilePath:
+    def expected_path(self) -> Path:
         """FilePath: Expected output file path."""
         return self._expected_path
 
@@ -268,12 +269,12 @@ class Test:
 class DatasetPlan:
     """Functionality to read and run a plan for generating dataset."""
     def __init__(self,
-                 directory: Directory,
-                 task_directory: Directory,
-                 dataset_directory: Directory,
+                 directory: Path,
+                 task_directory: Path,
+                 dataset_directory: Path,
                  filename: str = 'testplan.txt'):
         self._directory = directory
-        self._testplan_path = FilePath(directory, filename)
+        self._testplan_path = Path(directory, filename)
         if not self._testplan_path.exists():
             ui.fatal_error('No such file plan for creating dataset: "%s"' % self._testplan_path)
         self._task_directory = task_directory
@@ -281,9 +282,9 @@ class DatasetPlan:
         self._cpp_compiler = CppCompiler()
         self._java_compiler = JavaCompiler()
 
-    def test_filepath(self, stn: int, group: int, i: int) -> FilePath:
-        st_dir = FilePath(self._dataset_directory, 'st%d' % stn).get_or_create_dir()
-        return FilePath(st_dir, '%s-%d.in' % (group, i))
+    def test_filepath(self, stn: int, group: int, i: int) -> Path:
+        st_dir = Path(self._dataset_directory, 'st%d' % stn)
+        return Path(st_dir, '%s-%d.in' % (group, i))
 
     def validate_input(self) -> None:
         (_, cmds) = self.parse_file()
@@ -313,17 +314,17 @@ class DatasetPlan:
         return WorkResult(success=st, short_msg=msg)
 
     def build_validator(self, source: str) -> Tuple[Optional[Runnable], str]:
-        fp = FilePath(self._directory, source)
+        fp = Path(self._directory, source)
         if not fp.exists():
             return (None, 'File does not exists.')
-        if fp.ext == '.cpp':
-            binary = fp.chext('.bin')
-            if binary.mtime() < fp.mtime() and not self._cpp_compiler(fp, binary):
+        if fp.suffix == '.cpp':
+            binary = fp.with_suffix('.bin')
+            if binary.stat().st_mtime < fp.stat().st_mtime and not self._cpp_compiler(fp, binary):
                 return (None, 'Failed to build validator.')
             return (Runnable(binary), 'OK')
-        if fp.ext in ['.py', '.py3']:
+        if fp.suffix in ['.py', '.py3']:
             return (Runnable('python3', [str(source)]), 'OK')
-        if fp.ext == '.py2':
+        if fp.suffix == '.py2':
             return (Runnable('python2', [str(source)]), 'OK')
         return (None, 'Not supported source file.')
 
@@ -331,8 +332,9 @@ class DatasetPlan:
         (subtasks, cmds) = self.parse_file()
 
         for stn in range(1, subtasks + 1):
-            dire = FilePath(self._dataset_directory, 'st%d' % stn).get_or_create_dir()
-            dire.clear()
+            dir = Path(self._dataset_directory, 'st%d' % stn)
+            shutil.rmtree(dir, ignore_errors=True)
+            dir.mkdir(parents=True)
 
         if not cmds:
             ui.show_message("Warning", 'no commands were executed for the plan.', ui.WARNING)
@@ -353,7 +355,7 @@ class DatasetPlan:
                     self.echo(test['args'], test_file)
                 else:
                     test['args'].insert(0, '%s-%s-%s' % (stn, group, i))
-                    source = FilePath(self._directory, test['source'])
+                    source = Path(self._directory, test['source'])
                     if cmd == 'cpp':
                         self.run_cpp_generator(source, test['args'], test_file)
                     elif cmd in ['py', 'py2', 'py3']:
@@ -361,35 +363,35 @@ class DatasetPlan:
                     elif cmd == 'java':
                         self.run_java_generator(source, test['args'], test_file)
                     elif cmd == 'run':
-                        bin_path = FilePath(self._directory, test['bin'])
+                        bin_path = Path(self._directory, test['bin'])
                         self.run_bin_generator(bin_path, test['args'], test_file)
                     else:
                         ui.fatal_error('unexpected command when running plan: %s ' % cmd)
 
     @ui.work('Copy', '{1}')
-    def copy(self, src: str, dst: FilePath) -> WorkResult:
-        fp = FilePath(self._task_directory, src)
+    def copy(self, src: str, dst: Path) -> WorkResult:
+        fp = Path(self._task_directory, src)
         if not fp.exists():
             return WorkResult(success=False, short_msg='No such file')
         try:
-            fp.copy(dst)
+            shutil.copy(fp, dst)
             (st, msg) = (True, 'OK')
             return WorkResult(success=st, short_msg=msg)
         except Exception:  # pylint: disable=broad-except
             return WorkResult(success=False, short_msg='Error when copying file')
 
     @ui.work('Echo', '{1}')
-    def echo(self, args: List[str], dst: FilePath) -> WorkResult:
+    def echo(self, args: List[str], dst: Path) -> WorkResult:
         with dst.open('w') as test_file:
             test_file.write(' '.join(args) + '\n')
             return WorkResult(success=True, short_msg='Ok')
 
     @ui.work('Gen', '{1}')
-    def run_cpp_generator(self, source: FilePath, args: List[str], dst: FilePath) -> WorkResult:
+    def run_cpp_generator(self, source: Path, args: List[str], dst: Path) -> WorkResult:
         if not source.exists():
             return WorkResult(success=False, short_msg='No such file')
-        binary = source.chext('.bin')
-        if binary.mtime() < source.mtime():
+        binary = source.with_suffix('.bin')
+        if binary.stat().st_mtime < source.stat().st_mtime:
             st = self._cpp_compiler(source, binary)
             if not st:
                 return WorkResult(success=st, short_msg='Failed to build generator')
@@ -398,8 +400,7 @@ class DatasetPlan:
         return WorkResult(success=st, short_msg=msg)
 
     @ui.work('Gen', '{1}')
-    def run_py_generator(self, source: FilePath, args: List[str], dst: FilePath,
-                         cmd: FilePath) -> WorkResult:
+    def run_py_generator(self, source: Path, args: List[str], dst: Path, cmd: Path) -> WorkResult:
         if not source.exists():
             return WorkResult(success=False, short_msg='No such file')
         python = 'python2' if cmd == 'py2' else 'python3'
@@ -407,23 +408,23 @@ class DatasetPlan:
         return WorkResult(st, msg, stderr)
 
     @ui.work('Gen', '{1}')
-    def run_java_generator(self, source: FilePath, args: List[str], dst: FilePath) -> WorkResult:
+    def run_java_generator(self, source: Path, args: List[str], dst: Path) -> WorkResult:
         if not source.exists():
             return WorkResult(success=False, short_msg='No such file')
-        bytecode = source.chext('.class')
-        if bytecode.mtime() < source.mtime():
+        bytecode = source.with_suffix('.class')
+        if bytecode.stat().st_mtime < source.stat().st_mtime:
             st = self._java_compiler(source)
             if not st:
                 return WorkResult(success=st, short_msg='Failed to build generator')
 
-        classname = bytecode.rootname()
-        classpath = str(bytecode.directory().path())
+        classname = bytecode.stem
+        classpath = str(bytecode.parent)
         (st, _time, msg, stderr) = Runnable('java',
                                             ['-cp', classpath, classname]).run(None, dst, args)
         return WorkResult(success=st, short_msg=msg, long_msg=stderr)
 
     @ui.work('Gen', '{1}')
-    def run_bin_generator(self, bin_path: FilePath, args: List[str], dst: FilePath) -> WorkResult:
+    def run_bin_generator(self, bin_path: Path, args: List[str], dst: Path) -> WorkResult:
         if not bin_path.exists():
             return WorkResult(success=False, short_msg='No such file')
         if not Runnable.is_callable(bin_path):
@@ -479,10 +480,10 @@ class DatasetPlan:
                     elif cmd == 'echo':
                         cmds[st]['groups'][group].append({'cmd': 'echo', 'args': args})
                     else:
-                        f = FilePath(self._directory, cmd)
-                        if f.ext in ['.cpp', '.java', '.py', '.py2', '.py3']:
+                        f = Path(self._directory, cmd)
+                        if f.suffix in ['.cpp', '.java', '.py', '.py2', '.py3']:
                             cmds[st]['groups'][group].append({
-                                'cmd': f.ext[1:],
+                                'cmd': f.suffix[1:],
                                 'source': cmd,
                                 'args': args
                             })

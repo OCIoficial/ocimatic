@@ -1,22 +1,22 @@
 from abc import ABC, abstractmethod
-from ocimatic.filesystem import Directory, FilePath
+from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
+
 from ocimatic import ui
-from ocimatic.compilers import CppCompiler, JavaCompiler
-from ocimatic.runnable import Runnable
-from ocimatic.dataset import Dataset
 from ocimatic.checkers import Checker
+from ocimatic.compilers import CppCompiler, JavaCompiler
+from ocimatic.dataset import Dataset
+from ocimatic.runnable import Runnable
 
 
 class Solution(ABC):
     """Abstract class to represent a solution
     """
-    def __init__(self, source: FilePath):
+    def __init__(self, source: Path):
         self._source = source
 
     @staticmethod
-    def get_solutions(codename: str, solutions_dir: Directory,
-                      managers_dir: Directory) -> List['Solution']:
+    def get_solutions(codename: str, solutions_dir: Path, managers_dir: Path) -> List['Solution']:
         """Search for solutions in a directory.
 
         Args:
@@ -29,16 +29,15 @@ class Solution(ABC):
             List[Solution]: List of solutions.
         """
         return [
-            solution for file_path in solutions_dir.lsfile()
+            solution for file_path in solutions_dir.iterdir()
             for solution in [Solution.get_solution(codename, file_path, managers_dir)] if solution
         ]
 
     @staticmethod
-    def get_solution(codename: str, file_path: FilePath,
-                     managers_dir: Directory) -> Optional['Solution']:
-        if file_path.ext == CppSolution.ext:
+    def get_solution(codename: str, file_path: Path, managers_dir: Path) -> Optional['Solution']:
+        if file_path.suffix == CppSolution.ext:
             return CppSolution(file_path, managers_dir)
-        if file_path.ext == JavaSolution.ext:
+        if file_path.suffix == JavaSolution.ext:
             return JavaSolution(codename, file_path, managers_dir)
         return None
 
@@ -91,7 +90,7 @@ class Solution(ABC):
         Returns:
             Optional[Runnable]: Runnable file of this solution or None if it fails
           to build"""
-        if self.build_time() < self._source.mtime():
+        if self.build_time() < self._source.stat().st_mtime:
             with ui.capture_io(None), ui.capture_works() as works:
                 self.build()
                 (st, msg) = works[0]
@@ -128,25 +127,25 @@ class CppSolution(Solution):
     """
     ext = '.cpp'
 
-    def __init__(self, source: FilePath, managers: Directory):
+    def __init__(self, source: Path, managers: Path):
         """
         Args:
             source (FilePath): Source code.
             managers (Directory): Directory where managers reside.
         """
-        assert source.ext == self.ext
+        assert source.suffix == self.ext
         super().__init__(source)
 
         self._source = source
         self._compiler = CppCompiler(['-I"%s"' % managers])
-        self._grader = managers.find_file('grader.cpp')
-        self._bin_path = self._source.chext('.bin')
+        self._grader = next(managers.glob('grader.cpp'), None)
+        self._bin_path = self._source.with_suffix('.bin')
 
     def get_runnable(self) -> Runnable:
         return Runnable(self._bin_path)
 
     def build_time(self) -> float:
-        return self._bin_path.mtime()
+        return self._bin_path.stat().st_mtime
 
     def _build(self) -> bool:
         """Compile solution with a CppCompiler. Solutions is compiled with a
@@ -164,7 +163,7 @@ class JavaSolution(Solution):
     """
     ext = '.java'
 
-    def __init__(self, codename: str, source: FilePath, managers: Directory):
+    def __init__(self, codename: str, source: Path, managers: Path):
         """
         Args:
             source (FilePath): Source code.
@@ -173,19 +172,19 @@ class JavaSolution(Solution):
         # TODO: implement managers for java
         del managers
         super().__init__(source)
-        assert source.ext == self.ext
+        assert source.suffix == self.ext
         self._source = source
         self._compiler = JavaCompiler()
         # self._grader = managers.find_file('grader.cpp')
         self._classname = codename
-        self._classpath = self._source.directory().path()
-        self._bytecode = self._source.chext('.class')
+        self._classpath = self._source.parent
+        self._bytecode = self._source.with_suffix('.class')
 
     def get_runnable(self) -> Runnable:
         return Runnable('java', ['-cp', str(self._classpath), '-Xss1g', str(self._classname)])
 
     def build_time(self) -> float:
-        return self._bytecode.mtime()
+        return self._bytecode.stat().st_mtime
 
     def _build(self) -> bool:
         """Compile solution with the JavaCompiler.
