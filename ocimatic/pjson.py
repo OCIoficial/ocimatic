@@ -96,6 +96,9 @@ class PJSONArray(PJSONBase):
         arr.append(val)
         self._set_self_path(arr)
 
+    def __len__(self):
+        return len(self._get_self_path())
+
     def __iter__(self):
         arr = self._get_self_path()
         for val in arr:

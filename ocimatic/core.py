@@ -43,15 +43,11 @@ class Contest:
         self._compiler = LatexCompiler()
 
     def _init_tasks(self) -> None:
-        keep = []
-        dirs = []
-        for task in self._config.get('tasks', []):
-            path = next(self._directory.glob(task), None)
-            if path and path.is_dir():
-                keep.append(task)
-                dirs.append(path)
-        self._config['tasks'] = keep
-        self._tasks = [Task(d, i) for (i, d) in enumerate(dirs)]
+        n = len(self._config['tasks'])
+        order = {t: i for i, t in enumerate(self._config['tasks'])}
+        dirs = sorted((order.get(dir.name, n), dir) for dir in self._directory.iterdir()
+                      if Path(dir, '.ocimatic_task').exists())
+        self._tasks = [Task(d, i) for (i, (_, d)) in enumerate(dirs)]
 
     @staticmethod
     def create_layout(contest_path: Path, config: ContestConfig) -> None:
