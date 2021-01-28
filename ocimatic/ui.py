@@ -1,7 +1,7 @@
 import re
 import sys
 from contextlib import contextmanager
-from typing import Callable, Iterable, NamedTuple, Optional, TypeVar, cast
+from typing import Callable, Iterable, Iterator, List, NamedTuple, Optional, TypeVar, cast
 
 from colorama import Fore, Style
 
@@ -181,11 +181,11 @@ def show_message(label, msg, color=INFO):
     write(' %s \n' % colorize(label + ': ' + str(msg), color))
 
 
-CAPTURE_WORKS = []
+CAPTURE_WORKS: List[List[WorkResult]] = []
 
 
 @contextmanager
-def capture_works():
+def capture_works() -> Iterator[List[WorkResult]]:
     CAPTURE_WORKS.append([])
     yield CAPTURE_WORKS[-1]
     CAPTURE_WORKS.pop()

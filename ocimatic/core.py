@@ -282,6 +282,7 @@ class Task:
         """Statement"""
         return self._statement
 
+    @ui.task('Score Params')
     def score(self) -> None:
         counts = self._dataset.count()
         scores = self._statement.scores()
@@ -301,7 +302,7 @@ class Task:
         self._dataset.normalize()
 
     @ui.task('Running solutions')
-    def run_solutions(self, pattern=None) -> None:
+    def run_solutions(self, solution: Optional[str] = None) -> None:
         """Run all solutions reporting outcome and running time.
 
         Args:
@@ -310,7 +311,7 @@ class Task:
                 contain pattern as substring.
         """
         for sol in self.solutions(True):
-            if not pattern or fnmatch.fnmatch(sol.name, pattern):
+            if not solution or fnmatch.fnmatch(sol.name, solution):
                 sol.run(self._dataset, self._checker)
 
     @ui.task('Checking dataset')

@@ -85,7 +85,7 @@ class Solution(ABC):
         msg = 'OK' if st else 'FAILED'
         return ui.WorkResult(success=st, short_msg=msg)
 
-    def get_and_build(self) -> Tuple[Optional[Runnable], str]:
+    def get_and_build(self) -> Tuple[Optional[Runnable], Optional[str]]:
         """
         Returns:
             Optional[Runnable]: Runnable file of this solution or None if it fails
@@ -93,9 +93,9 @@ class Solution(ABC):
         if self.build_time() < self._source.stat().st_mtime:
             with ui.capture_io(None), ui.capture_works() as works:
                 self.build()
-                (st, msg) = works[0]
-            if not st:
-                return (None, msg)
+                result = works[0]
+            if not result.success:
+                return (None, result.short_msg)
         return (self.get_runnable(), 'OK')
 
     @abstractmethod

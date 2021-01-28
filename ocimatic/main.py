@@ -158,7 +158,7 @@ def main() -> None:
         help=
         "Run solutions against all test data and displays the output of the checker and running time."
     )
-    run.add_argument("pattern", help="A glob pattern specifying which solution to run")
+    run.add_argument("solution", help="A glob pattern specifying which solution to run")
 
     compress = actions.add_parser("compress", help="Generate zip file with all test data.")
     compress.add_argument(
