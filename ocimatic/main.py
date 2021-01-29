@@ -8,22 +8,6 @@ from ocimatic import core, ui
 CONTEST_COMMAND = {'problemset': 'build_problemset', 'package': 'package'}
 
 
-def change_directory() -> Tuple[Path, Optional[Path]]:
-    """Changes directory to the contest root and returns the absolute path of the
-    last directory before reaching the root, this correspond to the directory
-    of the problem in which ocimatic was called. If the function reach system
-    root the program exists with an error.
-    """
-    last_dir = None
-    curr_dir = Path.cwd()
-    while not Path(curr_dir, '.ocimatic_contest').exists():
-        last_dir = curr_dir
-        curr_dir = curr_dir.parent
-        if curr_dir.samefile(last_dir):
-            ui.fatal_error('ocimatic was not called inside a contest.')
-    return (curr_dir, last_dir)
-
-
 def new_contest(args: argparse.Namespace) -> None:
     name = args.path
 
@@ -43,14 +27,14 @@ def new_contest(args: argparse.Namespace) -> None:
 
 def contest_mode(args: argparse.Namespace) -> None:
     action = CONTEST_COMMAND[args.command]
-    contest_dir = change_directory()[0]
+    contest_dir = core.change_directory()[0]
     contest = core.Contest(contest_dir)
     getattr(contest, action)()
 
 
 def new_task(args: argparse.Namespace) -> None:
     try:
-        contest_dir = change_directory()[0]
+        contest_dir = core.change_directory()[0]
         if Path(contest_dir, args.name).exists():
             ui.fatal_error('Cannot create task in existing directory.')
         core.Contest(contest_dir).new_task(args.name)
@@ -74,7 +58,7 @@ TASK_COMMAND = {
 
 
 def task_mode(args: argparse.Namespace) -> None:
-    (contest_dir, last_dir) = change_directory()
+    (contest_dir, last_dir) = core.change_directory()
 
     contest = core.Contest(contest_dir)
     if args.command == "check":

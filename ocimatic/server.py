@@ -1,18 +1,19 @@
 from io import StringIO
 
+from pathlib import Path
 from ansi2html import Ansi2HTMLConverter
 from flask import Flask, flash, redirect, render_template, request
 from werkzeug.utils import secure_filename
 
 import ocimatic
-from ocimatic import core, filesystem, ui
+from ocimatic import core, ui
 
 
 def ansi2html(ansi):
     return Ansi2HTMLConverter().convert(ansi)
 
 
-UPLOAD_FOLDER = '/tmp/ocimatic/server/'
+UPLOAD_FOLDER = Path('/tmp', 'ocimatic', 'server')
 
 contest = None
 app = Flask(__name__)
@@ -20,11 +21,15 @@ app.secret_key = 'M\xf2\xba\xc0\xe3\xe55\xa0"\xff\x96\xba\xb8Jn\xc6#S\xa0t\xda\x
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
+def upload_folder():
+    return UPLOAD_FOLDER.mkdir(exist_ok=True, parents=True)
+
+
 def save_file(uploaded_file):
-    dst_dir = filesystem.Directory(UPLOAD_FOLDER, create=True)
+    dst_dir = upload_folder()
     filename = secure_filename(uploaded_file.filename)
-    filepath = filesystem.FilePath(dst_dir, filename)
-    uploaded_file.save(str(filesystem.FilePath(dst_dir, filename)))
+    filepath = Path(dst_dir, filename)
+    uploaded_file.save(str(Path(dst_dir, filename)))
     return filepath
 
 
@@ -32,8 +37,8 @@ def upload_solution():
     solution_text = request.form.get('solutionText')
     if solution_text:
         ext = request.form.get('lang')
-        dst_dir = filesystem.Directory(UPLOAD_FOLDER, create=True)
-        filepath = filesystem.FilePath(dst_dir, f'solution.{ext}')
+        dst_dir = upload_folder()
+        filepath = Path(dst_dir, f'solution.{ext}')
         with filepath.open('w') as f:
             f.write(solution_text)
         return filepath
@@ -72,7 +77,7 @@ def submit():
 
 def run(port=9999):
     global contest  # pylint: disable=global-statement
-    contest_dir = filesystem.change_directory()[0]
+    contest_dir = core.change_directory()[0]
     contest = core.Contest(contest_dir)
     ocimatic.config['verbosity'] = 1
     app.run(port=port, debug=True)

@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import fnmatch
 import tempfile
-from typing import Iterable, List, Optional, TypedDict
+from typing import Iterable, List, Optional, TypedDict, Tuple
 
 import ocimatic
 from ocimatic import pjson, ui
@@ -19,6 +19,22 @@ from ocimatic.solutions import CppSolution, Solution
 
 class ContestConfig(TypedDict, total=False):
     phase: str
+
+
+def change_directory() -> Tuple[Path, Optional[Path]]:
+    """Changes directory to the contest root and returns the absolute path of the
+    last directory before reaching the root, this correspond to the directory
+    of the problem in which ocimatic was called. If the function reach system
+    root the program exists with an error.
+    """
+    last_dir = None
+    curr_dir = Path.cwd()
+    while not Path(curr_dir, '.ocimatic_contest').exists():
+        last_dir = curr_dir
+        curr_dir = curr_dir.parent
+        if curr_dir.samefile(last_dir):
+            ui.fatal_error('ocimatic was not called inside a contest.')
+    return (curr_dir, last_dir)
 
 
 class Contest:
