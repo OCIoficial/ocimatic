@@ -2,7 +2,6 @@ import fnmatch
 import os
 from typing import List
 
-
 from setuptools import setup
 
 from ocimatic import __version__
