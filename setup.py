@@ -2,9 +2,12 @@ import fnmatch
 import os
 from typing import List
 
+
 from setuptools import setup
 
 from ocimatic import __version__
+
+pkg_dir = os.path.dirname(os.path.realpath(__file__))
 
 
 def recursive_glob(treeroot: str, pattern: str) -> List[str]:
@@ -21,6 +24,13 @@ def get_resources(package: str) -> List[str]:
     resources = recursive_glob('resources', '*') + recursive_glob('templates', '*')
     os.chdir(curr_path)
     return resources
+
+
+def get_requires(filepath: str) -> List[str]:
+    if os.path.isfile(filepath):
+        with open(filepath) as f:
+            return f.read().splitlines()
+    return []
 
 
 setup(name='ocimatic',
@@ -41,5 +51,5 @@ setup(name='ocimatic',
           'Programming Language :: Python',
           'Programming Language :: Python :: 3',
       ],
-      install_requires=["ansi2html>=1.4.2", "colorama>=0.3.9", "flask>=1.0.2"],
-      extras_require={'dev': ['yapf', 'mypy']})
+      install_requires=get_requires(os.path.join(pkg_dir, "requirements.txt")),
+      extras_require={'dev': get_requires(os.path.join(pkg_dir, "requirements-dev.txt"))})
