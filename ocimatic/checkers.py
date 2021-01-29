@@ -1,7 +1,7 @@
-from abc import ABC, abstractmethod
-from pathlib import Path
 import shutil
 import subprocess
+from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import NamedTuple
 
 from ocimatic.compilers import CppCompiler

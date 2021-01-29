@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import time as pytime
 from pathlib import Path
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, Union
 
 SIGNALS = {
     1: 'SIGHUP',
@@ -53,10 +53,10 @@ class Runnable:
     files.
     """
     @staticmethod
-    def is_callable(file_path):
-        return shutil.which(str(file_path)) is not None
+    def is_callable(file_path: Union[Path, str]) -> bool:
+        return shutil.which(file_path) is not None
 
-    def __init__(self, command, args=None):
+    def __init__(self, command: Union[Path, str], args: List[str] = None):
         """
         Args:
             bin_path (FilePath|string): Command to execute.
@@ -67,14 +67,14 @@ class Runnable:
         assert shutil.which(command)
         self._cmd = [command] + args
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._cmd[0]
 
     def run(self,
             in_path: Optional[Path],
             out_path: Optional[Path],
             args: List[str] = [],
-            timeout: Optional[float] = None) -> Result:
+            timeout: float = None) -> Result:
         """Run binary redirecting standard input and output.
 
         Args:

@@ -1,6 +1,6 @@
 import subprocess
-from typing import List, Union
 from pathlib import Path
+from typing import List, Union
 
 
 class CppCompiler:

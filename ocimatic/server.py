@@ -1,16 +1,18 @@
 from io import StringIO
-
 from pathlib import Path
+from typing import Optional, Text, cast
+
 from ansi2html import Ansi2HTMLConverter
 from flask import Flask, flash, redirect, render_template, request
+from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 import ocimatic
 from ocimatic import core, ui
 
 
-def ansi2html(ansi):
-    return Ansi2HTMLConverter().convert(ansi)
+def ansi2html(ansi: str) -> str:
+    return cast(str, Ansi2HTMLConverter().convert(ansi))
 
 
 UPLOAD_FOLDER = Path('/tmp', 'ocimatic', 'server')
@@ -21,19 +23,20 @@ app.secret_key = 'M\xf2\xba\xc0\xe3\xe55\xa0"\xff\x96\xba\xb8Jn\xc6#S\xa0t\xda\x
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
-def upload_folder():
-    return UPLOAD_FOLDER.mkdir(exist_ok=True, parents=True)
+def upload_folder() -> Path:
+    UPLOAD_FOLDER.mkdir(exist_ok=True, parents=True)
+    return UPLOAD_FOLDER
 
 
-def save_file(uploaded_file):
+def save_file(uploaded_file: FileStorage) -> Path:
     dst_dir = upload_folder()
-    filename = secure_filename(uploaded_file.filename)
+    filename = secure_filename(uploaded_file.filename or "file")
     filepath = Path(dst_dir, filename)
     uploaded_file.save(str(Path(dst_dir, filename)))
     return filepath
 
 
-def upload_solution():
+def upload_solution() -> Optional[Path]:
     solution_text = request.form.get('solutionText')
     if solution_text:
         ext = request.form.get('lang')
@@ -43,14 +46,15 @@ def upload_solution():
             f.write(solution_text)
         return filepath
 
-    uploaded_file = request.files.get('solutionFile')
+    uploaded_file = cast(FileStorage, request.files.get('solutionFile'))
     if not uploaded_file or uploaded_file.filename == '':
-        return False
+        return None
     return save_file(uploaded_file)
 
 
 @app.route('/', methods=['POST', 'GET'])
-def server():
+def server() -> Text:
+    assert contest
     result = ''
     if request.method == 'POST':
         filepath = upload_solution()
@@ -71,11 +75,11 @@ def server():
 
 
 @app.route('/submit', methods=['POST', 'GET'])
-def submit():
+def submit() -> Text:
     return render_template('submit.html')
 
 
-def run(port=9999):
+def run(port: int = 9999) -> None:
     global contest  # pylint: disable=global-statement
     contest_dir = core.change_directory()[0]
     contest = core.Contest(contest_dir)

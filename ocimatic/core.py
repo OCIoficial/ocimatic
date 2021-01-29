@@ -1,13 +1,13 @@
 # coding=UTF-8
+import fnmatch
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
-import fnmatch
 import tempfile
-from typing import Iterable, List, Optional, TypedDict, Tuple
+from pathlib import Path
+from typing import Iterable, List, Optional, Tuple, TypedDict
 
 import ocimatic
 from ocimatic import pjson, ui
@@ -155,7 +155,7 @@ class Contest:
         return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
 
     @ui.work('MERGE', '{1}')
-    def merge_pdfs(self, filename) -> ui.WorkResult:
+    def merge_pdfs(self, filename: str) -> ui.WorkResult:
         """Merges statements and title page in a single file """
         if not shutil.which('gs'):
             return ui.WorkResult(success=False, short_msg='Cannot find gs')
@@ -270,7 +270,7 @@ class Task:
         testplan.validate_input()
 
     @ui.work('ZIP')
-    def compress_dataset(self, random_sort=False) -> ui.WorkResult:
+    def compress_dataset(self, random_sort: bool = False) -> ui.WorkResult:
         """Compress dataset in a single file data.zip"""
         st = self._dataset.compress(random_sort=random_sort)
         return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
@@ -310,8 +310,8 @@ class Task:
             return
 
         if len(counts) == len(scores) == 1:
-            ui.show_message('Sum', scores[0] / counts[0])
-        ui.show_message('GroupMin', [[m, t] for (m, t) in zip(scores, counts)])
+            ui.show_message('Sum', str(scores[0] / counts[0]))
+        ui.show_message('GroupMin', str([[m, t] for (m, t) in zip(scores, counts)]))
 
     @ui.task('Normalizing')
     def normalize(self) -> None:
@@ -338,14 +338,14 @@ class Task:
             sol.run(self._dataset, self._checker, check=True, sample=True)
 
     @ui.task('Building solutions')
-    def build_solutions(self, pattern=None) -> None:
-        """Forces a rebuilding of all solutions, both partial and corrects."""
+    def build_solutions(self, pattern: str = None) -> None:
+        """Forcesa rebuilding of all solutions, both partial and corrects."""
         for sol in self.solutions(partial=True):
             if pattern is None or fnmatch.fnmatch(sol.name, pattern):
                 sol.build()
 
     @ui.task('Generating expected output')
-    def gen_expected(self, sample: bool = False, pattern: str = None):
+    def gen_expected(self, sample: bool = False, pattern: str = None) -> None:
         """Generate expected outputs files for dataset by running one of the
         correct solutions.
         """
@@ -369,7 +369,7 @@ class Task:
             generator = self._correct[0]
         generator.gen_expected(self._dataset, sample=sample)
 
-    def build_statement(self, blank_page=False) -> ui.WorkResult:
+    def build_statement(self, blank_page: bool = False) -> ui.WorkResult:
         """Generate pdf for the statement"""
         return self._statement.build(blank_page=blank_page)
 

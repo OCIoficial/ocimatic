@@ -1,21 +1,20 @@
-from abc import ABC, abstractmethod
 import os
-import tempfile
-from typing import Any, Dict, List, Optional, Tuple
-from ocimatic.checkers import Checker
 import random
 import re
 import shlex
 import shutil
 import string
 import subprocess
+import tempfile
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 import ocimatic
 from ocimatic import ui
-from ocimatic.ui import WorkResult
+from ocimatic.checkers import Checker
 from ocimatic.compilers import CppCompiler, JavaCompiler
 from ocimatic.runnable import Runnable
+from ocimatic.ui import WorkResult
 
 IN = ".in"
 SOL = ".sol"
@@ -133,11 +132,11 @@ class TestGroup:
             test.run(runnable, checker, check=check)
 
     @ui.workgroup()
-    def gen_expected(self, runnable) -> None:
+    def gen_expected(self, runnable: Runnable) -> None:
         for test in self._tests:
             test.gen_expected(runnable)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self._name
 
 
@@ -388,7 +387,7 @@ class DatasetPlan:
         return WorkResult(success=st, short_msg=msg)
 
     @ui.work('Gen', '{1}')
-    def run_py_generator(self, source: Path, args: List[str], dst: Path, cmd: Path) -> WorkResult:
+    def run_py_generator(self, source: Path, args: List[str], dst: Path, cmd: str) -> WorkResult:
         if not source.exists():
             return WorkResult(success=False, short_msg='No such file')
         python = 'python2' if cmd == 'py2' else 'python3'

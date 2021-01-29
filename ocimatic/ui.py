@@ -1,7 +1,8 @@
 import re
 import sys
 from contextlib import contextmanager
-from typing import Callable, Iterable, Iterator, List, NamedTuple, Optional, TypeVar, cast
+from typing import (Any, Callable, Iterable, Iterator, List, NamedTuple, Optional, TextIO, TypeVar,
+                    Union, cast)
 
 from colorama import Fore, Style
 
@@ -14,32 +15,27 @@ GREEN = Fore.GREEN
 YELLOW = Fore.YELLOW
 BLUE = Fore.BLUE
 MAGENTA = Fore.MAGENTA
-
 INFO = BOLD
 OK = BOLD + GREEN
+
 WARNING = BOLD + YELLOW
 ERROR = BOLD + RED
 
 
-def colorize(text, color):
-    u"Add ANSI coloring to `text`."
-    return color + text + RESET
+def colorize(text: str, color: str) -> str:
+    return cast(str, color + text + RESET)
 
 
-def bold(text):
+def bold(text: str) -> str:
     return colorize(text, BOLD)
 
 
-# def underline(text):
-#     return colorize(text, UNDERLINE)
-
-
-def decolorize(text):
-    u"Strip ANSI coloring from `text`."
+def decolorize(text: str) -> str:
     return re.sub(r'\033\[[0-9]+m', '', text)
 
 
-IO_STREAMS = [sys.stdout]
+IO = Union[TextIO]
+IO_STREAMS: List[Optional[IO]] = [sys.stdout]
 
 
 class WorkResult(NamedTuple):
@@ -49,27 +45,29 @@ class WorkResult(NamedTuple):
 
 
 @contextmanager
-def capture_io(stream):
+def capture_io(stream: Optional[IO]) -> Iterator[None]:
     IO_STREAMS.append(stream)
-    yield IO_STREAMS[-1]
+    yield
     IO_STREAMS.pop()
 
 
-def write(text):
-    if IO_STREAMS[-1]:
-        IO_STREAMS[-1].write(text)
+def write(text: str) -> None:
+    stream = IO_STREAMS[-1]
+    if stream:
+        stream.write(text)
 
 
-def flush():
-    if IO_STREAMS[-1]:
-        IO_STREAMS[-1].flush()
+def flush() -> None:
+    stream = IO_STREAMS[-1]
+    if stream:
+        stream.flush()
 
 
-def writeln(text=''):
+def writeln(text: str = '') -> None:
     write(text + '\n')
 
 
-def task_header(name, msg):
+def task_header(name: str, msg: str) -> None:
     """Print header for task"""
     write('\n\n')
     write(colorize('[%s] %s' % (name, msg), BOLD + YELLOW))
@@ -77,7 +75,7 @@ def task_header(name, msg):
     flush()
 
 
-def workgroup_header(msg, length=35):
+def workgroup_header(msg: str, length: int = 35) -> None:
     """Header for a generic group of works"""
     writeln()
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
@@ -89,7 +87,7 @@ def workgroup_header(msg, length=35):
     flush()
 
 
-def contest_group_header(msg, length=35):
+def contest_group_header(msg: str, length: int = 35) -> None:
     """Header for a group of works involving a contest"""
     write('\n\n')
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
@@ -98,12 +96,12 @@ def contest_group_header(msg, length=35):
     flush()
 
 
-SolutionGroup = TypeVar("SolutionGroup", bound=Callable[..., Iterable[WorkResult]])
+F1 = TypeVar("F1", bound=Callable[..., Iterable[WorkResult]])
 
 
-def solution_group(formatter: str = "{}") -> Callable[[SolutionGroup], Callable[..., None]]:
-    def decorator(func: SolutionGroup) -> Callable[..., None]:
-        def wrapper(*args, **kwargs):
+def solution_group(formatter: str = "{}") -> Callable[[F1], Callable[..., None]]:
+    def decorator(func: F1) -> Callable[..., None]:
+        def wrapper(*args: Any, **kwargs: Any) -> None:
             solution_group_header(formatter.format(*args, **kwargs))
             for result in func(*args, **kwargs):
                 end_work(result)
@@ -114,7 +112,7 @@ def solution_group(formatter: str = "{}") -> Callable[[SolutionGroup], Callable[
     return decorator
 
 
-def solution_group_header(msg, length=35):
+def solution_group_header(msg: str, length: int = 35) -> None:
     """Header for a group of works involving a solution"""
     writeln()
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
@@ -122,17 +120,17 @@ def solution_group_header(msg, length=35):
     flush()
 
 
-def solution_group_footer():
+def solution_group_footer() -> None:
     writeln()
     flush()
 
 
-Work = TypeVar('Work', bound=Callable[..., WorkResult])
+F2 = TypeVar('F2', bound=Callable[..., WorkResult])
 
 
-def work(action: str, formatter: str = "{}") -> Callable[[Work], Work]:
-    def decorator(func: Work) -> Work:
-        def wrapper(*args, **kwargs):
+def work(action: str, formatter: str = "{}") -> Callable[[F2], F2]:
+    def decorator(func: F2) -> F2:
+        def wrapper(*args: Any, **kwargs: Any) -> WorkResult:
             if not CAPTURE_WORKS:
                 start_work(action, formatter.format(*args, **kwargs))
             result = func(*args, **kwargs)
@@ -141,12 +139,12 @@ def work(action: str, formatter: str = "{}") -> Callable[[Work], Work]:
             end_work(result)
             return result
 
-        return cast(Work, wrapper)
+        return cast(F2, wrapper)
 
     return decorator
 
 
-def start_work(action, msg, length=45):
+def start_work(action: str, msg: str, length: int = 45) -> None:
     if ocimatic.config['verbosity'] < 0:
         return
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
@@ -171,13 +169,13 @@ def end_work(result: WorkResult) -> None:
     flush()
 
 
-def fatal_error(message):
+def fatal_error(message: str) -> None:
     writeln(colorize('ocimatic: ' + message, INFO + RED))
     writeln()
     sys.exit(1)
 
 
-def show_message(label, msg, color=INFO):
+def show_message(label: str, msg: str, color: str = INFO) -> None:
     write(' %s \n' % colorize(label + ': ' + str(msg), color))
 
 
@@ -191,34 +189,37 @@ def capture_works() -> Iterator[List[WorkResult]]:
     CAPTURE_WORKS.pop()
 
 
-def contest_group(formatter="{}"):
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def contest_group(formatter: str = "{}") -> Callable[[F], F]:
+    def decorator(func: F) -> F:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             contest_group_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
-def workgroup(formatter="{}"):
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+def workgroup(formatter: str = "{}") -> Callable[[F], F]:
+    def decorator(func: F) -> F:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             workgroup_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
-def task(action):
-    def decorator(func):
-        def wrapper(self, *args, **kwargs):
+def task(action: str) -> Callable[[F], F]:
+    def decorator(func: F) -> F:
+        def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
             task_header(str(self), action)
             return func(self, *args, **kwargs)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
