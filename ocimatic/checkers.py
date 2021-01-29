@@ -1,32 +1,32 @@
 import shutil
 import subprocess
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import NamedTuple
 
 from ocimatic.compilers import CppCompiler
-from ocimatic.filesystem import FilePath
 from ocimatic.runnable import SIGNALS
 
 
-class Checker:
+class CheckerResult(NamedTuple):
+    success: bool
+    outcome: float
+    msg: str
+
+
+class Checker(ABC):
     """Check solutions
     """
-    def __call__(self, in_path, expected_path, out_path):
-        """Check outcome.
-
-        Args:
-            in_path (FilePath): Input file.
-            expected_path (FilePath): Expected solution file
-            out_path (FilePath): Output file.
-
-        Returns:
-            float: Float between 0.0 and 1.0 indicating result.
-        """
-        NotImplementedError("Class %s doesn't implement __call__()" % (self.__class__.__name__))
+    @abstractmethod
+    def __call__(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
+        raise NotImplementedError("Class %s doesn't implement __call__()" %
+                                  (self.__class__.__name__))
 
 
 class DiffChecker(Checker):
     """White diff checker
     """
-    def __call__(self, in_path, expected_path, out_path):
+    def __call__(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
         """Performs a white diff between expected output and output files
         Parameters correspond to convention for checker in cms.
         Args:
@@ -48,20 +48,20 @@ class DiffChecker(Checker):
         # diff.
         st = complete.returncode == 0
         outcome = 1.0 if st else 0.0
-        return (True, outcome, '')
+        return CheckerResult(success=True, outcome=outcome, msg='')
 
 
 class CppChecker(Checker):
-    def __init__(self, source):
+    def __init__(self, source: Path):
         """
         Args:
             source (FilePath)
         """
         self._source = source
-        self._compiler = CppCompiler(['-I"%s"' % source.directory()])
-        self._binary_path = FilePath(source.directory(), 'checker')
+        self._compiler = CppCompiler(['-I"%s"' % source.parent])
+        self._binary_path = Path(source.parent, 'checker')
 
-    def __call__(self, in_path, expected_path, out_path):
+    def __call__(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
         """Run checker to evaluate outcome. Parameters correspond to convention
         for checker in cms.
         Args:
@@ -72,9 +72,9 @@ class CppChecker(Checker):
         assert in_path.exists()
         assert expected_path.exists()
         assert out_path.exists()
-        if self._binary_path.mtime() < self._source.mtime():
+        if self._binary_path.stat().st_mtime < self._source.stat().st_mtime:
             if not self.build():
-                return (False, 0.0, "Failed to build checker")
+                return CheckerResult(success=False, outcome=0.0, msg="Failed to build checker")
         complete = subprocess.run(
             [str(self._binary_path),
              str(in_path), str(expected_path),
@@ -107,9 +107,9 @@ class CppChecker(Checker):
                 else:
                     msg = 'Execution ended with error (return code %d)' % ret
 
-        return (st, outcome, msg)
+        return CheckerResult(success=st, outcome=outcome, msg=msg)
 
-    def build(self):
+    def build(self) -> bool:
         """Build source of the checker
         Returns:
             bool: True if compilation is successful. False otherwise

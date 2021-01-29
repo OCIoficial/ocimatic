@@ -1,31 +1,33 @@
 import json
+from pathlib import Path
+from typing import Any, Iterable, List, Tuple
 
 
-def load(file_path):
+def load(file_path: Path) -> Any:
     return PJSONFile(file_path).load()
 
 
 class PJSONFile:
-    def __init__(self, file_path):
+    def __init__(self, file_path: Path):
         self._file_path = file_path
 
-    def _load_json(self):
+    def _load_json(self) -> Any:
         if not self._file_path.exists():
             return {}
         with self._file_path.open('r') as json_file:
             return json.load(json_file)
 
-    def _dump_json(self, obj):
+    def _dump_json(self, obj: Any) -> Any:
         with self._file_path.open('w') as json_file:
             return json.dump(obj, json_file, indent=4)
 
-    def get_path(self, path):
+    def get_path(self, path: Any) -> Any:
         val = self._load_json()
         for key in path:
             val = val[key]
         return val
 
-    def set_path(self, path, val):
+    def set_path(self, path: List[str], val: Any) -> Any:
         if path:
             root = self._load_json()
             obj = root
@@ -36,10 +38,10 @@ class PJSONFile:
             root = val
         self._dump_json(root)
 
-    def load(self):
+    def load(self) -> Any:
         return self.to_pjson(self._load_json(), [])
 
-    def to_pjson(self, val, path):
+    def to_pjson(self, val: Any, path: List[str]) -> Any:
         if isinstance(val, list):
             return PJSONArray(self, path)
         if isinstance(val, dict):
@@ -48,42 +50,42 @@ class PJSONFile:
 
 
 class PJSONBase:
-    def __init__(self, json_file, path):
+    def __init__(self, json_file: PJSONFile, path: List[str]):
         self._json_file = json_file
         self._path = path
 
-    def _get_self_path(self):
+    def _get_self_path(self) -> Any:
         return self._json_file.get_path(self._path)
 
-    def _set_self_path(self, val):
+    def _set_self_path(self, val: Any) -> Any:
         self._json_file.set_path(self._path, val)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         return self._json_file.to_pjson(self._get_self_path()[key], self._path + [key])
 
-    def __setitem__(self, key, val):
+    def __setitem__(self, key: str, val: Any) -> Any:
         obj = self._get_self_path()
         obj[key] = val
         self._set_self_path(obj)
         return self[key]
 
-    def __contains__(self, val):
+    def __contains__(self, val: Any) -> bool:
         return val in self._get_self_path()
 
 
 class PJSONMap(PJSONBase):
-    def __iter__(self):
+    def __iter__(self) -> Iterable[Tuple[str, Any]]:
         obj = self._get_self_path()
         for key, val in obj:
             yield (key, val)
 
-    def setdefault(self, key, default=None):
+    def setdefault(self, key: str, default: Any = None) -> Any:
         obj = self._get_self_path()
         if key not in obj:
             self[key] = default
         return self[key]
 
-    def get(self, key, default=None):
+    def get(self, key: str, default: Any = None) -> Any:
         try:
             return self[key]
         except KeyError:
@@ -91,12 +93,15 @@ class PJSONMap(PJSONBase):
 
 
 class PJSONArray(PJSONBase):
-    def append(self, val):
+    def append(self, val: Any) -> None:
         arr = self._get_self_path()
         arr.append(val)
         self._set_self_path(arr)
 
-    def __iter__(self):
+    def __len__(self) -> int:
+        return len(self._get_self_path())
+
+    def __iter__(self) -> Iterable[Any]:
         arr = self._get_self_path()
         for val in arr:
             yield val

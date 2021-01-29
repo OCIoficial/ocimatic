@@ -1,79 +1,73 @@
 import re
 import sys
-import textwrap
 from contextlib import contextmanager
+from typing import (Any, Callable, Iterable, Iterator, List, NamedTuple, Optional, TextIO, TypeVar,
+                    Union, cast)
 
 from colorama import Fore, Style
 
 import ocimatic
-from ocimatic import parseopt
 
 RESET = Style.RESET_ALL
 BOLD = Style.BRIGHT
-# UNDERLINE = '\x1b[4m'
 RED = Fore.RED
 GREEN = Fore.GREEN
 YELLOW = Fore.YELLOW
 BLUE = Fore.BLUE
 MAGENTA = Fore.MAGENTA
-
-# RESET = '\x1b[0m'
-# BOLD = '\x1b[1m'
-# UNDERLINE = '\x1b[4m'
-# RED = '\x1b[31m'
-# GREEN = '\x1b[32m'
-# YELLOW = '\x1b[33m'
-# BLUE = '\x1b[34m'
-
 INFO = BOLD
 OK = BOLD + GREEN
+
 WARNING = BOLD + YELLOW
 ERROR = BOLD + RED
 
 
-def colorize(text, color):
-    u"Add ANSI coloring to `text`."
-    return color + text + RESET
+def colorize(text: str, color: str) -> str:
+    return cast(str, color + text + RESET)
 
 
-def bold(text):
+def bold(text: str) -> str:
     return colorize(text, BOLD)
 
 
-# def underline(text):
-#     return colorize(text, UNDERLINE)
-
-
-def decolorize(text):
-    u"Strip ANSI coloring from `text`."
+def decolorize(text: str) -> str:
     return re.sub(r'\033\[[0-9]+m', '', text)
 
 
-IO_STREAMS = [sys.stdout]
+IO = Union[TextIO]
+IO_STREAMS: List[Optional[IO]] = [sys.stdout]
+
+
+class WorkResult(NamedTuple):
+    success: bool
+    short_msg: Optional[str] = None
+    long_msg: Optional[str] = None
 
 
 @contextmanager
-def capture_io(stream):
+def capture_io(stream: Optional[IO]) -> Iterator[None]:
     IO_STREAMS.append(stream)
-    yield IO_STREAMS[-1]
+    yield
     IO_STREAMS.pop()
 
 
-def write(text):
-    if IO_STREAMS[-1]:
-        IO_STREAMS[-1].write(text)
+def write(text: str) -> None:
+    stream = IO_STREAMS[-1]
+    if stream:
+        stream.write(text)
 
 
-def flush():
-    if IO_STREAMS[-1]:
-        IO_STREAMS[-1].flush()
+def flush() -> None:
+    stream = IO_STREAMS[-1]
+    if stream:
+        stream.flush()
 
 
-def writeln(text=''):
+def writeln(text: str = '') -> None:
     write(text + '\n')
 
 
-def task_header(name, msg):
+def task_header(name: str, msg: str) -> None:
     """Print header for task"""
     write('\n\n')
     write(colorize('[%s] %s' % (name, msg), BOLD + YELLOW))
@@ -81,101 +75,36 @@ def task_header(name, msg):
     flush()
 
 
-def workgroup_header(msg, length=35):
+def workgroup_header(msg: str, length: int = 35) -> None:
     """Header for a generic group of works"""
     writeln()
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
     write(colorize('[%s]' % (msg), INFO))
-    if ocimatic.config['verbosity'] > 0:
-        writeln()
-    else:
+    if ocimatic.config['verbosity'] < 0:
         write(' ')
+    else:
+        writeln()
     flush()
 
 
-def contest_group_header(msg, length=35):
+def contest_group_header(msg: str, length: int = 35) -> None:
     """Header for a group of works involving a contest"""
     write('\n\n')
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    write(colorize('[%s]' % (msg), INFO + MAGENTA))
+    write(colorize('[%s]' % (msg), INFO + YELLOW))
     writeln()
     flush()
 
 
-def solution_group_header(msg, length=35):
-    """Header for a group of works involving a solution"""
-    writeln()
-    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    write(colorize('[%s]' % (msg), INFO + BLUE) + ' ')
-    flush()
+F1 = TypeVar("F1", bound=Callable[..., Iterable[WorkResult]])
 
 
-def solution_group_footer():
-    writeln()
-    flush()
-
-
-def start_work(action, msg, length=45, verbosity=True):
-    if ocimatic.config['verbosity'] == 0 and verbosity:
-        return
-    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    msg = ' * [' + action + '] ' + msg + '  '
-    write(msg)
-    flush()
-
-
-def end_work(msg, status, verbosity=True):
-    color = OK if status else ERROR
-    if not verbosity or ocimatic.config['verbosity'] > 0:
-        write(colorize(str(msg), color))
-        writeln()
-    else:
-        write(colorize('.', color))
-    flush()
-
-
-def fatal_error(message):
-    writeln(colorize('ocimatic: ' + message, INFO + RED))
-    writeln()
-    sys.exit(1)
-
-
-def show_message(label, msg, color=INFO):
-    write(' %s \n' % colorize(label + ': ' + str(msg), color))
-
-
-CAPTURE_WORKS = []
-
-
-@contextmanager
-def capture_works():
-    CAPTURE_WORKS.append([])
-    yield CAPTURE_WORKS[-1]
-    CAPTURE_WORKS.pop()
-
-
-def work(action, formatter="{}", verbosity=True):
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            if not CAPTURE_WORKS:
-                start_work(action, formatter.format(*args, **kwargs), verbosity=verbosity)
-            (st, msg) = func(*args, **kwargs)
-            if CAPTURE_WORKS:
-                CAPTURE_WORKS[-1].append((st, msg))
-            end_work(msg, st, verbosity=verbosity)
-            return (st, msg)
-
-        return wrapper
-
-    return decorator
-
-
-def solution_group(formatter="{}"):
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+def solution_group(formatter: str = "{}") -> Callable[[F1], Callable[..., None]]:
+    def decorator(func: F1) -> Callable[..., None]:
+        def wrapper(*args: Any, **kwargs: Any) -> None:
             solution_group_header(formatter.format(*args, **kwargs))
-            for st, msg in func(*args, **kwargs):
-                end_work(msg, st, verbosity=False)
+            for result in func(*args, **kwargs):
+                end_work(result)
             solution_group_footer()
 
         return wrapper
@@ -183,79 +112,114 @@ def solution_group(formatter="{}"):
     return decorator
 
 
-def contest_group(formatter="{}"):
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+def solution_group_header(msg: str, length: int = 35) -> None:
+    """Header for a group of works involving a solution"""
+    writeln()
+    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
+    write(colorize('[%s]' % (msg), INFO + BLUE) + ' ')
+    flush()
+
+
+def solution_group_footer() -> None:
+    writeln()
+    flush()
+
+
+F2 = TypeVar('F2', bound=Callable[..., WorkResult])
+
+
+def work(action: str, formatter: str = "{}") -> Callable[[F2], F2]:
+    def decorator(func: F2) -> F2:
+        def wrapper(*args: Any, **kwargs: Any) -> WorkResult:
+            if not CAPTURE_WORKS:
+                start_work(action, formatter.format(*args, **kwargs))
+            result = func(*args, **kwargs)
+            if CAPTURE_WORKS:
+                CAPTURE_WORKS[-1].append(result)
+            end_work(result)
+            return result
+
+        return cast(F2, wrapper)
+
+    return decorator
+
+
+def start_work(action: str, msg: str, length: int = 45) -> None:
+    if ocimatic.config['verbosity'] < 0:
+        return
+    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
+    msg = ' * [' + action + '] ' + msg + '  '
+    write(colorize(msg, MAGENTA))
+    flush()
+
+
+def end_work(result: WorkResult) -> None:
+    color = OK if result.success else ERROR
+    if ocimatic.config['verbosity'] < 0:
+        write(colorize('.', color))
+    else:
+        write(colorize(str(result.short_msg), color))
+        writeln()
+    if result.long_msg and ocimatic.config['verbosity'] > 0:
+        long_msg = result.long_msg.strip()
+        long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))
+        write(long_msg)
+        writeln()
+        writeln()
+    flush()
+
+
+def fatal_error(message: str) -> None:
+    writeln(colorize('ocimatic: ' + message, INFO + RED))
+    writeln()
+    sys.exit(1)
+
+
+def show_message(label: str, msg: str, color: str = INFO) -> None:
+    write(' %s \n' % colorize(label + ': ' + str(msg), color))
+
+
+CAPTURE_WORKS: List[List[WorkResult]] = []
+
+
+@contextmanager
+def capture_works() -> Iterator[List[WorkResult]]:
+    CAPTURE_WORKS.append([])
+    yield CAPTURE_WORKS[-1]
+    CAPTURE_WORKS.pop()
+
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def contest_group(formatter: str = "{}") -> Callable[[F], F]:
+    def decorator(func: F) -> F:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             contest_group_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
-def workgroup(formatter="{}"):
-    def decorator(func):
-        def wrapper(*args, **kwargs):
+def workgroup(formatter: str = "{}") -> Callable[[F], F]:
+    def decorator(func: F) -> F:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             workgroup_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
 
 
-def task(action):
-    def decorator(func):
-        def wrapper(self, *args, **kwargs):
+def task(action: str) -> Callable[[F], F]:
+    def decorator(func: F) -> F:
+        def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
             task_header(str(self), action)
             return func(self, *args, **kwargs)
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
-
-
-def ocimatic_help(mode):
-    for action_name, action in mode.items():
-        write(' ' * 2 + bold(action_name) + ' ')
-        writeln(' '.join(_format_arg(arg) for arg in action.get('args', [])))
-        description = '\n'.join(
-            textwrap.wrap(action.get('description', ''),
-                          90,
-                          subsequent_indent=' ' * 4,
-                          initial_indent=' ' * 4))
-        if description.strip():
-            writeln(description)
-        for opt_key, opt_config in action.get('optlist', {}).items():
-            opt = "{}{}   ".format(' ' * 6, _format_opt(opt_key, opt_config))
-            write(opt)
-            description = '\n'.join(
-                textwrap.wrap(opt_config.get('description', ''),
-                              80 - len(opt),
-                              subsequent_indent=' ' * len(opt)))
-            writeln(description)
-
-        writeln()
-    sys.exit(0)
-
-
-def _format_arg(arg):
-    arg_name = parseopt.get_arg_name(arg)
-    if parseopt.is_optional(arg):
-        return '[{}]'.format(arg_name)
-    return arg_name
-
-
-def _format_opt(opt_key, opt_config):
-    long_opt, short_opt = parseopt.parse_opt_key(opt_key)
-    typ = opt_config.get('type', 'str')
-    if typ == 'bool':
-        opt = '--{}, -{}'.format(long_opt, short_opt) if short_opt else '--{}'.format(long_opt)
-    else:
-        if short_opt:
-            opt = '--{long_opt}={long_opt}, -{short_opt}={long_opt}'.format(long_opt=long_opt,
-                                                                            short_opt=short_opt)
-        else:
-            opt = '--{long_opt}={long_opt}'.format(long_opt=long_opt)
-    return '[{}]'.format(opt)
