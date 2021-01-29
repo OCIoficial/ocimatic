@@ -306,9 +306,8 @@ class Task:
         """Run all solutions reporting outcome and running time.
 
         Args:
-            partial (bool): If true it runs partial solutions as well.
-            pattern (Optional[string]): If present it only runs the solutions that
-                contain pattern as substring.
+            solution (Optional[string]): If present it only runs the solutions that
+                contain that match this glob pattern.
         """
         for sol in self.solutions(True):
             if not solution or fnmatch.fnmatch(sol.name, solution):
@@ -326,7 +325,7 @@ class Task:
     def build_solutions(self, pattern=None) -> None:
         """Forces a rebuilding of all solutions, both partial and corrects."""
         for sol in self.solutions(partial=True):
-            if pattern is None or pattern.lower() in sol.name.lower():
+            if pattern is None or fnmatch.fnmatch(sol.name, pattern):
                 sol.build()
 
     @ui.task('Generating expected output')

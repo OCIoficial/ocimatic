@@ -145,7 +145,10 @@ class CppSolution(Solution):
         return Runnable(self._bin_path)
 
     def build_time(self) -> float:
-        return self._bin_path.stat().st_mtime
+        if self._bin_path.exists():
+            return self._bin_path.stat().st_mtime
+        else:
+            return float("-inf")
 
     def _build(self) -> bool:
         """Compile solution with a CppCompiler. Solutions is compiled with a

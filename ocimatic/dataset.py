@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import os
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 from ocimatic.checkers import Checker
@@ -70,7 +71,7 @@ class Dataset:
                 copied += subtask.copy_to(tmpdir, random_sort=random_sort)
 
             if not copied:
-                # ui.show_message("Warning", "no files in dataset", ui.WARNING)
+                ui.show_message("Warning", "no files in dataset", ui.WARNING)
                 return True
 
             cmd = f'cd {tmpdir} && zip data.zip *{IN} *{SOL}'
@@ -313,6 +314,9 @@ class DatasetPlan:
 
     def run(self) -> None:
         (subtasks, cmds) = self.parse_file()
+        cwd = Path.cwd()
+        # Run generators with attic/ as the cwd
+        os.chdir(self._directory)
 
         for stn in range(1, subtasks + 1):
             dir = Path(self._dataset_directory, 'st%d' % stn)
@@ -324,6 +328,7 @@ class DatasetPlan:
 
         for (stn, subtask) in sorted(cmds.items()):
             self.run_subtask(stn, subtask)
+        os.chdir(cwd)
 
     @ui.workgroup('Subtask {1}')
     def run_subtask(self, stn: int, subtask: Dict[str, Any]) -> None:

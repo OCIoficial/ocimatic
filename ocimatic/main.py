@@ -128,7 +128,7 @@ def main() -> None:
     build = actions.add_parser("build",
                                help="""Force a build of all solutions.
         If a pattern is specified, only solutions matching the pattern will be built.""")
-    build.add_argument("pattern", nargs="?")
+    build.add_argument("solution", nargs="?")
 
     actions.add_parser(
         "check",
@@ -162,7 +162,8 @@ def main() -> None:
 
     compress = actions.add_parser("compress", help="Generate zip file with all test data.")
     compress.add_argument(
-        "--random,-r",
+        "--random-sort",
+        "-r",
         default=False,
         help="Add random prefix to output filenames to sort testcases whithin a subtask randomly")
 
