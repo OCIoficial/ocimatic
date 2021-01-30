@@ -264,10 +264,10 @@ class Task:
         testplan.run()
 
     @ui.task('Validating dataset input files')
-    def validate_input(self) -> None:
+    def validate_input(self, subtask: Optional[int]) -> None:
         testplan = DatasetPlan(Path(self._directory, 'attic'), self._directory,
                                Path(self._directory, 'dataset'))
-        testplan.validate_input()
+        testplan.validate_input(subtask)
 
     @ui.work('ZIP')
     def compress_dataset(self, random_sort: bool = False) -> ui.WorkResult:
@@ -434,7 +434,7 @@ class Statement:
         """
         samples = set()
         for line in self._iter_file():
-            m = re.match(r'[^%]*\\sampleIO(\[[^\]]*\]){0,2}{([^}]+)}', line)
+            m = re.match(r'[^%]*\\sampleIO(?:\*)?(\[[^\]]*\]){0,2}{([^}]+)}', line)
             if m:
                 samples.add(m.group(2))
         return [

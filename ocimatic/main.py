@@ -96,6 +96,7 @@ SERVER_ACTIONS = {
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbosity", "-v", action="count", default=0)
+    parser.add_argument("--timeout", type=float)
 
     actions = parser.add_subparsers(title="commands", dest="command")
 
@@ -136,12 +137,12 @@ def main() -> None:
 
     actions.add_parser("pdf", help="Compile the statement's pdf")
 
-    run = actions.add_parser(
+    run_parser = actions.add_parser(
         "run",
         help=
         "Run solutions against all test data and displays the output of the checker and running time."
     )
-    run.add_argument("solution", help="A glob pattern specifying which solution to run")
+    run_parser.add_argument("solution", help="A glob pattern specifying which solution to run")
 
     compress = actions.add_parser("compress", help="Generate zip file with all test data.")
     compress.add_argument(
@@ -150,15 +151,21 @@ def main() -> None:
         default=False,
         help="Add random prefix to output filenames to sort testcases whithin a subtask randomly")
 
-    actions.add_parser("testplan", help="Run testplan.")
+    testplan_parser = actions.add_parser("testplan", help="Run testplan.")
+    testplan_parser.add_argument("--subtask", '-st', type=int)
 
-    actions.add_parser("validate", help="Run input validators.")
+    validate_parser = actions.add_parser("validate", help="Run input validators.")
+    validate_parser.add_argument("--subtask", '-st', type=int)
 
     actions.add_parser("score", help="Print the score parameters for cms.")
 
     actions.add_parser("normalize", help="Normalize input and output files running dos2unix.")
 
     args = parser.parse_args()
+
+    if args.timeout:
+        ocimatic.config['timeout'] = args.timeout
+    del args.timeout
 
     ocimatic.config['verbosity'] = args.verbosity
     del args.verbosity

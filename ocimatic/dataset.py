@@ -268,10 +268,11 @@ class DatasetPlan:
         st_dir = Path(self._dataset_directory, 'st%d' % stn)
         return Path(st_dir, '%s-%d.in' % (group, i))
 
-    def validate_input(self) -> None:
+    def validate_input(self, stn: Optional[int]) -> None:
         (_, cmds) = self.parse_file()
-        for (st, subtask) in sorted(cmds.items()):
-            self.validate_subtask(st, subtask)
+        for (i, subtask) in sorted(cmds.items()):
+            if stn is None or stn == i:
+                self.validate_subtask(i, subtask)
 
     @ui.workgroup('Subtask {1}')
     def validate_subtask(self, stn: int, subtask: Dict[str, Any]) -> None:
@@ -311,22 +312,23 @@ class DatasetPlan:
             return (Runnable('python2', [str(source)]), 'OK')
         return (None, 'Not supported source file.')
 
-    def run(self) -> None:
+    def run(self, stn: Optional[int]) -> None:
         (subtasks, cmds) = self.parse_file()
         cwd = Path.cwd()
         # Run generators with attic/ as the cwd
         os.chdir(self._directory)
 
-        for stn in range(1, subtasks + 1):
-            dir = Path(self._dataset_directory, 'st%d' % stn)
+        for i in range(1, subtasks + 1):
+            dir = Path(self._dataset_directory, 'st%d' % i)
             shutil.rmtree(dir, ignore_errors=True)
             dir.mkdir(parents=True)
 
         if not cmds:
             ui.show_message("Warning", 'no commands were executed for the plan.', ui.WARNING)
 
-        for (stn, subtask) in sorted(cmds.items()):
-            self.run_subtask(stn, subtask)
+        for (i, subtask) in sorted(cmds.items()):
+            if stn is None or stn == i:
+                self.run_subtask(i, subtask)
         os.chdir(cwd)
 
     @ui.workgroup('Subtask {1}')
