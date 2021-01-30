@@ -338,10 +338,10 @@ class Task:
             sol.run(self._dataset, self._checker, check=True, sample=True)
 
     @ui.task('Building solutions')
-    def build_solutions(self, pattern: str = None) -> None:
+    def build_solutions(self, solution: str = None) -> None:
         """Forcesa rebuilding of all solutions, both partial and corrects."""
         for sol in self.solutions(partial=True):
-            if pattern is None or fnmatch.fnmatch(sol.name, pattern):
+            if solution is None or fnmatch.fnmatch(sol.name, solution):
                 sol.build()
 
     @ui.task('Generating expected output')

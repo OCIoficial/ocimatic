@@ -187,7 +187,10 @@ class JavaSolution(Solution):
         return Runnable('java', ['-cp', str(self._classpath), '-Xss1g', str(self._classname)])
 
     def build_time(self) -> float:
-        return self._bytecode.stat().st_mtime
+        if self._bytecode.exists():
+            return self._bytecode.stat().st_mtime
+        else:
+            return float("-inf")
 
     def _build(self) -> bool:
         """Compile solution with the JavaCompiler.
