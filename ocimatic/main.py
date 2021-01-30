@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 
 import ocimatic
-from ocimatic import core, ui
+from ocimatic import core, server, ui
 
 CONTEST_COMMAND = {'problemset': 'build_problemset', 'package': 'package'}
 
@@ -79,20 +79,6 @@ def task_mode(args: argparse.Namespace) -> None:
         getattr(task, method)(**vars(args))
 
 
-SERVER_ACTIONS = {
-    'start': {
-        'description': 'Start server to run solutions for current contest.',
-        'method': 'run',
-        'optlist': {
-            ('port', 'p'): {
-                'type': 'num',
-                'description': 'Port where the app will run. default: 9999'
-            }
-        }
-    }
-}
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbosity", "-v", action="count", default=0)
@@ -161,6 +147,10 @@ def main() -> None:
 
     actions.add_parser("normalize", help="Normalize input and output files running dos2unix.")
 
+    server_parser = actions.add_parser(
+        "server", help='Start server which can be used to run solutions in te browser.')
+    server_parser.add_argument("--port", "-p", default="9999", type=int)
+
     args = parser.parse_args()
 
     if args.timeout:
@@ -173,6 +163,8 @@ def main() -> None:
         new_contest(args)
     elif args.command == "new":
         new_task(args)
+    elif args.command == "server":
+        server.run(args.port)
     elif args.command in CONTEST_COMMAND.keys():
         contest_mode(args)
     elif args.command in TASK_COMMAND.keys():
