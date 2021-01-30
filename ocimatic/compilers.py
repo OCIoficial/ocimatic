@@ -81,7 +81,6 @@ class LatexCompiler:
         """
         flags = ' '.join(self._flags)
         cmd = 'cd "%s" && %s %s "%s"' % (source.parent, self._cmd, flags, source.name)
-        print(cmd)
         complete = subprocess.run(cmd,
                                   shell=True,
                                   stdin=subprocess.DEVNULL,
