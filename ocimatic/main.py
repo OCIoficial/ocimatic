@@ -111,11 +111,10 @@ def main() -> None:
         By default it will choose any correct solution preferring solutions
         written in C++.
         """)
-    expected.add_argument("pattern",
+    expected.add_argument("solution",
                           nargs="?",
                           help="""A glob pattern.
-        If specified, the first solution matching this pattern will be used to generate the
-        expected output.""")
+        If specified, generate output running this solution.""")
     expected.add_argument("--sample",
                           help="Generate expected output for sample input as well.",
                           action="store_true",
@@ -128,7 +127,7 @@ def main() -> None:
         help=
         "Run solutions against all test data and displays the output of the checker and running time."
     )
-    run_parser.add_argument("solution", help="A glob pattern specifying which solution to run")
+    run_parser.add_argument("solution", help="A path to a solution", type=Path)
 
     compress = actions.add_parser("compress", help="Generate zip file with all test data.")
     compress.add_argument(

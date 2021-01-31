@@ -320,8 +320,9 @@ class DatasetPlan:
 
         for i in range(1, subtasks + 1):
             dir = Path(self._dataset_directory, 'st%d' % i)
-            shutil.rmtree(dir, ignore_errors=True)
-            dir.mkdir(parents=True)
+            if stn is None or i == stn:
+                shutil.rmtree(dir, ignore_errors=True)
+                dir.mkdir(parents=True, exist_ok=True)
 
         if not cmds:
             ui.show_message("Warning", 'no commands were executed for the plan.', ui.WARNING)

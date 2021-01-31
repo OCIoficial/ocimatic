@@ -16,11 +16,11 @@ class Solution(ABC):
         self._source = source
 
     @staticmethod
-    def get_solutions(codename: str, solutions_dir: Path, managers_dir: Path) -> List['Solution']:
+    def load_solutions_in_dir(codename: str, dir: Path, managers_dir: Path) -> List['Solution']:
         """Search for solutions in a directory.
 
         Args:
-            solutions_dir (Directory): Directory to look for solutions.
+            dir (Path): Directory to look for solutions.
             managers_dir (Directory): Directory where managers reside.
                 This is used to provide necessary files for compilation,
                 for example, when solutions are compiled with a grader.
@@ -28,13 +28,16 @@ class Solution(ABC):
         Returns:
             List[Solution]: List of solutions.
         """
+        assert dir.is_dir()
         return [
-            solution for file_path in solutions_dir.iterdir()
-            for solution in [Solution.get_solution(codename, file_path, managers_dir)] if solution
+            solution for file_path in dir.iterdir()
+            for solution in [Solution.load(codename, file_path, managers_dir)] if solution
         ]
 
     @staticmethod
-    def get_solution(codename: str, file_path: Path, managers_dir: Path) -> Optional['Solution']:
+    def load(codename: str, file_path: Path, managers_dir: Path) -> Optional['Solution']:
+        if not file_path.is_file():
+            return None
         if file_path.suffix == CppSolution.ext:
             return CppSolution(file_path, managers_dir)
         if file_path.suffix == JavaSolution.ext:

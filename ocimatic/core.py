@@ -221,9 +221,11 @@ class Task:
         self._config = pjson.load(Path(directory, ".ocimatic_task"))
 
         correct_dir = Path(directory, 'solutions', 'correct')
-        self._correct = Solution.get_solutions(self.codename, correct_dir, self._managers_dir)
+        self._correct = Solution.load_solutions_in_dir(self.codename, correct_dir,
+                                                       self._managers_dir)
         partial_dir = Path(directory, 'solutions', 'partial')
-        self._partial = Solution.get_solutions(self.codename, partial_dir, self._managers_dir)
+        self._partial = Solution.load_solutions_in_dir(self.codename, partial_dir,
+                                                       self._managers_dir)
 
         self._checker: Checker = DiffChecker()
         custom_checker = next(self._managers_dir.glob('checker.cpp'), None)
@@ -256,12 +258,39 @@ class Task:
             shutil.copy2(Path(self._directory, 'statement', 'statement.pdf'), statement)
 
     @ui.task('Generating dataset input files')
-    def gen_input(self) -> None:
+    def gen_input(self, subtask: Optional[int]) -> None:
         if self._config.get("static_dataset", False):
             ui.fatal_error("Task has a static dataset.")
         testplan = DatasetPlan(Path(self._directory, 'attic'), self._directory,
                                Path(self._directory, 'dataset'))
-        testplan.run()
+        testplan.run(subtask)
+
+    def load_solution_for_path(self, path: Path) -> Optional[Solution]:
+        """Search for a solution matching a path. The behavior depends on whether the path
+        is absolute or relative. If absolute, it will match a solution for the
+        corresponding path. If it is relative, it will try to match the path
+        relative to the following locations, in order, until it finds a match or it fails to
+        find one:
+        1. <task>/solutions/correct
+        2. <task>/solutions/partial
+        3. <task>/solutions/
+        4. <task>
+        4. <cwd>
+        Where <task> is the path of the current task and <cwd> is the current working
+        directory.
+        """
+        if path.is_absolute():
+            return Solution.load(self.codename, path, self._managers_dir)
+
+        for dir in [
+                Path(self._directory, 'solutions', 'correct'),
+                Path(self._directory, 'solutions', 'partial'),
+                Path(self._directory, 'solutions'), self._directory,
+                Path.cwd()
+        ]:
+            if Path(dir, path).is_file():
+                return Solution.load(self.codename, Path(dir, path), self._managers_dir)
+        return None
 
     @ui.task('Validating dataset input files')
     def validate_input(self, subtask: Optional[int]) -> None:
@@ -291,7 +320,7 @@ class Task:
                 yield solution
 
     def get_solution(self, file_path: Path) -> Optional[Solution]:
-        return Solution.get_solution(self.codename, file_path, self._managers_dir)
+        return Solution.load(self.codename, file_path, self._managers_dir)
 
     @property
     def statement(self) -> 'Statement':
@@ -318,15 +347,19 @@ class Task:
         self._dataset.normalize()
 
     @ui.task('Running solutions')
-    def run_solutions(self, solution: Optional[str] = None) -> None:
+    def run_solutions(self, solution: Optional[Path] = None) -> None:
         """Run all solutions reporting outcome and running time.
 
         Args:
-            solution (Optional[string]): If present it only runs the solutions that
+            solution (Optional[s. If it is relative it will first try to match tring]): If present it only runs the solutions that
                 contain that match this glob pattern.
         """
-        for sol in self.solutions(True):
-            if not solution or fnmatch.fnmatch(sol.name, solution):
+        if solution:
+            sol = self.load_solution_for_path(solution)
+            if sol:
+                sol.run(self._dataset, self._checker)
+        else:
+            for sol in self.solutions(True):
                 sol.run(self._dataset, self._checker)
 
     @ui.task('Checking dataset')
@@ -338,14 +371,18 @@ class Task:
             sol.run(self._dataset, self._checker, check=True, sample=True)
 
     @ui.task('Building solutions')
-    def build_solutions(self, solution: str = None) -> None:
+    def build_solutions(self, solution: Optional[Path] = None) -> None:
         """Forcesa rebuilding of all solutions, both partial and corrects."""
-        for sol in self.solutions(partial=True):
-            if solution is None or fnmatch.fnmatch(sol.name, solution):
+        if solution:
+            sol = self.load_solution_for_path(solution)
+            if sol:
+                sol.build()
+        else:
+            for sol in self.solutions(True):
                 sol.build()
 
     @ui.task('Generating expected output')
-    def gen_expected(self, sample: bool = False, pattern: str = None) -> None:
+    def gen_expected(self, sample: bool = False, solution: str = None) -> None:
         """Generate expected outputs files for dataset by running one of the
         correct solutions.
         """
@@ -356,9 +393,9 @@ class Task:
             ui.show_message('Skipping', 'No correct solution.', ui.WARNING)
             return
         generator = None
-        if pattern:
+        if solution:
             for sol in self._correct:
-                if pattern.lower() in sol.name.lower():
+                if solution == sol.name:
                     generator = sol
                     break
         else:
