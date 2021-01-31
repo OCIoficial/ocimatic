@@ -43,10 +43,6 @@ class Contest:
     filesystem.
     """
     def __init__(self, directory: Path):
-        """
-        Args:
-            directory (Directory): Directory where the contest reside.
-        """
         self._directory = directory
         self._config = pjson.load(Path(directory, '.ocimatic_contest'))
 
@@ -66,19 +62,12 @@ class Contest:
         self._tasks = [Task(d, i) for (i, (_, d)) in enumerate(dirs)]
 
     @staticmethod
-    def create_layout(contest_path: Path, config: ContestConfig) -> None:
-        """Copies contest skeleton to contest_path and saves specified configurations
-
-        Args:
-            contest_path (Filepath)
-        """
+    def create_layout(dest: Path, config: ContestConfig) -> None:
+        """Copy contest skeleton to `dest` and save configuration"""
         ocimatic_dir = Path(__file__).parent
         contest_skel = Path(ocimatic_dir, 'resources', 'contest-skel')
-        shutil.copytree(contest_skel,
-                        contest_path,
-                        ignore=shutil.ignore_patterns('auto'),
-                        symlinks=True)
-        with Path(contest_path, '.ocimatic_contest').open('w') as config_file:
+        shutil.copytree(contest_skel, dest, ignore=shutil.ignore_patterns('auto'), symlinks=True)
+        with Path(dest, '.ocimatic_contest').open('w') as config_file:
             json.dump(config, config_file, indent=4)
 
     def new_task(self, name: str) -> None:
@@ -88,13 +77,12 @@ class Contest:
 
     @property
     def tasks(self) -> List['Task']:
-        """List[Task]"""
         return self._tasks
 
     @ui.contest_group('Generating problemset')
     def build_problemset(self) -> None:
-        """It builds the titlepage and the statement of all tasks. Then it merges
-        all pdfs in a single file.
+        """Build titlepage and statement of all tasks. Then merge
+        all pdfs into a single pdf.
         """
         self.build_problemset_twoside()
         self.build_problemset_oneside()
@@ -121,7 +109,7 @@ class Contest:
 
     @ui.contest_group('Building package')
     def package(self) -> bool:
-        """Compress statement and dataset of all tasks in a single file"""
+        """Package statements and datasets of all tasks into a single zip file"""
         tmpdir = Path(tempfile.mkdtemp())
         try:
             for task in self._tasks:
@@ -147,16 +135,13 @@ class Contest:
 
     @ui.work('PDF', 'titlepage.tex')
     def compile_titlepage(self) -> ui.WorkResult:
-        """Compile title page latex
-        Returns:
-            (bool, msg): Status and result message
-        """
+        """Compile title page latex"""
         st = self._compiler(self._titlepage)
         return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
 
     @ui.work('MERGE', '{1}')
     def merge_pdfs(self, filename: str) -> ui.WorkResult:
-        """Merges statements and title page in a single file """
+        """Merge titlepage and statements pdfs into a single file """
         if not shutil.which('gs'):
             return ui.WorkResult(success=False, short_msg='Cannot find gs')
 
@@ -180,20 +165,14 @@ class Contest:
 
     @property
     def name(self) -> str:
-        """str: Name of the contest"""
+        """Name of the contest"""
         return self._directory.name
 
     def __str__(self) -> str:
         return self.name
 
     def find_task(self, name: str) -> Optional['Task']:
-        """find task with given name.
-        Args:
-            name (str): Name of the tasks
-        Returns:
-            Optional[Task]: The task with the given name or None if
-                no task with that name is present.
-        """
+        """find task with given name."""
         return next((p for p in self._tasks if p.name == name), None)
 
 
@@ -209,11 +188,6 @@ class Task:
         shutil.copytree(skel, task_path, symlinks=True)
 
     def __init__(self, directory: Path, num: int):
-        """
-        Args:
-            directory (Directory): Directory where the task resides.
-            num (int): Position of the task in the problemset starting from 0.
-        """
         self._directory = directory
 
         self._managers_dir = Path(directory, 'managers')
@@ -300,13 +274,13 @@ class Task:
 
     @ui.work('ZIP')
     def compress_dataset(self, random_sort: bool = False) -> ui.WorkResult:
-        """Compress dataset in a single file data.zip"""
+        """Compress dataset into a single file"""
         st = self._dataset.compress(random_sort=random_sort)
         return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
 
     @property
     def name(self) -> str:
-        """str: Name of the task"""
+        """Name of the task"""
         return self._directory.name
 
     def __str__(self) -> str:
@@ -321,7 +295,6 @@ class Task:
 
     @property
     def statement(self) -> 'Statement':
-        """Statement"""
         return self._statement
 
     @ui.task('Score Params')
@@ -345,12 +318,7 @@ class Task:
 
     @ui.task('Running solutions')
     def run_solutions(self, solution: Optional[Path] = None) -> None:
-        """Run all solutions reporting outcome and running time.
-
-        Args:
-            solution (Optional[s. If it is relative it will first try to match tring]): If present it only runs the solutions that
-                contain that match this glob pattern.
-        """
+        """Run all solutions reporting outcome and running time."""
         if solution:
             sol = self.load_solution_for_path(solution)
             if sol:
@@ -369,7 +337,7 @@ class Task:
 
     @ui.task('Building solutions')
     def build_solutions(self, solution: Optional[Path] = None) -> None:
-        """Forcesa rebuilding of all solutions, both partial and corrects."""
+        """Force compilation of solutions."""
         if solution:
             sol = self.load_solution_for_path(solution)
             if sol:
@@ -380,7 +348,7 @@ class Task:
 
     @ui.task('Generating expected output')
     def gen_expected(self, sample: bool = False, solution: str = None) -> None:
-        """Generate expected outputs files for dataset by running one of the
+        """Generate expected outputs files for the dataset by running one of the
         correct solutions.
         """
         if self._config.get("static_dataset", False):
@@ -409,15 +377,10 @@ class Task:
 
 
 class Statement:
-    """Represents a statement. A statement is formed by a latex source and a pdf
+    """Represents a statement. A statement is composed by a latex source and a pdf
     file.
     """
     def __init__(self, directory: Path, num: Optional[int] = None, codename: Optional[str] = None):
-        """
-        Args:
-            directory (Directory): Directory to search for statement source file.
-            num (int): Number of the statement in the contest starting from 0
-        """
         assert Path(directory, 'statement.tex').exists()
         self._source = Path(directory, 'statement.tex')
         self._pdf = self._source.with_suffix('.pdf')
@@ -428,11 +391,7 @@ class Statement:
 
     @property
     def pdf(self) -> Optional[Path]:
-        """Returns path to pdf file and compiles it if necessary.
-        Returns:
-            Optional[FilePath]: The file path if the binary is present or None
-                if the pdf file cannot be generated.
-        """
+        """Return path to pdf file and compiling it if necessary."""
         if self._pdf.stat().st_mtime < self._source.stat().st_mtime:
             result = self.build()
             if not result.success:
@@ -444,14 +403,7 @@ class Statement:
 
     @ui.work('PDF')
     def build(self, blank_page: bool = False) -> ui.WorkResult:
-        """Compile statement latex source
-        Args:
-           blank_page (Optional[bool]) if true adds a blank page at the end of the
-               problem.
-        Returns:
-           (bool, msg) a tuple containing status code and result message.
-
-        """
+        """Compile latex statement"""
         if self._num is not None:
             os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A') + self._num)
         if self._codename:
@@ -462,10 +414,7 @@ class Statement:
         return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
 
     def io_samples(self) -> List[Test]:
-        """Find sample input data in the satement
-        Returns:
-            List[FilePath]: list of paths
-        """
+        """Find sample input data in the satement"""
         samples = set()
         for line in self._iter_file():
             m = re.match(r'[^%]*\\sampleIO(?:\*)?(\[[^\]]*\]){0,2}{([^}]+)}', line)
@@ -477,10 +426,7 @@ class Statement:
         ]
 
     def scores(self) -> List[int]:
-        """Finds the scores for the subtasks
-        Returns:
-            List[int]: List with the scores for each subtask
-        """
+        """Finds the scores for the subtasks"""
         scores = []
         for line in self._iter_file():
             m = re.match(r'[^%]*\\subtask{([^}]+)}', line)

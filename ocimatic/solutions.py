@@ -17,17 +17,7 @@ class Solution(ABC):
 
     @staticmethod
     def load_solutions_in_dir(codename: str, dir: Path, managers_dir: Path) -> List['Solution']:
-        """Search for solutions in a directory.
-
-        Args:
-            dir (Path): Directory to look for solutions.
-            managers_dir (Directory): Directory where managers reside.
-                This is used to provide necessary files for compilation,
-                for example, when solutions are compiled with a grader.
-
-        Returns:
-            List[Solution]: List of solutions.
-        """
+        """Search for solutions in a directory."""
         assert dir.is_dir()
         return [
             solution for file_path in dir.iterdir()
@@ -50,15 +40,7 @@ class Solution(ABC):
             checker: Checker,
             check: bool = False,
             sample: bool = False) -> Iterable[ui.WorkResult]:
-        """Run this solution for all test cases in the given dataset.
-        Args:
-            dataset (Dataset)
-            checker (Checker): Checker to compute outcome.
-            check  (bool): If true only report if expected output
-                corresponds to solution output.
-            sample (bool): If true run solution with sample test data from
-                statement.
-        """
+        """Run this solution for all test cases in the given dataset."""
         runnable, msg = self.get_and_build()
         yield ui.WorkResult(success=runnable is not None, short_msg=msg)
         if runnable:
@@ -67,12 +49,7 @@ class Solution(ABC):
     @ui.solution_group()
     def gen_expected(self, dataset: Dataset, sample: bool = False) -> Iterable[ui.WorkResult]:
         """Generate expected output files for all test cases in the given dataset
-        running this solution.
-        Args:
-            dataset (Dataset)
-            sample (bool): If true expected output file for are generated for
-                sample test data from statement.
-        """
+        running this solution."""
         runnable, msg = self.get_and_build()
         yield ui.WorkResult(success=runnable is not None, short_msg=msg)
         if runnable:
@@ -80,19 +57,12 @@ class Solution(ABC):
 
     @ui.work('Build')
     def build(self) -> ui.WorkResult:
-        """Build solution.
-        Returns:
-            (bool, str): A tuple containing status and result message.
-        """
+        """Build solution."""
         st = self._build()
         msg = 'OK' if st else 'FAILED'
         return ui.WorkResult(success=st, short_msg=msg)
 
     def get_and_build(self) -> Tuple[Optional[Runnable], Optional[str]]:
-        """
-        Returns:
-            Optional[Runnable]: Runnable file of this solution or None if it fails
-          to build"""
         if self.build_time() < self._source.stat().st_mtime:
             with ui.capture_io(None), ui.capture_works() as works:
                 self.build()

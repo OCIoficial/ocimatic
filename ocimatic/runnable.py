@@ -42,6 +42,13 @@ SIGNALS = {
 
 
 class Result(NamedTuple):
+    """
+    Result of running
+    success: True if the execution terminates with exit code zero or False otherwise.
+    time: execution time.
+    err_msg: if success is False err_msg contains a message describing the error.
+    stderr: Captured standard error.
+    """
     success: bool
     time: float
     err_msg: Optional[str]
@@ -78,19 +85,12 @@ class Runnable:
         """Run binary redirecting standard input and output.
 
         Args:
-            in_path (Optional[FilePath]): Path to redirect stdin from. If None
+            in_path: Path to redirect stdin from. If None
                 input is redirected from /dev/null.
-            out_path (Optional[FilePath]): File to redirec stdout to. If None
+            out_path: File to redirec stdout to. If None
                 output is redirected to /dev/null.
-            args (List[str]): Additional parameters
-
-        Returns:
-            (bool, str, float): Returns a tuple (status, time, errmsg).
-                status is True if the execution terminates with exit code zero
-                or False otherwise.
-                time corresponds to execution time.
-                if status is False errmsg contains an explanatory error
-                message, otherwise it contains a success message.
+            args: Additional parameters
+            timeout: Timeout for the process
         """
         args = args or []
         assert in_path is None or in_path.exists()
@@ -110,7 +110,7 @@ class Runnable:
                                           timeout=timeout,
                                           stdin=in_file,
                                           stdout=out_file,
-                                          universal_newlines=True,
+                                          text=True,
                                           stderr=subprocess.PIPE,
                                           check=False)
             except subprocess.TimeoutExpired:

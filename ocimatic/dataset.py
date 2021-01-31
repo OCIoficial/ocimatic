@@ -23,11 +23,6 @@ SOL = ".sol"
 class Dataset:
     """Test data"""
     def __init__(self, directory: Path, sampledata: List['Test']):
-        """
-        Args:
-            directory (Directory): dataset directory.
-            sampledata (Optional[SampleData]): optional sampledata
-        """
         self._directory = directory
         self._subtasks = [Subtask(d) for d in directory.iterdir() if d.is_dir()]
         self._sampledata = TestGroup('sample', sampledata)
@@ -55,7 +50,7 @@ class Dataset:
         return mtime
 
     def compress(self, random_sort: bool = False) -> bool:
-        """Compress all test cases in this dataset in a single zip file.
+        """Compress all test cases in the dataset into a single zip file.
         The basename of the corresponding subtask subdirectory is prepended
         to each file.
         """
@@ -149,11 +144,6 @@ class Subtask(TestGroup):
 class Test:
     """A single test file. Expected output file may not exist"""
     def __init__(self, in_path: Path, expected_path: Path):
-        """
-        Args:
-            in_path (FilePath)
-            expected_path (FilePath)
-        """
         assert in_path.exists()
         self._in_path = in_path
         self._expected_path = expected_path
@@ -169,10 +159,6 @@ class Test:
     @ui.work('Gen')
     def gen_expected(self, runnable: Runnable) -> WorkResult:
         """Run binary with this test as input to generate expected output file
-        Args:
-            runnable (Runnable)
-        Returns:
-            (bool, msg): A tuple containing status and result message.
         """
         (st, _, errmsg, stderr) = runnable.run(self.in_path,
                                                self.expected_path,
@@ -182,13 +168,7 @@ class Test:
 
     @ui.work('Run')
     def run(self, runnable: Runnable, checker: Checker, check: bool = False) -> WorkResult:
-        """Run runnable whit this test as input and check output correctness
-        Args:
-            runnable (Runnable)
-            checker (Checker): Checker to check outcome
-            check  (bool): If true this only report if expected output
-                correspond to binary execution output.
-        """
+        """Run runnable redirect this test as standard input and check output correctness"""
         if not self.expected_path.exists():
             return WorkResult(success=False, short_msg='No expected output file')
 
@@ -220,12 +200,10 @@ class Test:
 
     @property
     def in_path(self) -> Path:
-        """FilePath: Input file path"""
         return self._in_path
 
     @property
     def expected_path(self) -> Path:
-        """FilePath: Expected output file path."""
         return self._expected_path
 
     @ui.work('Normalize')

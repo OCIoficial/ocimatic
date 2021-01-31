@@ -175,7 +175,11 @@ def main() -> None:
     # Server
 
     server_parser = subcommands.add_parser(
-        "server", help='Start server which can be used to run solutions in te browser.')
+        "server",
+        help="""Start a server which can be used to control ocimatic from a browser.
+        This is for the moment very limited, but it's useful during a contest to quickly paste
+        and run a solution.
+        """)
     server_parser.add_argument("--port", "-p", default="9999", type=int)
 
     args = parser.parse_args()
