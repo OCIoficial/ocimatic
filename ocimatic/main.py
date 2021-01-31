@@ -65,7 +65,10 @@ def task_mode(args: argparse.Namespace) -> None:
 
     method = TASK_COMMAND[args.command]
 
-    if last_dir:
+    if args.task:
+        task = contest.find_task(args.task)
+        tasks = [task] if task else []
+    elif last_dir:
         task = contest.find_task(last_dir.name)
         assert task
         tasks = [task]
@@ -74,6 +77,7 @@ def task_mode(args: argparse.Namespace) -> None:
     if not tasks:
         ui.show_message("Warning", "no tasks", ui.WARNING)
     kwargs = vars(args)
+    del kwargs['task']
     del kwargs['command']
     for task in tasks:
         getattr(task, method)(**vars(args))
@@ -84,69 +88,93 @@ def main() -> None:
     parser.add_argument("--verbosity", "-v", action="count", default=0)
     parser.add_argument("--timeout", type=float)
 
-    actions = parser.add_subparsers(title="commands", dest="command")
+    subcommands = parser.add_subparsers(title="commands", dest="command")
 
-    init = actions.add_parser("init", help="Initializes a contest in a new directory.")
+    # Contest Commands
+
+    init = subcommands.add_parser("init", help="Initializes a contest in a new directory.")
     init.add_argument("path", help="Path to directory.")
     init.add_argument("--phase")
-    actions.add_parser("problemset", help="Generate problemset.")
-    actions.add_parser("package", help="Generate contest package.")
 
-    new = actions.add_parser("new", help="Creates a new task.")
-    new.add_argument("name", help="Name of the task")
+    subcommands.add_parser("problemset", help="Generate problemset.")
 
-    build = actions.add_parser("build",
-                               help="""Force a build of all solutions.
-        If a pattern is specified, only solutions matching the pattern will be built.""")
-    build.add_argument("solution", nargs="?")
+    subcommands.add_parser("package", help="Generate contest package.")
 
-    actions.add_parser(
+    # Task Commands
+
+    task_parent = argparse.ArgumentParser(add_help=False)
+    task_parent.add_argument('--task')
+
+    new_task_parser = subcommands.add_parser("new", help="Creates a new task.")
+    new_task_parser.add_argument("name", help="Name of the task")
+
+    build_parser = subcommands.add_parser("build",
+                                          help="""Force a build of all solutions.
+        If a pattern is specified, only solutions matching the pattern will be built.""",
+                                          parents=[task_parent])
+    build_parser.add_argument("solution", nargs="?")
+
+    subcommands.add_parser(
         "check",
         help="""Check input/output correcteness by running all correct solutions against all
-        test cases and sample inputs""")
+        test cases and sample inputs""",
+        parents=[task_parent])
 
-    expected = actions.add_parser('expected',
-                                  help="""
+    expected_parser = subcommands.add_parser('expected',
+                                             help="""
         Generate expected output by running a correct solution against all the input data.
         By default it will choose any correct solution preferring solutions
         written in C++.
-        """)
-    expected.add_argument("solution",
-                          nargs="?",
-                          help="""A glob pattern.
+        """,
+                                             parents=[task_parent])
+    expected_parser.add_argument("solution",
+                                 nargs="?",
+                                 help="""A glob pattern.
         If specified, generate output running this solution.""")
-    expected.add_argument("--sample",
-                          help="Generate expected output for sample input as well.",
-                          action="store_true",
-                          default=False)
+    expected_parser.add_argument("--sample",
+                                 help="Generate expected output for sample input as well.",
+                                 action="store_true",
+                                 default=False)
 
-    actions.add_parser("pdf", help="Compile the statement's pdf")
+    subcommands.add_parser("pdf", help="Compile the statement's pdf", parents=[task_parent])
 
-    run_parser = actions.add_parser(
+    run_parser = subcommands.add_parser(
         "run",
         help=
-        "Run solutions against all test data and displays the output of the checker and running time."
-    )
+        "Run solutions against all test data and displays the output of the checker and running time.",
+        parents=[task_parent])
     run_parser.add_argument("solution", help="A path to a solution", type=Path)
 
-    compress = actions.add_parser("compress", help="Generate zip file with all test data.")
-    compress.add_argument(
+    compress_parser = subcommands.add_parser("compress",
+                                             help="Generate zip file with all test data.",
+                                             parents=[task_parent])
+    compress_parser.add_argument(
         "--random-sort",
         "-r",
         default=False,
         help="Add random prefix to output filenames to sort testcases whithin a subtask randomly")
 
-    testplan_parser = actions.add_parser("testplan", help="Run testplan.")
+    testplan_parser = subcommands.add_parser("testplan",
+                                             help="Run testplan.",
+                                             parents=[task_parent])
     testplan_parser.add_argument("--subtask", '-st', type=int)
 
-    validate_parser = actions.add_parser("validate", help="Run input validators.")
+    validate_parser = subcommands.add_parser("validate",
+                                             help="Run input validators.",
+                                             parents=[task_parent])
     validate_parser.add_argument("--subtask", '-st', type=int)
 
-    actions.add_parser("score", help="Print the score parameters for cms.")
+    subcommands.add_parser("score",
+                           help="Print the score parameters for cms.",
+                           parents=[task_parent])
 
-    actions.add_parser("normalize", help="Normalize input and output files running dos2unix.")
+    subcommands.add_parser("normalize",
+                           help="Normalize input and output files running dos2unix.",
+                           parents=[task_parent])
 
-    server_parser = actions.add_parser(
+    # Server
+
+    server_parser = subcommands.add_parser(
         "server", help='Start server which can be used to run solutions in te browser.')
     server_parser.add_argument("--port", "-p", default="9999", type=int)
 

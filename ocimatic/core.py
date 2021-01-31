@@ -319,9 +319,6 @@ class Task:
             for solution in self._partial:
                 yield solution
 
-    def get_solution(self, file_path: Path) -> Optional[Solution]:
-        return Solution.load(self.codename, file_path, self._managers_dir)
-
     @property
     def statement(self) -> 'Statement':
         """Statement"""

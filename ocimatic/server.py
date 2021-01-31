@@ -1,18 +1,20 @@
+import subprocess
 from io import StringIO
 from pathlib import Path
 from typing import Optional, Text, cast
 
 from ansi2html import Ansi2HTMLConverter
-from flask import Flask, flash, redirect, render_template, request
+from flask import Flask, Response, flash, redirect, render_template, request
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 import ocimatic
-from ocimatic import core, ui
+from ocimatic import core
 
 
 def ansi2html(ansi: str) -> str:
-    return cast(str, Ansi2HTMLConverter().convert(ansi))
+    return cast(str,
+                Ansi2HTMLConverter(scheme='mint-terminal', inline=True).convert(ansi, full=False))
 
 
 UPLOAD_FOLDER = Path('/tmp', 'ocimatic', 'server')
@@ -55,28 +57,43 @@ def upload_solution() -> Optional[Path]:
 @app.route('/', methods=['POST', 'GET'])
 def server() -> Text:
     assert contest
-    result = ''
-    if request.method == 'POST':
-        filepath = upload_solution()
-        if not filepath:
-            flash('Please provide a solution')
-            return redirect(request.url)
-        task = contest.find_task(request.form.get('task'))
-        solution = task.get_solution(filepath)
-        if solution:
-            stream = StringIO()
-            with ui.capture_io(stream):
-                task.run_solution(solution)
-            result = stream.getvalue()
-        else:
-            result = 'Invalid solution'
-    result = ansi2html(result)
-    return render_template('index.html', tasks=contest.tasks, result=result)
+    return render_template('index.html', tasks=contest.tasks)
 
 
-@app.route('/submit', methods=['POST', 'GET'])
+def save_solution(content: str, suffix: str) -> Path:
+    dst_dir = upload_folder()
+    filepath = Path(dst_dir, f'solution.{suffix}')
+    with filepath.open('w') as f:
+        f.write(content)
+    return filepath
+
+
+@app.route('/submit', methods=['POST'])
 def submit() -> Text:
-    return render_template('submit.html')
+    assert contest
+    data = request.get_json()
+    print(data)
+    filepath = save_solution(data["solution"], data["lang"])
+    if not filepath:
+        return 'Unable to upload solution'
+
+    task = contest.find_task(data['task'])
+    if not task:
+        return 'Task not found'
+
+    solution = task.load_solution_for_path(filepath)
+    if not solution:
+        return 'Invalid solution'
+
+    ocimatic_path = Path(Path(__file__).parents[1], 'bin', 'ocimatic').resolve()
+    cmd = ['python', ocimatic_path, 'run', '--task', task.name, filepath]
+
+    def stream():
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+        for line in proc.stdout:
+            yield ansi2html(line)
+
+    return Response(stream())
 
 
 def run(port: int = 9999) -> None:
