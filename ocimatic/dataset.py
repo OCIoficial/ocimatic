@@ -14,8 +14,7 @@ import ocimatic
 from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.runnable import Binary, Python3, Runnable
-from ocimatic.source_code import (CppSource, JavaSource, PythonSource,
-                                  SourceCode)
+from ocimatic.source_code import (CppSource, JavaSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
 
 IN = ".in"
