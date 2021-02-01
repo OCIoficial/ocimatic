@@ -2,9 +2,11 @@ import contextlib
 import os
 import shutil
 import subprocess
+import tempfile
 import time as pytime
+from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, NamedTuple, Optional, Union
+from typing import IO, Any, List, NamedTuple, Optional, Union
 
 SIGNALS = {
     1: 'SIGHUP',
@@ -51,18 +53,15 @@ class Result(NamedTuple):
     """
     success: bool
     time: float
-    err_msg: Optional[str]
-    stderr: str
+    err_msg: str = ''
+    stdout: str = ''
+    stderr: str = ''
 
 
-class Runnable:
+class Runnable(ABC):
     """An entity that may be executed redirecting stdin and stdout to specific
     files.
     """
-    @staticmethod
-    def is_callable(file_path: Union[Path, str]) -> bool:
-        return shutil.which(file_path) is not None
-
     def __init__(self, command: Union[Path, str], args: List[str] = None):
         """
         Args:
@@ -74,12 +73,16 @@ class Runnable:
         assert shutil.which(command)
         self._cmd = [command] + args
 
+    @abstractmethod
+    def cmd(self) -> List[str]:
+        raise NotImplementedError("Class %s doesn't implement cmd()" % (self.__class__.__name__))
+
     def __str__(self) -> str:
         return self._cmd[0]
 
     def run(self,
-            in_path: Optional[Path],
-            out_path: Optional[Path],
+            in_path: Path = None,
+            out_path: Path = None,
             args: List[str] = [],
             timeout: float = None) -> Result:
         """Run binary redirecting standard input and output.
@@ -92,21 +95,23 @@ class Runnable:
             args: Additional parameters
             timeout: Timeout for the process
         """
-        args = args or []
         assert in_path is None or in_path.exists()
         with contextlib.ExitStack() as stack:
             if not in_path:
                 in_path = Path(os.devnull)
             in_file = stack.enter_context(in_path.open('r'))
 
-            if not out_path:
-                out_path = Path(os.devnull)
-            out_file = stack.enter_context(out_path.open('w'))
+            if out_path:
+                out_file: IO[Any] = stack.enter_context(out_path.open('w+'))
+            else:
+                out_file = stack.enter_context(tempfile.TemporaryFile('w+'))
+
+            cmd = self.cmd()
+            cmd.extend(args)
 
             start = pytime.monotonic()
-            self._cmd.extend(args)
             try:
-                complete = subprocess.run(self._cmd,
+                complete = subprocess.run(cmd,
                                           timeout=timeout,
                                           stdin=in_file,
                                           stdout=out_file,
@@ -130,5 +135,39 @@ class Runnable:
                         msg += ': %s' % SIGNALS[sig]
                 else:
                     msg = 'Execution ended with error (return code %d)' % ret
-            return Result(success=status, time=time, err_msg=msg, stderr=complete.stderr)
+
+            out_file.seek(0)
+            return Result(success=status,
+                          time=time,
+                          err_msg=msg,
+                          stderr=complete.stderr,
+                          stdout=out_file.read())
         assert False
+
+
+class Binary(Runnable):
+    def __init__(self, path: Union[str, Path]):
+        self._path = path
+
+    def cmd(self) -> List[str]:
+        return [str(self._path)]
+
+    def is_callable(self) -> bool:
+        return shutil.which(self._path) is not None
+
+
+class JavaClasses(Runnable):
+    def __init__(self, classname: str, classes: Path):
+        self._classname = classname
+        self._classes = classes
+
+    def cmd(self) -> List[str]:
+        return ['java', '-cp', str(self._classes), self._classname]
+
+
+class Python3(Runnable):
+    def __init__(self, script: Path):
+        self._script = script
+
+    def cmd(self) -> List[str]:
+        return ['python3', str(self._script)]

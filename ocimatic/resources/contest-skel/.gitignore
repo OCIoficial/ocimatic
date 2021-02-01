@@ -32,6 +32,7 @@ auto
 TAGS
 *.bin
 *.class
+.build
 checker
 *fdb_latexmk
 *.md5

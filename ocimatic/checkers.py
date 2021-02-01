@@ -4,8 +4,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import NamedTuple
 
-from ocimatic.compilers import CppCompiler
-from ocimatic.runnable import SIGNALS
+from ocimatic.source_code import CppSource
 
 
 class CheckerResult(NamedTuple):
@@ -18,15 +17,14 @@ class Checker(ABC):
     """Check solutions
     """
     @abstractmethod
-    def __call__(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
-        raise NotImplementedError("Class %s doesn't implement __call__()" %
-                                  (self.__class__.__name__))
+    def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
+        raise NotImplementedError("Class %s doesn't implement run()" % (self.__class__.__name__))
 
 
 class DiffChecker(Checker):
     """White diff checker
     """
-    def __call__(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
+    def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
         """Performs a white diff between expected output and output files
         Parameters correspond to convention for checker in cms.
         Args:
@@ -57,11 +55,9 @@ class CppChecker(Checker):
         Args:
             source (FilePath)
         """
-        self._source = source
-        self._compiler = CppCompiler(['-I"%s"' % source.parent])
-        self._binary_path = Path(source.parent, 'checker')
+        self._source = CppSource(source, include=source.parent, out=Path(source.parent, 'checker'))
 
-    def __call__(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
+    def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
         """Run checker to evaluate outcome. Parameters correspond to convention
         for checker in cms.
         Args:
@@ -72,46 +68,22 @@ class CppChecker(Checker):
         assert in_path.exists()
         assert expected_path.exists()
         assert out_path.exists()
-        if self._binary_path.stat().st_mtime < self._source.stat().st_mtime:
-            if not self.build():
-                return CheckerResult(success=False, outcome=0.0, msg="Failed to build checker")
-        complete = subprocess.run(
-            [str(self._binary_path),
-             str(in_path), str(expected_path),
-             str(out_path)],
-            universal_newlines=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False)
-        ret = complete.returncode
-        st = ret == 0
-        if st:
+        runnable = self._source.build()
+        if runnable is None:
+            return CheckerResult(success=False, outcome=0.0, msg="Failed to build checker")
+        result = runnable.run(args=[str(in_path), str(expected_path), str(out_path)])
+        success = result.success
+        if success:
             try:
-                outcome = float(complete.stdout)
-                msg = complete.stderr
+                outcome = float(result.stdout)
+                msg = result.stderr
             except ValueError:
                 outcome = 0.0
                 msg = 'Output must be a valid float'
-                st = False
+                success = False
         else:
-            stderr = complete.stderr.strip('\n')
+            stderr = result.stderr.strip('\n')
+            msg = result.err_msg
             outcome = 0.0
-            if stderr and len(stderr) < 75:
-                msg = stderr
-            else:
-                if ret < 0:
-                    sig = -ret
-                    msg = 'Execution killed with signal %d' % sig
-                    if sig in SIGNALS:
-                        msg += ': %s' % SIGNALS[sig]
-                else:
-                    msg = 'Execution ended with error (return code %d)' % ret
 
-        return CheckerResult(success=st, outcome=outcome, msg=msg)
-
-    def build(self) -> bool:
-        """Build source of the checker
-        Returns:
-            bool: True if compilation is successful. False otherwise
-        """
-        return self._compiler(self._source, self._binary_path)
+        return CheckerResult(success=success, outcome=outcome, msg=msg)

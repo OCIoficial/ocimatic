@@ -1,5 +1,4 @@
 # coding=UTF-8
-import fnmatch
 import json
 import os
 import re
@@ -12,9 +11,9 @@ from typing import Iterable, List, Optional, Tuple, TypedDict
 import ocimatic
 from ocimatic import pjson, ui
 from ocimatic.checkers import Checker, CppChecker, DiffChecker
-from ocimatic.compilers import LatexCompiler
 from ocimatic.dataset import Dataset, DatasetPlan, Test
-from ocimatic.solutions import CppSolution, Solution
+from ocimatic.solutions import Solution
+from ocimatic.source_code import CppSource, LatexSource
 
 
 class ContestConfig(TypedDict, total=False):
@@ -51,8 +50,7 @@ class Contest:
         if 'phase' in self._config:
             os.environ['OCIMATIC_PHASE'] = self._config['phase']
 
-        self._titlepage = Path(directory, 'titlepage.tex')
-        self._compiler = LatexCompiler()
+        self._titlepage = LatexSource(Path(directory, 'titlepage.tex'))
 
     def _init_tasks(self) -> None:
         n = len(self._config['tasks'])
@@ -136,8 +134,8 @@ class Contest:
     @ui.work('PDF', 'titlepage.tex')
     def compile_titlepage(self) -> ui.WorkResult:
         """Compile title page latex"""
-        st = self._compiler(self._titlepage)
-        return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
+        success = self._titlepage.compile() is not None
+        return ui.WorkResult(success=success, short_msg='OK' if success else 'FAILED')
 
     @ui.work('MERGE', '{1}')
     def merge_pdfs(self, filename: str) -> ui.WorkResult:
@@ -364,7 +362,7 @@ class Task:
                     generator = sol
                     break
         else:
-            cpp = [sol for sol in self._correct if isinstance(sol, CppSolution)]
+            cpp = [sol for sol in self._correct if isinstance(sol.source, CppSource)]
             if cpp:
                 generator = cpp[0]
         if not generator:
@@ -382,9 +380,7 @@ class Statement:
     """
     def __init__(self, directory: Path, num: Optional[int] = None, codename: Optional[str] = None):
         assert Path(directory, 'statement.tex').exists()
-        self._source = Path(directory, 'statement.tex')
-        self._pdf = self._source.with_suffix('.pdf')
-        self._compiler = LatexCompiler()
+        self._source = LatexSource(Path(directory, 'statement.tex'))
         self._directory = directory
         self._num = num
         self._codename = codename
@@ -392,11 +388,7 @@ class Statement:
     @property
     def pdf(self) -> Optional[Path]:
         """Return path to pdf file and compiling it if necessary."""
-        if self._pdf.stat().st_mtime < self._source.stat().st_mtime:
-            result = self.build()
-            if not result.success:
-                return None
-        return self._pdf
+        return self._source.compile()
 
     def __str__(self) -> str:
         return str(self._source)
@@ -410,13 +402,15 @@ class Statement:
             os.environ['OCIMATIC_CODENAME'] = self._codename
         if blank_page:
             os.environ['OCIMATIC_BLANK_PAGE'] = 'True'
-        st = self._compiler(self._source)
-        return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
+
+        success = self._source.compile() is not None
+
+        return ui.WorkResult(success=success, short_msg='OK' if success else 'FAILED')
 
     def io_samples(self) -> List[Test]:
         """Find sample input data in the satement"""
         samples = set()
-        for line in self._iter_file():
+        for line in self._source.iter_lines():
             m = re.match(r'[^%]*\\sampleIO(?:\*)?(\[[^\]]*\]){0,2}{([^}]+)}', line)
             if m:
                 samples.add(m.group(2))
@@ -428,7 +422,7 @@ class Statement:
     def scores(self) -> List[int]:
         """Finds the scores for the subtasks"""
         scores = []
-        for line in self._iter_file():
+        for line in self._source.iter_lines():
             m = re.match(r'[^%]*\\subtask{([^}]+)}', line)
             if m:
                 scores.append(int(m.group(1)))
@@ -438,8 +432,3 @@ class Statement:
             scores = [100]
 
         return scores
-
-    def _iter_file(self) -> Iterable[str]:
-        latex_file = self._source.open('r')
-        yield from latex_file
-        latex_file.close()
