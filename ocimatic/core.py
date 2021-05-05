@@ -41,6 +41,7 @@ class Contest:
     tasks and a titlepage. A contest is associated to a directory in the
     filesystem.
     """
+
     def __init__(self, directory: Path):
         self._directory = directory
         self._config = pjson.load(Path(directory, '.ocimatic_contest'))
@@ -53,8 +54,9 @@ class Contest:
         self._titlepage = LatexSource(Path(directory, 'titlepage.tex'))
 
     def _init_tasks(self) -> None:
-        n = len(self._config['tasks'])
-        order = {t: i for i, t in enumerate(self._config['tasks'])}
+        tasks = self._config.get('tasks', [])
+        n = len(tasks)
+        order = {t: i for i, t in enumerate(tasks)}
         dirs = sorted((order.get(dir.name, n), dir) for dir in self._directory.iterdir()
                       if Path(dir, '.ocimatic_task').exists())
         self._tasks = [Task(d, i) for (i, (_, d)) in enumerate(dirs)]
@@ -378,6 +380,7 @@ class Statement:
     """Represents a statement. A statement is composed by a latex source and a pdf
     file.
     """
+
     def __init__(self, directory: Path, num: Optional[int] = None, codename: Optional[str] = None):
         assert Path(directory, 'statement.tex').exists()
         self._source = LatexSource(Path(directory, 'statement.tex'))

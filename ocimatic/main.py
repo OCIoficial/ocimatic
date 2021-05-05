@@ -39,7 +39,7 @@ def new_task(args: argparse.Namespace) -> None:
         core.Contest(contest_dir).new_task(args.name)
         ui.show_message('Info', f'Task [{args.name}] created')
     except Exception as exc:  # pylint: disable=broad-except
-        ui.fatal_error('Couldn\'t create task: %s' % exc)
+        ui.fatal_error("Couldn\'t create task: {exc}")
 
 
 TASK_COMMAND = {
@@ -140,8 +140,7 @@ def main() -> None:
 
     run_parser = subcommands.add_parser(
         "run",
-        help=
-        "Run solutions against all test data and displays the output of the checker and running time.",
+        help="Run solutions against all test data and displays the output of the checker and running time.",
         parents=[task_parent])
     run_parser.add_argument("solution", help="A path to a solution", type=Path)
 
