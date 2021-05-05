@@ -39,7 +39,8 @@ def new_task(args: argparse.Namespace) -> None:
         core.Contest(contest_dir).new_task(args.name)
         ui.show_message('Info', f'Task [{args.name}] created')
     except Exception as exc:  # pylint: disable=broad-except
-        ui.fatal_error("Couldn\'t create task: {exc}")
+        raise exc
+        # ui.fatal_error(r"Couldn't create task: {exc}")
 
 
 TASK_COMMAND = {

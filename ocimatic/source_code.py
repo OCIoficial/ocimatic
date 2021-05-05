@@ -111,11 +111,23 @@ class LatexSource:
         yield from self._source.open()
 
     def compile(self) -> Optional[Path]:
-        cmd = ['pdflatex', '--shell-escape', '-interaciton=batchmode', str(self._source)]
+        name = self._source.name
+        parent = self._source.parent
+        cmd = f"cd {parent} && pdflatex --shell-escape -interaciton=batchmode {name}"
         complete = subprocess.run(cmd,
+                                  shell=True,
+                                  stdin=subprocess.DEVNULL,
                                   stdout=subprocess.DEVNULL,
                                   stderr=subprocess.DEVNULL,
                                   check=False)
         if complete.returncode != 0:
             return None
         return self._source.with_suffix('.pdf')
+
+    @property
+    def pdf(self) -> Optional[Path]:
+        pdf = self._source.with_suffix('.pdf')
+        return pdf if pdf.exists() else None
+
+    def __str__(self) -> str:
+        return str(self._source)

@@ -390,8 +390,8 @@ class Statement:
 
     @property
     def pdf(self) -> Optional[Path]:
-        """Return path to pdf file and compiling it if necessary."""
-        return self._source.compile()
+        """Return path to pdf if exists."""
+        return self._source.pdf
 
     def __str__(self) -> str:
         return str(self._source)
