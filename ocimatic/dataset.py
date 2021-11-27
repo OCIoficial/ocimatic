@@ -23,7 +23,6 @@ SOL = ".sol"
 
 class Dataset:
     """Test data"""
-
     def __init__(self, directory: Path, sampledata: List['Test']):
         self._directory = directory
         if directory.exists():
@@ -139,7 +138,6 @@ class Subtask(TestGroup):
 
 class Test:
     """A single test file. Expected output file may not exist"""
-
     def __init__(self, in_path: Path, expected_path: Path):
         assert in_path.exists()
         self._in_path = in_path
@@ -221,7 +219,6 @@ class Test:
 # FIXME: Refactor class. This should allow to re-enable some pylint checks
 class DatasetPlan:
     """Functionality to read and run a plan for generating dataset."""
-
     def __init__(self,
                  directory: Path,
                  task_directory: Path,

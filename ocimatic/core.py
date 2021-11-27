@@ -41,7 +41,6 @@ class Contest:
     tasks and a titlepage. A contest is associated to a directory in the
     filesystem.
     """
-
     def __init__(self, directory: Path):
         self._directory = directory
         self._config = pjson.load(Path(directory, '.ocimatic_contest'))
@@ -380,7 +379,6 @@ class Statement:
     """Represents a statement. A statement is composed by a latex source and a pdf
     file.
     """
-
     def __init__(self, directory: Path, num: Optional[int] = None, codename: Optional[str] = None):
         assert Path(directory, 'statement.tex').exists()
         self._source = LatexSource(Path(directory, 'statement.tex'))

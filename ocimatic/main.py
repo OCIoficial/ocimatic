@@ -141,7 +141,8 @@ def main() -> None:
 
     run_parser = subcommands.add_parser(
         "run",
-        help="Run solutions against all test data and displays the output of the checker and running time.",
+        help=
+        "Run solutions against all test data and displays the output of the checker and running time.",
         parents=[task_parent])
     run_parser.add_argument("solution", help="A path to a solution", type=Path)
 
