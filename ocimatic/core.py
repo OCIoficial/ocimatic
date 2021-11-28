@@ -11,9 +11,10 @@ from typing import Iterable, List, Optional, Tuple, TypedDict
 import ocimatic
 from ocimatic import pjson, ui
 from ocimatic.checkers import Checker, CppChecker, DiffChecker
-from ocimatic.dataset import Dataset, Testplan, Test
+from ocimatic.dataset import Dataset, Test
 from ocimatic.solutions import Solution
 from ocimatic.source_code import CppSource, LatexSource
+from ocimatic.testplan import Testplan
 
 
 class ContestConfig(TypedDict, total=False):

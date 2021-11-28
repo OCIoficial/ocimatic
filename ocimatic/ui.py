@@ -1,8 +1,8 @@
 import re
 import sys
 from contextlib import contextmanager
-from typing import (Any, Callable, Iterable, Iterator, List, NamedTuple, Optional, TextIO, TypeVar,
-                    Union, cast)
+from typing import (Any, Callable, Iterable, Iterator, List, NamedTuple, NoReturn, Optional, TextIO,
+                    TypeVar, cast)
 
 from colorama import Fore, Style
 
@@ -169,7 +169,7 @@ def end_work(result: WorkResult) -> None:
     flush()
 
 
-def fatal_error(message: str) -> None:
+def fatal_error(message: str) -> NoReturn:
     writeln(colorize('ocimatic: ' + message, INFO + RED))
     writeln()
     sys.exit(1)

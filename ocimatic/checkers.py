@@ -3,8 +3,8 @@ import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import NamedTuple
-from ocimatic.runnable import RunSuccess
 
+from ocimatic.runnable import RunSuccess
 from ocimatic.source_code import BuildError, CppSource
 
 
