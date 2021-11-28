@@ -13,8 +13,8 @@ from zipfile import ZipFile
 import ocimatic
 from ocimatic import ui
 from ocimatic.checkers import Checker
-from ocimatic.runnable import Binary, Python3, RunError, RunSuccess, Runnable
-from ocimatic.source_code import (BuildError, CppSource, JavaSource, PythonSource, SourceCode)
+from ocimatic.runnable import Python3, RunError, Runnable, RunSuccess
+from ocimatic.source_code import (BuildError, CppSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
 
 IN = ".in"
@@ -219,7 +219,7 @@ class Test:
 
 
 # FIXME: Refactor class. This should allow to re-enable some pylint checks
-class DatasetPlan:
+class Testplan:
     """Functionality to read and run a plan for generating dataset."""
     def __init__(self,
                  directory: Path,
@@ -312,22 +312,12 @@ class DatasetPlan:
                     self.copy(test['file'], test_file)
                 elif cmd == 'echo':
                     self.echo(test['args'], test_file)
-                else:
+                elif cmd == 'run':
                     args = test['args']
                     args.insert(0, '%s-%s-%s' % (stn, group, i))
-                    source = Path(self._directory, test['source'])
-                    if cmd == 'cpp':
-                        self.run_source_code_generator(CppSource(source), args, test_file)
-                    elif cmd in 'py':
-                        self.run_source_code_generator(PythonSource(source), args, test_file)
-                    elif cmd == 'java':
-                        self.run_source_code_generator(JavaSource(source.stem, source), args,
-                                                       test_file)
-                    elif cmd == 'run':
-                        bin_path = Path(self._directory, test['bin'])
-                        self.run_bin_generator(bin_path, args, test_file)
-                    else:
-                        ui.fatal_error('unexpected command when running plan: %s ' % cmd)
+                    test['gen'].run(args, test_file)
+                else:
+                    ui.fatal_error('unexpected command when running plan: %s ' % cmd)
 
     @ui.work('Copy', '{1}')
     def copy(self, src: str, dst: Path) -> WorkResult:
@@ -346,35 +336,6 @@ class DatasetPlan:
         with dst.open('w') as test_file:
             test_file.write(' '.join(args) + '\n')
             return WorkResult(success=True, short_msg='Ok')
-
-    @ui.work('Gen', '{1}')
-    def run_source_code_generator(self, source: SourceCode, args: List[str],
-                                  dst: Path) -> WorkResult:
-        build_result = source.build()
-        if isinstance(build_result, BuildError):
-            return WorkResult(success=False,
-                              short_msg='Failed to build generator',
-                              long_msg=build_result.msg)
-        result = build_result.run(out_path=dst, args=args)
-        if isinstance(result, RunSuccess):
-            return WorkResult(success=True, short_msg='OK')
-        else:
-            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
-
-    @ui.work('Gen', '{1}')
-    def run_bin_generator(self, bin_path: Path, args: List[str], dst: Path) -> WorkResult:
-        if not bin_path.exists():
-            return WorkResult(success=False, short_msg='No such file')
-
-        bin = Binary(bin_path)
-        if not bin.is_callable():
-            return WorkResult(success=False,
-                              short_msg='Cannot run file, it may not have correct permissions')
-        result = bin.run(None, dst, args)
-        if isinstance(result, RunSuccess):
-            return WorkResult(success=True, short_msg='OK')
-        else:
-            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
 
     def parse_file(self) -> Tuple[int, Dict[int, Any]]:
         """
@@ -423,22 +384,58 @@ class DatasetPlan:
                     elif cmd == 'echo':
                         cmds[st]['groups'][group].append({'cmd': 'echo', 'args': args})
                     else:
-                        f = Path(self._directory, cmd)
-                        if f.suffix in ['.cpp', '.java', '.py']:
+                        generator = TestGenerator.from_path(Path(self._directory, cmd))
+                        if generator is not None:
                             cmds[st]['groups'][group].append({
-                                'cmd': f.suffix[1:],
-                                'source': cmd,
+                                'cmd': 'run',
+                                'gen': generator,
                                 'args': args
                             })
                         else:
-                            cmds[st]['groups'][group].append({
-                                'cmd': 'run',
-                                'bin': cmd,
-                                'args': args
-                            })
+                            _invalid_command(cmd, lineno)
                 else:
                     ui.fatal_error('line %d: error while parsing line `%s`\n' % (lineno, line))
         return (st, cmds)
+
+
+class TestGenerator:
+    VALID_EXTENSIONS: List[str] = ['py', 'cpp']
+
+    def __init__(self, script: SourceCode):
+        self._script = script
+
+    @staticmethod
+    def from_path(path: Path) -> Optional['TestGenerator']:
+        ext = path.suffix
+        if ext == '.cpp':
+            return TestGenerator(CppSource(path))
+        elif ext == '.py':
+            return TestGenerator(PythonSource(path))
+        else:
+            return None
+
+    def __str__(self) -> str:
+        return str(self._script)
+
+    @ui.work('Gen', '{0}')
+    def run(self, args: List[str], dst: Path) -> WorkResult:
+        build_result = self._script.build()
+        if isinstance(build_result, BuildError):
+            return WorkResult(success=False,
+                              short_msg='Failed to build generator',
+                              long_msg=build_result.msg)
+        result = build_result.run(out_path=dst, args=args)
+        if isinstance(result, RunSuccess):
+            return WorkResult(success=True, short_msg='OK')
+        else:
+            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
+
+
+def _invalid_command(cmd: str, lineno: int) -> None:
+    ui.fatal_error(
+        f"line {lineno}: invalid command `{cmd}`\n"
+        f"The command should be either `copy`, `echo` or a generator with one of the following extensions `{TestGenerator.VALID_EXTENSIONS}`"
+    )
 
 
 def _parse_args(args: str) -> List[str]:

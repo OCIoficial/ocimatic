@@ -11,7 +11,7 @@ from typing import Iterable, List, Optional, Tuple, TypedDict
 import ocimatic
 from ocimatic import pjson, ui
 from ocimatic.checkers import Checker, CppChecker, DiffChecker
-from ocimatic.dataset import Dataset, DatasetPlan, Test
+from ocimatic.dataset import Dataset, Testplan, Test
 from ocimatic.solutions import Solution
 from ocimatic.source_code import CppSource, LatexSource
 
@@ -234,8 +234,8 @@ class Task:
     def gen_input(self, subtask: Optional[int]) -> None:
         if self._config.get("static_dataset", False):
             ui.fatal_error("Task has a static dataset.")
-        testplan = DatasetPlan(Path(self._directory, 'attic'), self._directory,
-                               Path(self._directory, 'dataset'))
+        testplan = Testplan(Path(self._directory, 'attic'), self._directory,
+                            Path(self._directory, 'dataset'))
         testplan.run(subtask)
 
     def load_solution_for_path(self, path: Path) -> Optional[Solution]:
@@ -267,8 +267,8 @@ class Task:
 
     @ui.task('Validating dataset input files')
     def validate_input(self, subtask: Optional[int]) -> None:
-        testplan = DatasetPlan(Path(self._directory, 'attic'), self._directory,
-                               Path(self._directory, 'dataset'))
+        testplan = Testplan(Path(self._directory, 'attic'), self._directory,
+                            Path(self._directory, 'dataset'))
         testplan.validate_input(subtask)
 
     @ui.work('ZIP')

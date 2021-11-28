@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 import contextlib
 import os
 import shutil
@@ -6,8 +5,9 @@ import subprocess
 import tempfile
 import time as pytime
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Any, List, NamedTuple, Union
+from typing import IO, Any, List, Union
 
 SIGNALS = {
     1: 'SIGHUP',

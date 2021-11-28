@@ -1,10 +1,10 @@
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional
 
 from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset
-from ocimatic.source_code import BuildError, CppSource, JavaSource, PythonSource, SourceCode
+from ocimatic.source_code import (BuildError, CppSource, JavaSource, PythonSource, SourceCode)
 
 
 class Solution:

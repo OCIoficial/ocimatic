@@ -1,6 +1,6 @@
 import subprocess
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
 
@@ -13,25 +13,17 @@ class BuildError:
 
 
 class SourceCode(ABC):
-    def __init__(self, source: Path, extra_sources: List[Path]):
-        self._source = source
-        self._extra_sources = extra_sources
-
-    @property
-    def sources(self) -> List[Path]:
-        sources = [self._source]
-        sources.extend(self._extra_sources)
-        return sources
-
-    @property
-    def name(self) -> str:
-        return str(self._source)
+    def __init__(self, name: str):
+        self.name = name
 
     def __str__(self) -> str:
-        return str(self._source)
+        return self.name
 
-    def mtime(self) -> float:
-        return max(s.stat().st_mtime for s in self.sources)
+    @staticmethod
+    def should_build(sources: List[Path], out: Path) -> bool:
+        mtime = max(s.stat().st_mtime for s in sources)
+        btime = out.stat().st_mtime if out.exists() else float("-inf")
+        return btime < mtime
 
     @abstractmethod
     def build(self, force: bool = False) -> Union[Runnable, BuildError]:
@@ -44,26 +36,21 @@ class CppSource(SourceCode):
                  extra_sources: List[Path] = [],
                  include: Path = None,
                  out: Path = None):
-        super().__init__(source, extra_sources)
+        super().__init__(str(source))
+        self._sources = [source] + extra_sources
         self._include = include
         self._out = out or Path(source.parent, '.build', source.stem)
-
-    def build_time(self) -> float:
-        if self._out.exists():
-            return self._out.stat().st_mtime
-        else:
-            return float("-inf")
 
     def build_cmd(self) -> List[str]:
         cmd = ['g++', '-std=c++11', '-O2', '-o', str(self._out)]
         if self._include:
             cmd.extend(['-I', str(self._include)])
-        cmd.extend(str(s) for s in self.sources)
+        cmd.extend(str(s) for s in self._sources)
         return cmd
 
     def build(self, force: bool = False) -> Union[Binary, BuildError]:
         self._out.parent.mkdir(parents=True, exist_ok=True)
-        if force or self.build_time() < self.mtime():
+        if force or CppSource.should_build(self._sources, self._out):
             cmd = self.build_cmd()
             complete = subprocess.run(cmd,
                                       stdout=subprocess.DEVNULL,
@@ -77,23 +64,16 @@ class CppSource(SourceCode):
 
 class JavaSource(SourceCode):
     def __init__(self, classname: str, source: Path, out: Path = None):
-        super().__init__(source, [])
+        super().__init__(str(source))
         self._classname = classname
+        self._source = source
         self._out = out or Path(source.parent, '.build', f"{source.stem}.classes")
 
-    def build_time(self) -> float:
-        if self._out.exists():
-            return self._out.stat().st_mtime
-        else:
-            return float("-inf")
-
     def build_cmd(self) -> List[str]:
-        cmd = ['javac', '-d', str(self._out)]
-        cmd.extend(str(s) for s in self.sources)
-        return cmd
+        return ['javac', '-d', str(self._out), str(self._source)]
 
     def build(self, force: bool = False) -> Union[JavaClasses, BuildError]:
-        if force or self.build_time() < self.mtime():
+        if force or JavaSource.should_build([self._source], self._out):
             self._out.mkdir(parents=True, exist_ok=True)
             cmd = self.build_cmd()
             complete = subprocess.run(cmd,
@@ -108,7 +88,8 @@ class JavaSource(SourceCode):
 
 class PythonSource(SourceCode):
     def __init__(self, source: Path):
-        super().__init__(source, [])
+        super().__init__(str(source))
+        self._source = source
 
     def build(self, _force: bool = False) -> Python3:
         return Python3(self._source)
