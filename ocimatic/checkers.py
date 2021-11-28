@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import NamedTuple
 
-from ocimatic.source_code import CppSource
+from ocimatic.source_code import BuildError, CppSource
 
 
 class CheckerResult(NamedTuple):
@@ -68,10 +68,10 @@ class CppChecker(Checker):
         assert in_path.exists()
         assert expected_path.exists()
         assert out_path.exists()
-        runnable = self._source.build()
-        if runnable is None:
+        build_result = self._source.build()
+        if isinstance(build_result, BuildError):
             return CheckerResult(success=False, outcome=0.0, msg="Failed to build checker")
-        result = runnable.run(args=[str(in_path), str(expected_path), str(out_path)])
+        result = build_result.run(args=[str(in_path), str(expected_path), str(out_path)])
         success = result.success
         if success:
             try:

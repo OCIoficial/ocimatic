@@ -1,9 +1,15 @@
 import subprocess
+from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
 
 from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
+
+
+@dataclass
+class BuildError:
+    msg: str
 
 
 class SourceCode(ABC):
@@ -21,11 +27,14 @@ class SourceCode(ABC):
     def name(self) -> str:
         return str(self._source)
 
+    def __str__(self) -> str:
+        return str(self._source)
+
     def mtime(self) -> float:
         return max(s.stat().st_mtime for s in self.sources)
 
     @abstractmethod
-    def build(self, force: bool = False) -> Optional[Runnable]:
+    def build(self, force: bool = False) -> Union[Runnable, BuildError]:
         raise NotImplementedError("Class %s doesn't implement build()" % (self.__class__.__name__))
 
 
@@ -52,16 +61,17 @@ class CppSource(SourceCode):
         cmd.extend(str(s) for s in self.sources)
         return cmd
 
-    def build(self, force: bool = False) -> Optional[Binary]:
+    def build(self, force: bool = False) -> Union[Binary, BuildError]:
         self._out.parent.mkdir(parents=True, exist_ok=True)
         if force or self.build_time() < self.mtime():
             cmd = self.build_cmd()
             complete = subprocess.run(cmd,
                                       stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL,
+                                      stderr=subprocess.PIPE,
+                                      text=True,
                                       check=False)
             if complete.returncode != 0:
-                return None
+                return BuildError(msg=complete.stderr)
         return Binary(self._out)
 
 
@@ -82,16 +92,17 @@ class JavaSource(SourceCode):
         cmd.extend(str(s) for s in self.sources)
         return cmd
 
-    def build(self, force: bool = False) -> Optional[JavaClasses]:
+    def build(self, force: bool = False) -> Union[JavaClasses, BuildError]:
         if force or self.build_time() < self.mtime():
             self._out.mkdir(parents=True, exist_ok=True)
             cmd = self.build_cmd()
             complete = subprocess.run(cmd,
                                       stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL,
+                                      stderr=subprocess.PIPE,
+                                      text=True,
                                       check=False)
             if complete.returncode != 0:
-                return None
+                return BuildError(msg=complete.stderr)
         return JavaClasses(self._classname, self._out)
 
 

@@ -14,7 +14,7 @@ import ocimatic
 from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.runnable import Binary, Python3, Runnable
-from ocimatic.source_code import (CppSource, JavaSource, PythonSource, SourceCode)
+from ocimatic.source_code import (BuildError, CppSource, JavaSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
 
 IN = ".in"
@@ -268,10 +268,10 @@ class DatasetPlan:
         if not fp.exists():
             return (None, 'File does not exists.')
         if fp.suffix == '.cpp':
-            binary = CppSource(fp).build()
-            if binary is None:
+            build_result = CppSource(fp).build()
+            if isinstance(build_result, BuildError):
                 return (None, 'Failed to build validator.')
-            return (binary, 'OK')
+            return (build_result, 'OK')
         if fp.suffix == '.py':
             return (Python3(fp), 'OK')
         return (None, 'Not supported source file.')
@@ -345,11 +345,13 @@ class DatasetPlan:
     @ui.work('Gen', '{1}')
     def run_source_code_generator(self, source: SourceCode, args: List[str],
                                   dst: Path) -> WorkResult:
-        runnable = source.build()
-        if runnable is None:
-            return WorkResult(success=False, short_msg='Failed to build generator')
-        result = runnable.run(out_path=dst, args=args)
-        return WorkResult(success=result.success, short_msg=result.err_msg)
+        build_result = source.build()
+        if isinstance(build_result, BuildError):
+            return WorkResult(success=False,
+                              short_msg='Failed to build generator',
+                              long_msg=build_result.msg)
+        result = build_result.run(out_path=dst, args=args)
+        return WorkResult(success=result.success, short_msg=result.err_msg, long_msg=result.stderr)
 
     @ui.work('Gen', '{1}')
     def run_bin_generator(self, bin_path: Path, args: List[str], dst: Path) -> WorkResult:

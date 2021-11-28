@@ -34,7 +34,7 @@ def decolorize(text: str) -> str:
     return re.sub(r'\033\[[0-9]+m', '', text)
 
 
-IO = Union[TextIO]
+IO = TextIO
 IO_STREAMS: List[Optional[IO]] = [sys.stdout]
 
 

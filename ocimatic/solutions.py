@@ -4,7 +4,7 @@ from typing import Iterable, List, Optional, Tuple
 from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset
-from ocimatic.source_code import CppSource, JavaSource, SourceCode
+from ocimatic.source_code import BuildError, CppSource, JavaSource, SourceCode
 
 
 class Solution:
@@ -47,21 +47,23 @@ class Solution:
             check: bool = False,
             sample: bool = False) -> Iterable[ui.WorkResult]:
         """Run this solution for all test cases in the given dataset."""
-        runnable = self._source.build()
-        success = runnable is not None
-        yield ui.WorkResult(success=success, short_msg="OK" if success else "Failed")
-        if runnable:
-            dataset.run(runnable, checker, sample=sample, check=check)
+        build_result = self._source.build()
+        if isinstance(build_result, BuildError):
+            yield ui.WorkResult(success=False, short_msg="Failed", long_msg=build_result.msg)
+        else:
+            yield ui.WorkResult(success=True, short_msg="OK")
+            dataset.run(build_result, checker, sample=sample, check=check)
 
     @ui.solution_group()
     def gen_expected(self, dataset: Dataset, sample: bool = False) -> Iterable[ui.WorkResult]:
         """Generate expected output files for all test cases in the given dataset
         running this solution."""
-        runnable = self._source.build()
-        success = runnable is not None
-        yield ui.WorkResult(success=success, short_msg="OK" if success else "Failed")
-        if runnable is not None:
-            dataset.gen_expected(runnable, sample=sample)
+        build_result = self._source.build()
+        if isinstance(build_result, BuildError):
+            yield ui.WorkResult(success=False, short_msg="Failed", long_msg=build_result.msg)
+        else:
+            yield ui.WorkResult(success=True, short_msg="OK")
+            dataset.gen_expected(build_result, sample=sample)
 
     @ui.work('Build')
     def build(self) -> ui.WorkResult:

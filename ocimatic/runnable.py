@@ -6,7 +6,7 @@ import tempfile
 import time as pytime
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import IO, Any, List, NamedTuple, Optional, Union
+from typing import IO, Any, List, NamedTuple, Union
 
 SIGNALS = {
     1: 'SIGHUP',
