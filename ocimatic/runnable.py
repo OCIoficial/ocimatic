@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import contextlib
 import os
 import shutil
@@ -43,19 +44,19 @@ SIGNALS = {
 }
 
 
-class Result(NamedTuple):
-    """
-    Result of running
-    success: True if the execution terminates with exit code zero or False otherwise.
-    time: execution time.
-    err_msg: if success is False err_msg contains a message describing the error.
-    stderr: Captured standard error.
-    """
-    success: bool
+@dataclass
+class RunSuccess:
     time: float
-    err_msg: str = ''
-    stdout: str = ''
-    stderr: str = ''
+    stdout: str
+
+
+@dataclass
+class RunError:
+    msg: str
+    stderr: str
+
+
+RunResult = Union[RunSuccess, RunError]
 
 
 class Runnable(ABC):
@@ -84,7 +85,7 @@ class Runnable(ABC):
             in_path: Path = None,
             out_path: Path = None,
             args: List[str] = [],
-            timeout: float = None) -> Result:
+            timeout: float = None) -> RunResult:
         """Run binary redirecting standard input and output.
 
         Args:
@@ -119,14 +120,10 @@ class Runnable(ABC):
                                           stderr=subprocess.PIPE,
                                           check=False)
             except subprocess.TimeoutExpired:
-                return Result(success=False,
-                              time=pytime.monotonic() - start,
-                              err_msg='Execution timed out',
-                              stderr='')
+                return RunError(msg='Execution timed out', stderr='')
             time = pytime.monotonic() - start
             ret = complete.returncode
             status = ret == 0
-            msg = 'OK'
             if not status:
                 if ret < 0:
                     sig = -ret
@@ -135,13 +132,10 @@ class Runnable(ABC):
                         msg += ': %s' % SIGNALS[sig]
                 else:
                     msg = 'Execution ended with error (return code %d)' % ret
+                return RunError(msg=msg, stderr=complete.stderr)
 
             out_file.seek(0)
-            return Result(success=status,
-                          time=time,
-                          err_msg=msg,
-                          stderr=complete.stderr,
-                          stdout=out_file.read())
+            return RunSuccess(time=time, stdout=out_file.read())
         assert False
 
 

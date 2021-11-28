@@ -13,7 +13,7 @@ from zipfile import ZipFile
 import ocimatic
 from ocimatic import ui
 from ocimatic.checkers import Checker
-from ocimatic.runnable import Binary, Python3, Runnable
+from ocimatic.runnable import Binary, Python3, RunError, RunSuccess, Runnable
 from ocimatic.source_code import (BuildError, CppSource, JavaSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
 
@@ -156,8 +156,10 @@ class Test:
         """Run binary with this test as input to generate expected output file
         """
         result = runnable.run(self.in_path, self.expected_path, timeout=ocimatic.config['timeout'])
-        msg = 'OK' if result.success else result.err_msg
-        return WorkResult(success=result.success, short_msg=msg, long_msg=result.stderr)
+        if isinstance(result, RunSuccess):
+            return WorkResult(success=True, short_msg='OK')
+        else:
+            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
 
     @ui.work('Run')
     def run(self, runnable: Runnable, checker: Checker, check: bool = False) -> WorkResult:
@@ -170,8 +172,8 @@ class Test:
         result = runnable.run(self.in_path, out_path, timeout=ocimatic.config['timeout'])
 
         # Execution failed
-        if not result.success:
-            return WorkResult(success=False, short_msg=result.err_msg, long_msg=result.stderr)
+        if isinstance(result, RunError):
+            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
 
         (st, outcome, checkmsg) = checker.run(self.in_path, self.expected_path, out_path)
         # Checker failed
@@ -187,7 +189,7 @@ class Test:
         msg = '%s [%.2fs]' % (outcome, result.time)
         if checkmsg:
             msg += ' - %s' % checkmsg
-        return WorkResult(success=st, short_msg=msg, long_msg=result.stderr)
+        return WorkResult(success=st, short_msg=msg)
 
     @property
     def in_path(self) -> Path:
@@ -261,7 +263,10 @@ class DatasetPlan:
         if not test_file.exists():
             return WorkResult(success=False, short_msg='Test file does not exist')
         result = validator.run(test_file, None)
-        return WorkResult(success=result.success, short_msg=result.err_msg)
+        if isinstance(result, RunSuccess):
+            return WorkResult(success=True, short_msg='OK')
+        else:
+            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
 
     def build_validator(self, source: str) -> Tuple[Optional[Runnable], str]:
         fp = Path(self._directory, source)
@@ -351,7 +356,10 @@ class DatasetPlan:
                               short_msg='Failed to build generator',
                               long_msg=build_result.msg)
         result = build_result.run(out_path=dst, args=args)
-        return WorkResult(success=result.success, short_msg=result.err_msg, long_msg=result.stderr)
+        if isinstance(result, RunSuccess):
+            return WorkResult(success=True, short_msg='OK')
+        else:
+            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
 
     @ui.work('Gen', '{1}')
     def run_bin_generator(self, bin_path: Path, args: List[str], dst: Path) -> WorkResult:
@@ -363,7 +371,10 @@ class DatasetPlan:
             return WorkResult(success=False,
                               short_msg='Cannot run file, it may not have correct permissions')
         result = bin.run(None, dst, args)
-        return WorkResult(success=result.success, short_msg=result.err_msg, long_msg=result.stderr)
+        if isinstance(result, RunSuccess):
+            return WorkResult(success=True, short_msg='OK')
+        else:
+            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
 
     def parse_file(self) -> Tuple[int, Dict[int, Any]]:
         """

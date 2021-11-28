@@ -3,6 +3,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import NamedTuple
+from ocimatic.runnable import RunSuccess
 
 from ocimatic.source_code import BuildError, CppSource
 
@@ -72,18 +73,17 @@ class CppChecker(Checker):
         if isinstance(build_result, BuildError):
             return CheckerResult(success=False, outcome=0.0, msg="Failed to build checker")
         result = build_result.run(args=[str(in_path), str(expected_path), str(out_path)])
-        success = result.success
-        if success:
+        if isinstance(result, RunSuccess):
+            success = True
+            msg = ''
             try:
                 outcome = float(result.stdout)
-                msg = result.stderr
             except ValueError:
                 outcome = 0.0
                 msg = 'Output must be a valid float'
                 success = False
+            return CheckerResult(success=success, outcome=outcome, msg=msg)
         else:
-            stderr = result.stderr.strip('\n')
-            msg = result.err_msg
+            msg = result.msg
             outcome = 0.0
-
-        return CheckerResult(success=success, outcome=outcome, msg=msg)
+            return CheckerResult(success=True, outcome=outcome, msg=msg)
