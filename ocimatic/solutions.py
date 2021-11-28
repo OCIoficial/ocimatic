@@ -4,7 +4,7 @@ from typing import Iterable, List, Optional, Tuple
 from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset
-from ocimatic.source_code import BuildError, CppSource, JavaSource, SourceCode
+from ocimatic.source_code import BuildError, CppSource, JavaSource, PythonSource, SourceCode
 
 
 class Solution:
@@ -35,6 +35,8 @@ class Solution:
                                include=managers_dir)
         elif source_path.suffix == '.java':
             source = JavaSource(codename, source_path)
+        elif source_path.suffix == '.py':
+            source = PythonSource(source_path)
         else:
             return None
 
