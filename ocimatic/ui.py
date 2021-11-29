@@ -144,7 +144,7 @@ def work(action: str, formatter: str = "{}") -> Callable[[F2], F2]:
     return decorator
 
 
-def start_work(action: str, msg: str, length: int = 45) -> None:
+def start_work(action: str, msg: str, length: int = 80) -> None:
     if ocimatic.config['verbosity'] < 0:
         return
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg

@@ -3,6 +3,7 @@ import re
 import shlex
 import shutil
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, NoReturn, Optional, Tuple
 
@@ -24,51 +25,28 @@ class Testplan:
         if not self._testplan_path.exists():
             ui.fatal_error('No such file plan for creating dataset: "%s"' % self._testplan_path)
         self._task_directory = task_directory
-        self._dataset_directory = dataset_directory
-
-    def test_filepath(self, stn: int, group: int, i: int) -> Path:
-        st_dir = Path(self._dataset_directory, 'st%d' % stn)
-        return Path(st_dir, '%s-%d.in' % (group, i))
+        self._dataset_dir = dataset_directory
 
     def validators(self) -> List[Optional[Path]]:
-        (_, cmds) = self._parse_file()
-        return [st['validator'] for (_, st) in sorted(cmds.items())]
+        return [subtask.validator for subtask in self._parse_file()]
 
     def run(self, stn: Optional[int]) -> None:
-        (subtasks, cmds) = self._parse_file()
+        subtasks = self._parse_file()
         cwd = Path.cwd()
         # Run generators with attic/ as the cwd
         os.chdir(self._directory)
 
-        for i in range(1, subtasks + 1):
-            dir = Path(self._dataset_directory, 'st%d' % i)
-            if stn is None or i == stn:
-                shutil.rmtree(dir, ignore_errors=True)
-                dir.mkdir(parents=True, exist_ok=True)
+        for (i, st) in enumerate(subtasks, 1):
+            if stn is None or stn == i:
+                st.run()
 
-        if not cmds:
+        if sum(len(st.commands) for st in subtasks) == 0:
             ui.show_message("Warning", 'no commands were executed for the plan.', ui.WARNING)
 
-        for (i, subtask) in sorted(cmds.items()):
-            if stn is None or stn == i:
-                self.run_subtask(i, subtask)
         os.chdir(cwd)
 
-    @ui.workgroup('Subtask {1}')
-    def run_subtask(self, stn: int, subtask: Dict[str, Any]) -> None:
-        groups = subtask['groups']
-        for (group, tests) in sorted(groups.items()):
-            for (i, cmd) in enumerate(tests, 1):
-                seed_arg = '{stn}-{group}-{i}'
-                test_file = self.test_filepath(stn, group, i)
-                cmd.run(seed_arg, test_file)
-
-    def _parse_file(self) -> Tuple[int, Dict[int, Any]]:
-        """
-        Args:
-            path (FilePath)
-        """
-        cmds: Dict[int, Any] = {}
+    def _parse_file(self) -> List['Subtask']:
+        subtasks: Dict[int, 'Subtask'] = {}
         st = 0
         for (lineno, line) in enumerate(self._testplan_path.open('r').readlines(), 1):
             line = line.strip()
@@ -83,15 +61,13 @@ class Testplan:
                 cmd_match = cmd_line.fullmatch(line)
                 if header_match:
                     found_st = int(header_match.group(1))
-                    validator = header_match.group(2)
+                    validator = Path(self._directory,
+                                     header_match.group(2)) if header_match.group(2) else None
                     if st + 1 != found_st:
                         ui.fatal_error('line %d: found subtask %d, but subtask %d was expected' %
                                        (lineno, found_st, st + 1))
                     st += 1
-                    cmds[st] = {
-                        'validator': validator and Path(self._directory, validator),
-                        'groups': {}
-                    }
+                    subtasks[st] = Subtask(self._dataset_dir, st, validator)
                 elif cmd_match:
                     if st == 0:
                         ui.fatal_error('line %d: found command before declaring a subtask.' %
@@ -99,46 +75,70 @@ class Testplan:
                     group = cmd_match.group(1)
                     cmd = cmd_match.group(2)
                     args = _parse_args(cmd_match.group(3) or '')
-                    if group not in cmds[st]['groups']:
-                        cmds[st]['groups'][group] = []
 
-                    command = self._parse_command(cmd, args, lineno)
-                    cmds[st]['groups'][group].append(command)
+                    idx = len(subtasks[st].commands) + 1
+                    command = self._parse_command(group, idx, cmd, args, lineno)
+                    subtasks[st].commands.append(command)
                 else:
                     ui.fatal_error('line %d: error while parsing line `%s`\n' % (lineno, line))
-        return (st, cmds)
+        return [st for (_, st) in sorted(subtasks.items())]
 
-    def _parse_command(self, cmd: str, args: List[str], lineno: int) -> 'Command':
+    def _parse_command(self, group: str, idx: int, cmd: str, args: List[str],
+                       lineno: int) -> 'Command':
         if cmd == 'copy':
             if len(args) > 2:
                 ui.fatal_error(f'line {lineno}: command `copy` expects exactly one argument.')
-            return Copy(Path(self._task_directory, args[0]))
+            return Copy(group, idx, Path(self._task_directory, args[0]))
         elif cmd == 'echo':
-            return Echo(args)
+            return Echo(group, idx, args)
         elif Path(cmd).suffix == '.py':
-            return Script(PythonSource(Path(self._directory, cmd)), args)
+            return Script(group, idx, PythonSource(Path(self._directory, cmd)), args)
         elif Path(cmd).suffix == '.cpp':
-            return Script(CppSource(Path(self._directory, cmd)), args)
+            return Script(group, idx, CppSource(Path(self._directory, cmd)), args)
         else:
             _invalid_command(cmd, lineno)
 
 
+class Subtask:
+    def __init__(self, dataset_dir: Path, stn: int, validator: Optional[Path]):
+        self._dir = Path(dataset_dir, f'st{stn}')
+        self.commands: List['Command'] = []
+        self.validator = validator
+
+    def __str__(self) -> str:
+        return str(self._dir.name)
+
+    @ui.workgroup()
+    def run(self) -> None:
+        shutil.rmtree(self._dir, ignore_errors=True)
+        self._dir.mkdir(parents=True, exist_ok=True)
+        for cmd in self.commands:
+            cmd.run(self._dir)
+
+
 class Command(ABC):
+    def __init__(self, group: str, idx: int):
+        self._group = group
+        self._idx = idx
+
+    def dst_file(self, dir: Path) -> Path:
+        return Path(dir, f'{self._idx}-{self._group}.in')
+
     @abstractmethod
-    def run(self, seed_arg: str, dst: Path) -> WorkResult:
+    def run(self, dst_dir: Path) -> WorkResult:
         raise NotImplementedError("Class %s doesn't implement run()" % (self.__class__.__name__))
 
 
 class Copy(Command):
-    def __init__(self, file: Path):
+    def __init__(self, group: str, idx: int, file: Path):
+        super().__init__(group, idx)
         self._file = file
 
     def __str__(self) -> str:
         return str(self._file)
 
     @ui.work('Copy', '{0}')
-    def run(self, seed_arg: str, dst: Path) -> WorkResult:
-        del seed_arg
+    def run(self, dst: Path) -> WorkResult:
         if not self._file.exists():
             return WorkResult(success=False, short_msg='No such file')
         try:
@@ -150,16 +150,16 @@ class Copy(Command):
 
 
 class Echo(Command):
-    def __init__(self, args: List[str]):
+    def __init__(self, group: str, idx: int, args: List[str]):
+        super().__init__(group, idx)
         self._args = args
 
     def __str__(self) -> str:
         return str(self._args)
 
     @ui.work('Echo', '{0}')
-    def run(self, seed_arg: str, dst: Path) -> WorkResult:
-        del seed_arg
-        with dst.open('w') as test_file:
+    def run(self, dst_dir: Path) -> WorkResult:
+        with self.dst_file(dst_dir).open('w') as test_file:
             test_file.write(' '.join(self._args) + '\n')
             return WorkResult(success=True, short_msg='Ok')
 
@@ -167,25 +167,32 @@ class Echo(Command):
 class Script(Command):
     VALID_EXTENSIONS: List[str] = ['py', 'cpp']
 
-    def __init__(self, script: SourceCode, args: List[str]):
+    def __init__(self, group: str, idx: int, script: SourceCode, args: List[str]):
+        super().__init__(group, idx)
         self._args = args
         self._script = script
 
     def __str__(self) -> str:
-        return str(self._script)
+        args = ' '.join(self._args)
+        script = Path(self._script.name).name
+        return f'{self._group} ; {script} {args}'
 
     @ui.work('Gen', '{0}')
-    def run(self, seed_arg: str, dst: Path) -> WorkResult:
+    def run(self, dst_dir: Path) -> WorkResult:
         build_result = self._script.build()
         if isinstance(build_result, BuildError):
             return WorkResult(success=False,
                               short_msg='Failed to build generator',
                               long_msg=build_result.msg)
-        result = build_result.run(out_path=dst, args=[seed_arg, *self._args])
+        result = build_result.run(out_path=self.dst_file(dst_dir),
+                                  args=[self._seed_arg(dst_dir), *self._args])
         if isinstance(result, RunSuccess):
             return WorkResult(success=True, short_msg='OK')
         else:
             return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
+
+    def _seed_arg(self, dir: Path) -> str:
+        return f'{dir.name}-{self._group}-{self._idx}'
 
 
 def _invalid_command(cmd: str, lineno: int) -> NoReturn:
