@@ -270,7 +270,8 @@ class Task:
     def validate_input(self, subtask: Optional[int]) -> None:
         testplan = Testplan(Path(self._directory, 'attic'), self._directory,
                             Path(self._directory, 'dataset'))
-        testplan.validate_input(subtask)
+        self._dataset.validate(testplan.validators(), subtask)
+        # testplan.validate_input(subtask)
 
     @ui.work('ZIP')
     def compress_dataset(self, random_sort: bool = False) -> ui.WorkResult:

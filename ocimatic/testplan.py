@@ -30,52 +30,12 @@ class Testplan:
         st_dir = Path(self._dataset_directory, 'st%d' % stn)
         return Path(st_dir, '%s-%d.in' % (group, i))
 
-    def validate_input(self, stn: Optional[int]) -> None:
-        (_, cmds) = self.parse_file()
-        for (i, subtask) in sorted(cmds.items()):
-            if stn is None or stn == i:
-                self.validate_subtask(i, subtask)
-
-    @ui.workgroup('Subtask {1}')
-    def validate_subtask(self, stn: int, subtask: Dict[str, Any]) -> None:
-        validator = None
-        if subtask['validator']:
-            (validator, msg) = self.build_validator(subtask['validator'])
-            if validator is None:
-                ui.show_message('Warning', 'Failed to build validator: %s' % msg, ui.WARNING)
-        else:
-            ui.show_message('Info', 'No validator specified', ui.INFO)
-        if validator:
-            for (group, tests) in sorted(subtask['groups'].items()):
-                for (i, _) in enumerate(tests, 1):
-                    test_file = self.test_filepath(stn, group, i)
-                    self.validate_test_input(test_file, validator)
-
-    @ui.work('Validating', '{1}')
-    def validate_test_input(self, test_file: Path, validator: Runnable) -> WorkResult:
-        if not test_file.exists():
-            return WorkResult(success=False, short_msg='Test file does not exist')
-        result = validator.run(test_file, None)
-        if isinstance(result, RunSuccess):
-            return WorkResult(success=True, short_msg='OK')
-        else:
-            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
-
-    def build_validator(self, source: str) -> Tuple[Optional[Runnable], str]:
-        fp = Path(self._directory, source)
-        if not fp.exists():
-            return (None, 'File does not exists.')
-        if fp.suffix == '.cpp':
-            build_result = CppSource(fp).build()
-            if isinstance(build_result, BuildError):
-                return (None, 'Failed to build validator.')
-            return (build_result, 'OK')
-        if fp.suffix == '.py':
-            return (Python3(fp), 'OK')
-        return (None, 'Not supported source file.')
+    def validators(self) -> List[Optional[Path]]:
+        (_, cmds) = self._parse_file()
+        return [st['validator'] for (_, st) in sorted(cmds.items())]
 
     def run(self, stn: Optional[int]) -> None:
-        (subtasks, cmds) = self.parse_file()
+        (subtasks, cmds) = self._parse_file()
         cwd = Path.cwd()
         # Run generators with attic/ as the cwd
         os.chdir(self._directory)
@@ -103,7 +63,7 @@ class Testplan:
                 test_file = self.test_filepath(stn, group, i)
                 cmd.run(seed_arg, test_file)
 
-    def parse_file(self) -> Tuple[int, Dict[int, Any]]:
+    def _parse_file(self) -> Tuple[int, Dict[int, Any]]:
         """
         Args:
             path (FilePath)
@@ -128,7 +88,10 @@ class Testplan:
                         ui.fatal_error('line %d: found subtask %d, but subtask %d was expected' %
                                        (lineno, found_st, st + 1))
                     st += 1
-                    cmds[st] = {'validator': validator, 'groups': {}}
+                    cmds[st] = {
+                        'validator': validator and Path(self._directory, validator),
+                        'groups': {}
+                    }
                 elif cmd_match:
                     if st == 0:
                         ui.fatal_error('line %d: found command before declaring a subtask.' %
@@ -139,13 +102,13 @@ class Testplan:
                     if group not in cmds[st]['groups']:
                         cmds[st]['groups'][group] = []
 
-                    command = self.parse_command(cmd, args, lineno)
+                    command = self._parse_command(cmd, args, lineno)
                     cmds[st]['groups'][group].append(command)
                 else:
                     ui.fatal_error('line %d: error while parsing line `%s`\n' % (lineno, line))
         return (st, cmds)
 
-    def parse_command(self, cmd: str, args: List[str], lineno: int) -> 'Command':
+    def _parse_command(self, cmd: str, args: List[str], lineno: int) -> 'Command':
         if cmd == 'copy':
             if len(args) > 2:
                 ui.fatal_error(f'line {lineno}: command `copy` expects exactly one argument.')

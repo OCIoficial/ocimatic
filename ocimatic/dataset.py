@@ -4,13 +4,14 @@ import string
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from zipfile import ZipFile
 
 import ocimatic
 from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.runnable import RunError, Runnable, RunSuccess
+from ocimatic.source_code import (BuildError, CppSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
 
 IN = ".in"
@@ -42,6 +43,15 @@ class Dataset:
             subtask.run(runnable, checker, check=check)
         if sample:
             self._sampledata.run(runnable, checker, check=check)
+
+    def validate(self, validators: List[Optional[Path]], stn: Optional[int]) -> None:
+        assert len(validators) == len(self._subtasks)
+        for (i, (subtask, validator)) in enumerate(zip(self._subtasks, validators)):
+            if stn is None or stn == i:
+                subtask.validate(validator)
+
+    def __str__(self) -> str:
+        return f"Dataset({self._directory})"
 
     def mtime(self) -> float:
         mtime = -1.0
@@ -131,6 +141,26 @@ class Subtask(TestGroup):
         super().__init__(directory.name,
                          [Test(f, f.with_suffix(SOL)) for f in directory.glob(f'*{IN}')])
 
+    @ui.workgroup('{0}')
+    def validate(self, validator: Optional[Path]) -> None:
+        if validator is None:
+            ui.show_message('Info', 'No validator specified', ui.INFO)
+            return
+        source: SourceCode
+        if validator.suffix == '.cpp':
+            source = CppSource(validator)
+        elif validator.suffix == '.py':
+            source = PythonSource(validator)
+        else:
+            ui.show_message('Warning', 'Unsupported file for validator', ui.WARNING)
+            return
+        build = source.build()
+        if isinstance(build, BuildError):
+            ui.show_message('Warning', f'Failed to build validator\n{build.msg}', ui.WARNING)
+            return
+        for test in self._tests:
+            test.validate(build)
+
 
 class Test:
     """A single test file. Expected output file may not exist"""
@@ -146,6 +176,14 @@ class Test:
         if self._expected_path.exists():
             return max(self._in_path.stat().st_mtime, self._expected_path.stat().st_mtime)
         return self._in_path.stat().st_mtime
+
+    @ui.work('Validating', '{1}')
+    def validate(self, validator: Runnable) -> WorkResult:
+        result = validator.run(self._in_path, None)
+        if isinstance(result, RunSuccess):
+            return WorkResult(success=True, short_msg='OK')
+        else:
+            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
 
     @ui.work('Gen')
     def gen_expected(self, runnable: Runnable) -> WorkResult:

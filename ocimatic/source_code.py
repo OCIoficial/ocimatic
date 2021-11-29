@@ -21,7 +21,7 @@ class SourceCode(ABC):
 
     @staticmethod
     def should_build(sources: List[Path], out: Path) -> bool:
-        mtime = max(s.stat().st_mtime for s in sources)
+        mtime = max((s.stat().st_mtime for s in sources if s.exists()), default=float("inf"))
         btime = out.stat().st_mtime if out.exists() else float("-inf")
         return btime < mtime
 
