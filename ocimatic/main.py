@@ -113,7 +113,7 @@ def main() -> None:
                                           help="""Force a build of all solutions.
         If a pattern is specified, only solutions matching the pattern will be built.""",
                                           parents=[task_parent])
-    build_parser.add_argument("solution", nargs="?")
+    build_parser.add_argument("solution", nargs="?", type=Path)
 
     subcommands.add_parser(
         "check",

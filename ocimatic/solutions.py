@@ -70,9 +70,11 @@ class Solution:
     @ui.work('Build')
     def build(self) -> ui.WorkResult:
         """Build solution."""
-        success = self._source.build(True) is not None
-        msg = 'OK' if success else 'FAILED'
-        return ui.WorkResult(success=success, short_msg=msg)
+        result = self._source.build(True)
+        if isinstance(result, BuildError):
+            return ui.WorkResult(success=False, short_msg='Failed', long_msg=result.msg)
+        else:
+            return ui.WorkResult(success=True, short_msg='OK')
 
     @property
     def name(self) -> str:
