@@ -5,7 +5,7 @@ import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, NoReturn, Optional, Tuple
+from typing import Any, Counter, Dict, List, NoReturn, Optional, Tuple
 
 from ocimatic import ui
 from ocimatic.runnable import Python3, Runnable, RunSuccess
@@ -48,6 +48,7 @@ class Testplan:
     def _parse_file(self) -> List['Subtask']:
         subtasks: Dict[int, 'Subtask'] = {}
         st = 0
+        tests_in_group: Counter[str] = Counter()
         for (lineno, line) in enumerate(self._testplan_path.open('r').readlines(), 1):
             line = line.strip()
             subtask_header = re.compile(r'\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*')
@@ -76,8 +77,8 @@ class Testplan:
                     cmd = cmd_match.group(2)
                     args = _parse_args(cmd_match.group(3) or '')
 
-                    idx = len(subtasks[st].commands) + 1
-                    command = self._parse_command(group, idx, cmd, args, lineno)
+                    tests_in_group[group] += 1
+                    command = self._parse_command(group, tests_in_group[group], cmd, args, lineno)
                     subtasks[st].commands.append(command)
                 else:
                     ui.fatal_error('line %d: error while parsing line `%s`\n' % (lineno, line))

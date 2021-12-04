@@ -42,9 +42,6 @@
 
 [Subtask 2]
   # Random tests
-  rand ; random.java 10 20 30
-  rand ; random.java 20 30 40
-
-  # More random tests
-  rand ; random.py 1 1000
+  rand ; random.py 10 20 30
+  rand ; random.py 20 30 40
 
