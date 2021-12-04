@@ -130,6 +130,7 @@ def main() -> None:
                                              parents=[task_parent])
     expected_parser.add_argument("solution",
                                  nargs="?",
+                                 type=Path,
                                  help="""A glob pattern.
         If specified, generate output running this solution.""")
     expected_parser.add_argument("--sample",

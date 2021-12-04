@@ -122,7 +122,7 @@ class Command(ABC):
         self._idx = idx
 
     def dst_file(self, dir: Path) -> Path:
-        return Path(dir, f'{self._idx}-{self._group}.in')
+        return Path(dir, f'{self._group}-{self._idx}.in')
 
     @abstractmethod
     def run(self, dst_dir: Path) -> WorkResult:
@@ -142,7 +142,7 @@ class Copy(Command):
         if not self._file.exists():
             return WorkResult(success=False, short_msg='No such file')
         try:
-            shutil.copy(self._file, dst)
+            shutil.copy(self._file, self.dst_file(dst))
             (st, msg) = (True, 'OK')
             return WorkResult(success=st, short_msg=msg)
         except Exception:  # pylint: disable=broad-except

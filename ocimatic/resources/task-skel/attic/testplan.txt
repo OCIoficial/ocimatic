@@ -1,35 +1,50 @@
-# This is a sample test plan.
-# Every line specifies a command to generate a test case.
-# The first column specifies a group name.
-# The second column specifies a command to generate the test case, it could be
-# either a `copy` command or a generator with its respective arguments.
-# A `copy` command expects a path to a file relatively to the task root.
-# A generator could be a source file in Java, C++ or Python, which is compiled
-# and executed with the specified arguments.
-# Additionally, an argument which is different for every test case, is passed
-# at the beginning. Arguments should be used to generate a uniquely random seed
-# inside the generator.
-# To generate test cases using test plan use `ocimatic input`
+# This is a sample testplan. Each line specifies a command to generate a single test case.
+# When executing the testplan, ocimatic will take care of choosing a name for the file
+# and placing it in the correct directory.
 
+# The first column in each line is the "group name". This is supposed to briefly describe how the
+# test was generated or what is suppose to be testing. The group name will be used as part of the
+# name of the generated test file. This is useful when debugging solutions to be able to see at a
+# glance in which test cases the solution is failing. It should also inform a reader of the
+# testplan the purpose of each test.
+
+# The second column specifies a command to generate the test case. A command could be either `copy`
+# `echo` or a generator script.
+
+# `copy`: The copy command takes a single argument: a path to a file to copy. The path should be
+# relative to the root of the current task.
+
+# `echo`: This command takes one or more arguments and prints them in a single line. This is useful
+# for tasks where the input consist of a single line to quickly generate test cases manually.
+
+# `script`: A generator script is a file in either python (extension `.py`) or c++ (extension `.cpp`).
+# The file should be placed in `attic/` next to this file. When processing the testplan ocimatic will
+# run the script with the provided arguments (sys.argv or **argv). The script should then write
+# to the standard output.
+# Generator scripts typically use randomness. To ensure each execution of the testplan generates the
+# same results a script should set the random seed to a fixed value. To this end, ocimatic passes an
+# additional (hidden) argument to each invocation which is guaranteed to be different each time.
+# The generator should use this extra argument to generate the random seed. The extra argument is
+# passed as the first argument meaning that the rest of the arguments are "shifted" in one position.
 
 [Subtask 1]
   # Use sample data as test
-  1 ; copy statement/sample-1.in
-  1 ; copy statement/sample-2.in
+  sample ; copy statement/sample-1.in
+  sample ; copy statement/sample-2.in
 
   # Manual test case
-  2 ; copy attic/manual-1.in
+  manual ; copy attic/manual-1.in
 
   # Random tests
-  3 ; random.cpp 10 100
-  3 ; random.cpp 100 1000
+  rand ; random.cpp 10 100
+  rand ; random.cpp 100 1000
 
 
 [Subtask 2]
   # Random tests
-  1 ; random.java 10 20 30
-  1 ; random.java 20 30 40
+  rand ; random.java 10 20 30
+  rand ; random.java 20 30 40
 
   # More random tests
-  2 ; random.py 1 1000
+  rand ; random.py 1 1000
 

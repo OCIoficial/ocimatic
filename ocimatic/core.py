@@ -348,7 +348,7 @@ class Task:
                 sol.build()
 
     @ui.task('Generating expected output')
-    def gen_expected(self, sample: bool = False, solution: str = None) -> None:
+    def gen_expected(self, sample: bool = False, solution: Path = None) -> None:
         """Generate expected outputs files for the dataset by running one of the
         correct solutions.
         """
@@ -360,16 +360,13 @@ class Task:
             return
         generator = None
         if solution:
-            for sol in self._correct:
-                if solution == sol.name:
-                    generator = sol
-                    break
+            generator = self.load_solution_for_path(solution)
         else:
             cpp = [sol for sol in self._correct if isinstance(sol.source, CppSource)]
             if cpp:
                 generator = cpp[0]
         if not generator:
-            generator = self._correct[0]
+            ui.fatal_error("solution not found")
         generator.gen_expected(self._dataset, sample=sample)
 
     def build_statement(self, blank_page: bool = False) -> ui.WorkResult:
