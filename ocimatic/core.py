@@ -34,6 +34,7 @@ def change_directory() -> Tuple[Path, Optional[Path]]:
         curr_dir = curr_dir.parent
         if curr_dir.samefile(last_dir):
             ui.fatal_error('ocimatic was not called inside a contest.')
+    ocimatic.config['contest_root'] = curr_dir
     return (curr_dir, last_dir)
 
 

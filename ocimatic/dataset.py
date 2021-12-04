@@ -170,7 +170,7 @@ class Test:
         self._expected_path = expected_path
 
     def __str__(self) -> str:
-        return str(self._in_path)
+        return str(self._in_path.relative_to(ocimatic.config['contest_root']))
 
     def mtime(self) -> float:
         if self._expected_path.exists():

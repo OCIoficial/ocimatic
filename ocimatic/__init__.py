@@ -9,13 +9,14 @@
 __version__ = 'beta1'
 
 from typing import Optional, TypedDict
+from pathlib import Path
 
 
 class Config(TypedDict):
     timeout: int
     last_blank_page: bool
-    task: Optional[str]
     verbosity: int
+    contest_root: Path
 
 
-config: Config = {'timeout': 10, 'last_blank_page': True, 'task': None, 'verbosity': 0}
+config: Config = {'timeout': 10, 'last_blank_page': True, 'verbosity': 0, 'contest_root': Path('/')}
