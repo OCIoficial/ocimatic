@@ -112,7 +112,7 @@ def solution_group(formatter: str = "{}") -> Callable[[F1], Callable[..., None]]
     return decorator
 
 
-def solution_group_header(msg: str, length: int = 35) -> None:
+def solution_group_header(msg: str, length: int = 40) -> None:
     """Header for a group of works involving a solution"""
     writeln()
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg

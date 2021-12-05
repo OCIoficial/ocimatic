@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
 
+import ocimatic
 from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
 
 
@@ -36,7 +37,7 @@ class CppSource(SourceCode):
                  extra_sources: List[Path] = [],
                  include: Path = None,
                  out: Path = None):
-        super().__init__(str(source))
+        super().__init__(str(source.relative_to(ocimatic.config['contest_root'])))
         self._sources = [source] + extra_sources
         self._include = include
         self._out = out or Path(source.parent, '.build', source.stem)

@@ -9,7 +9,7 @@ from zipfile import ZipFile
 
 import ocimatic
 from ocimatic import ui
-from ocimatic.checkers import Checker
+from ocimatic.checkers import Checker, CheckerError
 from ocimatic.runnable import RunError, Runnable, RunSuccess
 from ocimatic.source_code import (BuildError, CppSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
@@ -209,20 +209,22 @@ class Test:
         if isinstance(result, RunError):
             return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
 
-        (st, outcome, checkmsg) = checker.run(self.in_path, self.expected_path, out_path)
-        # Checker failed
-        if not st:
-            msg = 'Failed to run checker: %s' % checkmsg
-            return WorkResult(success=st, short_msg=msg)
+        checker_result = checker.run(self.in_path, self.expected_path, out_path)
 
+        # Checker failed
+        if isinstance(checker_result, CheckerError):
+            msg = f'Failed to run checker: `{checker_result.msg}`'
+            return WorkResult(success=False, short_msg=msg)
+
+        outcome = checker_result.outcome
         st = outcome == 1.0
         if check:
             msg = 'OK' if st else 'FAILED'
             return WorkResult(success=st, short_msg=msg)
 
-        msg = '%s [%.2fs]' % (outcome, result.time)
-        if checkmsg:
-            msg += ' - %s' % checkmsg
+        msg = f'{outcome} [{result.time:.2f}s]'
+        if checker_result.msg is not None:
+            msg += ' - %s' % checker_result.msg
         return WorkResult(success=st, short_msg=msg)
 
     @property

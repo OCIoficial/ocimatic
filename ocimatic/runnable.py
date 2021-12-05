@@ -48,6 +48,7 @@ SIGNALS = {
 class RunSuccess:
     time: float
     stdout: str
+    stderr: str
 
 
 @dataclass
@@ -135,7 +136,7 @@ class Runnable(ABC):
                 return RunError(msg=msg, stderr=complete.stderr)
 
             out_file.seek(0)
-            return RunSuccess(time=time, stdout=out_file.read())
+            return RunSuccess(time=time, stdout=out_file.read(), stderr=complete.stderr)
         assert False
 
 

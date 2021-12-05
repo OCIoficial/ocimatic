@@ -1,17 +1,31 @@
+from dataclasses import dataclass
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import NamedTuple
+from typing import Union, Optional
 
 from ocimatic.runnable import RunSuccess
 from ocimatic.source_code import BuildError, CppSource
 
+# class CheckerResult(NamedTuple):
+#     success: bool
+#     outcome: float
+#     msg: str
 
-class CheckerResult(NamedTuple):
-    success: bool
+
+@dataclass
+class CheckerSuccess:
     outcome: float
+    msg: Optional[str] = None
+
+
+@dataclass
+class CheckerError:
     msg: str
+
+
+CheckerResult = Union[CheckerSuccess, CheckerError]
 
 
 class Checker(ABC):
@@ -45,9 +59,10 @@ class DiffChecker(Checker):
         # @TODO(NL 20/10/1990) Check if returncode is nonzero because there
         # is a difference between files or because there was an error executing
         # diff.
-        st = complete.returncode == 0
-        outcome = 1.0 if st else 0.0
-        return CheckerResult(success=True, outcome=outcome, msg='')
+        if complete.returncode == 0:
+            return CheckerSuccess(outcome=1.0)
+        else:
+            return CheckerSuccess(outcome=0)
 
 
 class CppChecker(Checker):
@@ -71,19 +86,14 @@ class CppChecker(Checker):
         assert out_path.exists()
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
-            return CheckerResult(success=False, outcome=0.0, msg="Failed to build checker")
+            return CheckerError(msg="Failed to build checker")
         result = build_result.run(args=[str(in_path), str(expected_path), str(out_path)])
         if isinstance(result, RunSuccess):
-            success = True
-            msg = ''
             try:
-                outcome = float(result.stdout)
+                stderr = result.stderr.strip()
+                msg = stderr if stderr != "" else None
+                return CheckerSuccess(outcome=float(result.stdout), msg=msg)
             except ValueError:
-                outcome = 0.0
-                msg = 'Output must be a valid float'
-                success = False
-            return CheckerResult(success=success, outcome=outcome, msg=msg)
+                return CheckerError(msg='output must be a valid float')
         else:
-            msg = result.msg
-            outcome = 0.0
-            return CheckerResult(success=True, outcome=outcome, msg=msg)
+            return CheckerError(msg=result.msg)
