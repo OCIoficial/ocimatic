@@ -177,7 +177,7 @@ class Test:
             return max(self._in_path.stat().st_mtime, self._expected_path.stat().st_mtime)
         return self._in_path.stat().st_mtime
 
-    @ui.work('Validating', '{1}')
+    @ui.work('Validate', '{0}')
     def validate(self, validator: Runnable) -> WorkResult:
         result = validator.run(self._in_path, None)
         if isinstance(result, RunSuccess):

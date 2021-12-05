@@ -61,26 +61,9 @@ RunResult = Union[RunSuccess, RunError]
 
 
 class Runnable(ABC):
-    """An entity that may be executed redirecting stdin and stdout to specific
-    files.
-    """
-    def __init__(self, command: Union[Path, str], args: List[str] = None):
-        """
-        Args:
-            bin_path (FilePath|string): Command to execute.
-            args (List[string]): List of arguments to pass to the command.
-        """
-        args = args or []
-        command = str(command)
-        assert shutil.which(command)
-        self._cmd = [command] + args
-
     @abstractmethod
     def cmd(self) -> List[str]:
         raise NotImplementedError("Class %s doesn't implement cmd()" % (self.__class__.__name__))
-
-    def __str__(self) -> str:
-        return self._cmd[0]
 
     def run(self,
             in_path: Path = None,
