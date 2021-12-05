@@ -156,7 +156,7 @@ def start_work(action: str, msg: str, length: int = 80) -> None:
 def end_work(result: WorkResult) -> None:
     color = OK if result.success else ERROR
     if ocimatic.config['verbosity'] < 0:
-        write(colorize('.', color))
+        write(colorize("." if result.success else "⨯", color))
     else:
         write(colorize(str(result.short_msg), color))
         writeln()
