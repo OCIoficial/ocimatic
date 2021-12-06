@@ -123,4 +123,4 @@ class LatexSource:
         return pdf if pdf.exists() else None
 
     def __str__(self) -> str:
-        return str(self._source)
+        return str(self._source.relative_to(ocimatic.config['contest_root']))
