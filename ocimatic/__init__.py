@@ -8,8 +8,8 @@
 
 __version__ = 'beta1'
 
-from typing import TypedDict
 from pathlib import Path
+from typing import TypedDict
 
 
 class Config(TypedDict):

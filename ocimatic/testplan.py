@@ -3,12 +3,12 @@ import re
 import shlex
 import shutil
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Counter, Dict, List, NoReturn, Optional, Tuple
+from typing import Counter, Dict, List, NoReturn, Optional
 
+import ocimatic
 from ocimatic import ui
-from ocimatic.runnable import Python3, Runnable, RunSuccess
+from ocimatic.runnable import RunSuccess
 from ocimatic.source_code import (BuildError, CppSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
 
@@ -136,7 +136,7 @@ class Copy(Command):
         self._file = file
 
     def __str__(self) -> str:
-        return str(self._file)
+        return str(self._file.relative_to(ocimatic.config['contest_root']))
 
     @ui.work('Copy', '{0}')
     def run(self, dst: Path) -> WorkResult:

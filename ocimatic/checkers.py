@@ -1,17 +1,12 @@
-from dataclasses import dataclass
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Union, Optional
+from typing import Optional, Union
 
 from ocimatic.runnable import RunSuccess
 from ocimatic.source_code import BuildError, CppSource
-
-# class CheckerResult(NamedTuple):
-#     success: bool
-#     outcome: float
-#     msg: str
 
 
 @dataclass
