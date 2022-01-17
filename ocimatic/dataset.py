@@ -23,7 +23,7 @@ class Dataset:
     def __init__(self, directory: Path, sampledata: List['Test']):
         self._directory = directory
         if directory.exists():
-            self._subtasks = [Subtask(d) for d in directory.iterdir() if d.is_dir()]
+            self._subtasks = [Subtask(d) for d in sorted(directory.iterdir()) if d.is_dir()]
         else:
             self._subtasks = []
         self._sampledata = TestGroup('sample', sampledata)
