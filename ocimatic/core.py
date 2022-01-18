@@ -10,7 +10,7 @@ from typing import Iterable, List, Optional, Tuple, TypedDict
 
 import ocimatic
 from ocimatic import pjson, ui
-from ocimatic.checkers import Checker, CppChecker, DiffChecker
+from ocimatic.checkers import Checker, Checker
 from ocimatic.dataset import Dataset, Test
 from ocimatic.solutions import Solution
 from ocimatic.source_code import CppSource, LatexSource
@@ -202,10 +202,7 @@ class Task:
         self._partial = Solution.load_solutions_in_dir(self.codename, partial_dir,
                                                        self._managers_dir)
 
-        self._checker: Checker = DiffChecker()
-        custom_checker = next(self._managers_dir.glob('checker.cpp'), None)
-        if custom_checker:
-            self._checker = CppChecker(custom_checker)
+        self._checker = Checker.find_in_directory(self._managers_dir)
 
         self._statement = Statement(Path(directory, 'statement'), num=num, codename=self.codename)
 

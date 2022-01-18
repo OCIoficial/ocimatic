@@ -40,7 +40,7 @@ class CppSource(SourceCode):
         super().__init__(str(source.relative_to(ocimatic.config['contest_root'])))
         self._sources = [source] + extra_sources
         self._include = include
-        self._out = out or Path(source.parent, '.build', source.stem)
+        self._out = out or Path(source.parent, '.build', f'{source.stem}-cpp')
 
     def build_cmd(self) -> List[str]:
         cmd = ['g++', '-std=c++11', '-O2', '-o', str(self._out)]
@@ -63,12 +63,36 @@ class CppSource(SourceCode):
         return Binary(self._out)
 
 
+class RustSource(SourceCode):
+    def __init__(self, source: Path, out: Path = None):
+        super().__init__(str(source.relative_to(ocimatic.config['contest_root'])))
+        self._source = source
+        self._out = out or Path(source.parent, '.build', f'{source.stem}-rs')
+
+    def build_cmd(self) -> List[str]:
+        cmd = ['rustc', '-O', '-o', str(self._out), str(self._source)]
+        return cmd
+
+    def build(self, force: bool = False) -> Union[Binary, BuildError]:
+        self._out.parent.mkdir(parents=True, exist_ok=True)
+        if force or RustSource.should_build([self._source], self._out):
+            cmd = self.build_cmd()
+            complete = subprocess.run(cmd,
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.PIPE,
+                                      text=True,
+                                      check=False)
+            if complete.returncode != 0:
+                return BuildError(msg=complete.stderr)
+        return Binary(self._out)
+
+
 class JavaSource(SourceCode):
     def __init__(self, classname: str, source: Path, out: Path = None):
         super().__init__(str(source))
         self._classname = classname
         self._source = source
-        self._out = out or Path(source.parent, '.build', f"{source.stem}.classes")
+        self._out = out or Path(source.parent, '.build', f"{source.stem}-java")
 
     def build_cmd(self) -> List[str]:
         return ['javac', '-d', str(self._out), str(self._source)]
@@ -92,7 +116,8 @@ class PythonSource(SourceCode):
         super().__init__(str(source))
         self._source = source
 
-    def build(self, _force: bool = False) -> Python3:
+    def build(self, force: bool = False) -> Python3:
+        del force
         return Python3(self._source)
 
 

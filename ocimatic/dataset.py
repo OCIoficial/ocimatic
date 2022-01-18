@@ -46,7 +46,7 @@ class Dataset:
 
     def validate(self, validators: List[Optional[Path]], stn: Optional[int]) -> None:
         assert len(validators) == len(self._subtasks)
-        for (i, (subtask, validator)) in enumerate(zip(self._subtasks, validators)):
+        for (i, (subtask, validator)) in enumerate(zip(self._subtasks, validators), 1):
             if stn is None or stn == i:
                 subtask.validate(validator)
 

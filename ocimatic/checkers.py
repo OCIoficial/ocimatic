@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from ocimatic.runnable import RunSuccess
-from ocimatic.source_code import BuildError, CppSource
+from ocimatic.source_code import BuildError, CppSource, SourceCode, RustSource
 
 
 @dataclass
@@ -29,6 +29,15 @@ class Checker(ABC):
     @abstractmethod
     def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
         raise NotImplementedError("Class %s doesn't implement run()" % (self.__class__.__name__))
+
+    @staticmethod
+    def find_in_directory(dir: Path) -> 'Checker':
+        for f in dir.iterdir():
+            if f.name == 'checker.cpp':
+                return CustomChecker(CppSource(f, include=dir, out=Path(dir, 'checker')))
+            elif f.name == 'checker.rs':
+                return CustomChecker(RustSource(f, out=Path(dir, 'checker')))
+        return DiffChecker()
 
 
 class DiffChecker(Checker):
@@ -60,13 +69,13 @@ class DiffChecker(Checker):
             return CheckerSuccess(outcome=0)
 
 
-class CppChecker(Checker):
-    def __init__(self, source: Path):
+class CustomChecker(Checker):
+    def __init__(self, code: SourceCode):
         """
         Args:
             source (FilePath)
         """
-        self._source = CppSource(source, include=source.parent, out=Path(source.parent, 'checker'))
+        self._code = code
 
     def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
         """Run checker to evaluate outcome. Parameters correspond to convention
@@ -79,7 +88,7 @@ class CppChecker(Checker):
         assert in_path.exists()
         assert expected_path.exists()
         assert out_path.exists()
-        build_result = self._source.build()
+        build_result = self._code.build()
         if isinstance(build_result, BuildError):
             return CheckerError(msg="Failed to build checker")
         result = build_result.run(args=[str(in_path), str(expected_path), str(out_path)])
