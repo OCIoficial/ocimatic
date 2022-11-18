@@ -16,6 +16,7 @@ from ocimatic.ui import WorkResult
 
 class Testplan:
     """Functionality to read and run a plan for generating dataset."""
+
     def __init__(self,
                  directory: Path,
                  task_directory: Path,
@@ -102,6 +103,7 @@ class Testplan:
 
 
 class Subtask:
+
     def __init__(self, dataset_dir: Path, stn: int, validator: Optional[Path]):
         self._dir = Path(dataset_dir, f'st{stn}')
         self.commands: List['Command'] = []
@@ -119,6 +121,7 @@ class Subtask:
 
 
 class Command(ABC):
+
     def __init__(self, group: str, idx: int):
         self._group = group
         self._idx = idx
@@ -132,6 +135,7 @@ class Command(ABC):
 
 
 class Copy(Command):
+
     def __init__(self, group: str, idx: int, file: Path):
         super().__init__(group, idx)
         self._file = file
@@ -152,6 +156,7 @@ class Copy(Command):
 
 
 class Echo(Command):
+
     def __init__(self, group: str, idx: int, args: List[str]):
         super().__init__(group, idx)
         self._args = args

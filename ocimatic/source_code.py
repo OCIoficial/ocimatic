@@ -14,6 +14,7 @@ class BuildError:
 
 
 class SourceCode(ABC):
+
     def __init__(self, name: str):
         self.name = name
 
@@ -32,6 +33,7 @@ class SourceCode(ABC):
 
 
 class CppSource(SourceCode):
+
     def __init__(self,
                  source: Path,
                  extra_sources: List[Path] = [],
@@ -64,6 +66,7 @@ class CppSource(SourceCode):
 
 
 class RustSource(SourceCode):
+
     def __init__(self, source: Path, out: Path = None):
         super().__init__(str(source.relative_to(ocimatic.config['contest_root'])))
         self._source = source
@@ -88,6 +91,7 @@ class RustSource(SourceCode):
 
 
 class JavaSource(SourceCode):
+
     def __init__(self, classname: str, source: Path, out: Path = None):
         super().__init__(str(source))
         self._classname = classname
@@ -112,6 +116,7 @@ class JavaSource(SourceCode):
 
 
 class PythonSource(SourceCode):
+
     def __init__(self, source: Path):
         super().__init__(str(source))
         self._source = source
@@ -122,6 +127,7 @@ class PythonSource(SourceCode):
 
 
 class LatexSource:
+
     def __init__(self, source: Path):
         self._source = source
 

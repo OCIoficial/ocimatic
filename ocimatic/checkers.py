@@ -26,6 +26,7 @@ CheckerResult = Union[CheckerSuccess, CheckerError]
 class Checker(ABC):
     """Check solutions
     """
+
     @abstractmethod
     def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
         raise NotImplementedError("Class %s doesn't implement run()" % (self.__class__.__name__))
@@ -43,6 +44,7 @@ class Checker(ABC):
 class DiffChecker(Checker):
     """White diff checker
     """
+
     def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
         """Performs a white diff between expected output and output files
         Parameters correspond to convention for checker in cms.
@@ -70,6 +72,7 @@ class DiffChecker(Checker):
 
 
 class CustomChecker(Checker):
+
     def __init__(self, code: SourceCode):
         """
         Args:

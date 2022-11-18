@@ -100,7 +100,9 @@ F1 = TypeVar("F1", bound=Callable[..., Iterable[WorkResult]])
 
 
 def solution_group(formatter: str = "{}") -> Callable[[F1], Callable[..., None]]:
+
     def decorator(func: F1) -> Callable[..., None]:
+
         def wrapper(*args: Any, **kwargs: Any) -> None:
             solution_group_header(formatter.format(*args, **kwargs))
             for result in func(*args, **kwargs):
@@ -129,7 +131,9 @@ F2 = TypeVar('F2', bound=Callable[..., WorkResult])
 
 
 def work(action: str, formatter: str = "{}") -> Callable[[F2], F2]:
+
     def decorator(func: F2) -> F2:
+
         def wrapper(*args: Any, **kwargs: Any) -> WorkResult:
             if not CAPTURE_WORKS:
                 start_work(action, formatter.format(*args, **kwargs))
@@ -193,7 +197,9 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def contest_group(formatter: str = "{}") -> Callable[[F], F]:
+
     def decorator(func: F) -> F:
+
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             contest_group_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
@@ -204,7 +210,9 @@ def contest_group(formatter: str = "{}") -> Callable[[F], F]:
 
 
 def workgroup(formatter: str = "{}") -> Callable[[F], F]:
+
     def decorator(func: F) -> F:
+
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             workgroup_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
@@ -215,7 +223,9 @@ def workgroup(formatter: str = "{}") -> Callable[[F], F]:
 
 
 def task(action: str) -> Callable[[F], F]:
+
     def decorator(func: F) -> F:
+
         def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
             task_header(str(self), action)
             return func(self, *args, **kwargs)

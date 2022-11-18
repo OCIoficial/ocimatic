@@ -11,6 +11,7 @@ from ocimatic.source_code import (BuildError, CppSource, JavaSource,
 class Solution:
     """Abstract class to represent a solution
     """
+
     def __init__(self, source: SourceCode):
         self._source = source
 

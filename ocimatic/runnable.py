@@ -61,6 +61,7 @@ RunResult = Union[RunSuccess, RunError]
 
 
 class Runnable(ABC):
+
     @abstractmethod
     def cmd(self) -> List[str]:
         raise NotImplementedError("Class %s doesn't implement cmd()" % (self.__class__.__name__))
@@ -124,6 +125,7 @@ class Runnable(ABC):
 
 
 class Binary(Runnable):
+
     def __init__(self, path: Union[str, Path]):
         self._path = path
 
@@ -135,6 +137,7 @@ class Binary(Runnable):
 
 
 class JavaClasses(Runnable):
+
     def __init__(self, classname: str, classes: Path):
         self._classname = classname
         self._classes = classes
@@ -144,6 +147,7 @@ class JavaClasses(Runnable):
 
 
 class Python3(Runnable):
+
     def __init__(self, script: Path):
         self._script = script
 

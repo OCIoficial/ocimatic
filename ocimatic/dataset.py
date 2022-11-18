@@ -21,6 +21,7 @@ SOL = ".sol"
 
 class Dataset:
     """Test data"""
+
     def __init__(self, directory: Path, sampledata: List['Test']):
         self._directory = directory
         if directory.exists():
@@ -88,6 +89,7 @@ class Dataset:
 
 
 class TestGroup:
+
     def __init__(self, name: str, tests: List['Test']):
         self._name = name
         self._tests = tests
@@ -138,6 +140,7 @@ class TestGroup:
 
 
 class Subtask(TestGroup):
+
     def __init__(self, directory: Path):
         super().__init__(directory.name,
                          [Test(f, f.with_suffix(SOL)) for f in directory.glob(f'*{IN}')])
@@ -165,6 +168,7 @@ class Subtask(TestGroup):
 
 class Test:
     """A single test file. Expected output file may not exist"""
+
     def __init__(self, in_path: Path, expected_path: Path):
         assert in_path.exists()
         self._in_path = in_path
