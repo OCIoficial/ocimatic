@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from ocimatic.runnable import RunSuccess
-from ocimatic.source_code import BuildError, CppSource, SourceCode, RustSource
+from ocimatic.source_code import BuildError, CppSource, RustSource, SourceCode
 
 
 @dataclass

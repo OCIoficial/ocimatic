@@ -6,14 +6,14 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple, TypedDict
+from typing import Dict, Iterable, List, Optional, Tuple, TypedDict
 
 import ocimatic
 from ocimatic import pjson, ui
-from ocimatic.checkers import Checker, Checker
+from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, Test
 from ocimatic.solutions import Solution
-from ocimatic.source_code import CppSource, LatexSource
+from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
 from ocimatic.testplan import Testplan
 
 
@@ -43,6 +43,7 @@ class Contest:
     tasks and a titlepage. A contest is associated to a directory in the
     filesystem.
     """
+
     def __init__(self, directory: Path):
         self._directory = directory
         self._config = pjson.load(Path(directory, '.ocimatic_contest'))
@@ -182,6 +183,7 @@ class Task:
     a list of correct and partial solutions and a dataset. A task is
     associated to a directory in the filesystem.
     """
+
     @staticmethod
     def create_layout(task_path: Path) -> None:
         ocimatic_dir = Path(__file__).parent
@@ -360,9 +362,10 @@ class Task:
         if solution:
             generator = self.load_solution_for_path(solution)
         else:
-            cpp = [sol for sol in self._correct if isinstance(sol.source, CppSource)]
-            if cpp:
-                generator = cpp[0]
+            keys: Dict[type, int] = {CppSource: 0, RustSource: 1, JavaSource: 0}
+            sols = sorted(self._correct, key=lambda sol: keys.get(type(sol.source), len(keys)))
+            generator = sols[0] if sols else None
+
         if not generator:
             ui.fatal_error("solution not found")
         generator.gen_expected(self._dataset, sample=sample)
@@ -376,6 +379,7 @@ class Statement:
     """Represents a statement. A statement is composed by a latex source and a pdf
     file.
     """
+
     def __init__(self, directory: Path, num: Optional[int] = None, codename: Optional[str] = None):
         assert Path(directory, 'statement.tex').exists()
         self._source = LatexSource(Path(directory, 'statement.tex'))
