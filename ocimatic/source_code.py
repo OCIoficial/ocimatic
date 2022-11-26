@@ -45,7 +45,7 @@ class CppSource(SourceCode):
         self._out = out or Path(source.parent, '.build', f'{source.stem}-cpp')
 
     def build_cmd(self) -> List[str]:
-        cmd = ['g++', '-std=c++11', '-O2', '-o', str(self._out)]
+        cmd = ['g++', '-std=c++17', '-O2', '-o', str(self._out)]
         if self._include:
             cmd.extend(['-I', str(self._include)])
         cmd.extend(str(s) for s in self._sources)

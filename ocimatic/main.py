@@ -154,6 +154,7 @@ def main() -> None:
         "--random-sort",
         "-r",
         default=False,
+        action="store_true",
         help="Add random prefix to output filenames to sort testcases whithin a subtask randomly")
 
     testplan_parser = subcommands.add_parser("testplan",
