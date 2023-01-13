@@ -58,7 +58,7 @@ class DiffChecker(Checker):
         assert expected_path.exists()
         assert out_path.exists()
         complete = subprocess.run(
-            ['diff', str(expected_path), str(out_path)],
+            ['diff', '-q', str(expected_path), str(out_path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False)
@@ -88,6 +88,7 @@ class CustomChecker(Checker):
             expected_path (FilePath)
             out_path (FilePath)
         """
+
         assert in_path.exists()
         assert expected_path.exists()
         assert out_path.exists()
