@@ -6,7 +6,7 @@
     :license: Beer-Ware, see LICENSE.rst for more details.
 """
 
-__version__ = 'beta1'
+__version__ = '0.1.0'
 
 from pathlib import Path
 from typing import TypedDict
