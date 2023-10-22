@@ -4,8 +4,8 @@ from typing import Iterable, List, Optional
 from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset
-from ocimatic.source_code import (BuildError, CppSource, JavaSource,
-                                  PythonSource, SourceCode)
+from ocimatic.source_code import (BuildError, CppSource, JavaSource, PythonSource, RustSource,
+                                  SourceCode)
 
 
 class Solution:
@@ -39,6 +39,8 @@ class Solution:
             source = JavaSource(codename, source_path)
         elif source_path.suffix == '.py':
             source = PythonSource(source_path)
+        elif source_path.suffix == '.rs':
+            source = RustSource(source_path)
         else:
             return None
 

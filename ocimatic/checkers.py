@@ -46,7 +46,7 @@ class DiffChecker(Checker):
     """
 
     def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
-        """Performs a white diff between expected output and output files
+        """Performs a white diff between expected output and output files.
         Parameters correspond to convention for checker in cms.
         Args:
             in_path (FilePath)

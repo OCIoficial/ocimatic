@@ -348,7 +348,7 @@ class Task:
                 sol.build()
 
     @ui.task('Generating expected output')
-    def gen_expected(self, sample: bool = False, solution: Path = None) -> None:
+    def gen_expected(self, sample: bool = False, solution: Optional[Path] = None) -> None:
         """Generate expected outputs files for the dataset by running one of the
         correct solutions.
         """

@@ -37,8 +37,8 @@ class CppSource(SourceCode):
     def __init__(self,
                  source: Path,
                  extra_sources: List[Path] = [],
-                 include: Path = None,
-                 out: Path = None):
+                 include: Optional[Path] = None,
+                 out: Optional[Path] = None):
         super().__init__(str(source.relative_to(ocimatic.config['contest_root'])))
         self._sources = [source] + extra_sources
         self._include = include
@@ -67,13 +67,13 @@ class CppSource(SourceCode):
 
 class RustSource(SourceCode):
 
-    def __init__(self, source: Path, out: Path = None):
+    def __init__(self, source: Path, out: Optional[Path] = None):
         super().__init__(str(source.relative_to(ocimatic.config['contest_root'])))
         self._source = source
         self._out = out or Path(source.parent, '.build', f'{source.stem}-rs')
 
     def build_cmd(self) -> List[str]:
-        cmd = ['rustc', '-O', '-o', str(self._out), str(self._source)]
+        cmd = ['rustc', '--edition=2021', '-O', '-o', str(self._out), str(self._source)]
         return cmd
 
     def build(self, force: bool = False) -> Union[Binary, BuildError]:
@@ -92,7 +92,7 @@ class RustSource(SourceCode):
 
 class JavaSource(SourceCode):
 
-    def __init__(self, classname: str, source: Path, out: Path = None):
+    def __init__(self, classname: str, source: Path, out: Optional[Path] = None):
         super().__init__(str(source))
         self._classname = classname
         self._source = source

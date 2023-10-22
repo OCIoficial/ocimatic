@@ -1,10 +1,9 @@
 import subprocess
-from io import StringIO
 from pathlib import Path
-from typing import Optional, Text, cast
+from typing import Iterator, List, Optional, Text, Union, cast
 
 from ansi2html import Ansi2HTMLConverter
-from flask import Flask, Response, flash, redirect, render_template, request
+from flask import Flask, Response, render_template, request
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
@@ -19,7 +18,7 @@ def ansi2html(ansi: str) -> str:
 
 UPLOAD_FOLDER = Path('/tmp', 'ocimatic', 'server')
 
-contest = None
+contest: Optional[core.Contest] = None
 app = Flask(__name__)
 app.secret_key = 'M\xf2\xba\xc0\xe3\xe55\xa0"\xff\x96\xba\xb8Jn\xc6#S\xa0t\xda\xb5[\r'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -69,7 +68,7 @@ def save_solution(content: str, suffix: str) -> Path:
 
 
 @app.route('/submit', methods=['POST'])
-def submit() -> Text:
+def submit() -> Union[Response, str]:
     assert contest
     data = request.get_json()
     print(data)
@@ -86,10 +85,11 @@ def submit() -> Text:
         return 'Invalid solution'
 
     ocimatic_path = Path(Path(__file__).parents[1], 'bin', 'ocimatic').resolve()
-    cmd = ['python', ocimatic_path, 'run', '--task', task.name, filepath]
+    cmd: List[Union[Path, str]] = ['python', ocimatic_path, 'run', '--task', task.name, filepath]
 
-    def stream():
+    def stream() -> Iterator[str]:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+        assert proc.stdout
         for line in proc.stdout:
             yield ansi2html(line)
 
