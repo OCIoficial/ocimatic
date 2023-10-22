@@ -99,7 +99,7 @@ class Contest:
         self.compile_titlepage()
 
         for task in self._tasks:
-            task.build_statement()
+            task.statement.build(blank_page=False)
         self.merge_pdfs('oneside.pdf')
 
     @ui.workgroup('twoside')
@@ -110,7 +110,7 @@ class Contest:
         for (i, task) in enumerate(self._tasks):
             last = i == len(self._tasks) - 1
             blank_page = last and ocimatic.config['last_blank_page']
-            task.build_statement(blank_page=blank_page)
+            task.statement.build(blank_page=blank_page)
         self.merge_pdfs('twoside.pdf')
 
     @ui.contest_group('Building package')
@@ -223,14 +223,14 @@ class Task:
         new_dir = Path(directory, self.codename)
         new_dir.mkdir()
 
-        result = self.compress_dataset(False)
+        result = self._dataset.compress(False)
         if result.success:
             dataset = Path(self._directory, 'dataset', 'data.zip')
             dataset_dst = Path(new_dir, 'data.zip')
             if dataset.exists():
                 shutil.copy2(dataset, dataset_dst)
 
-        result = self.build_statement()
+        result = self.statement.build(blank_page=False)
         if result.success:
             statement = Path(new_dir, 'statement.pdf')
             shutil.copy2(Path(self._directory, 'statement', 'statement.pdf'), statement)
@@ -277,11 +277,10 @@ class Task:
         self._dataset.validate(testplan.validators(), subtask)
         # testplan.validate_input(subtask)
 
-    @ui.work('ZIP')
-    def compress_dataset(self, random_sort: bool) -> ui.WorkResult:
+    @ui.task('Compressing dataset')
+    def compress_dataset(self, random_sort: bool) -> None:
         """Compress dataset into a single file"""
-        st = self._dataset.compress(random_sort=random_sort)
-        return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
+        self._dataset.compress(random_sort=random_sort)
 
     @property
     def name(self) -> str:
@@ -370,6 +369,7 @@ class Task:
             ui.fatal_error("solution not found")
         generator.gen_expected(self._dataset, sample=sample)
 
+    @ui.task('Building statement')
     def build_statement(self, blank_page: bool = False) -> ui.WorkResult:
         """Generate pdf for the statement"""
         return self._statement.build(blank_page=blank_page)
@@ -396,7 +396,7 @@ class Statement:
         return str(self._source)
 
     @ui.work('LATEX')
-    def build(self, blank_page: bool = False) -> ui.WorkResult:
+    def build(self, blank_page: bool) -> ui.WorkResult:
         """Compile latex statement"""
         if self._num is not None:
             os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A') + self._num)

@@ -100,5 +100,5 @@ def run(port: int = 9999) -> None:
     global contest  # pylint: disable=global-statement
     contest_dir = core.change_directory()[0]
     contest = core.Contest(contest_dir)
-    ocimatic.config['verbosity'] = 1
+    ocimatic.config['verbosity'] = 2
     app.run(port=port, debug=True)

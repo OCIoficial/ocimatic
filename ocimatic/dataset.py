@@ -52,7 +52,7 @@ class Dataset:
                 subtask.validate(validator)
 
     def __str__(self) -> str:
-        return f"Dataset({self._directory})"
+        return f"{self._directory}"
 
     def mtime(self) -> float:
         mtime = -1.0
@@ -60,14 +60,15 @@ class Dataset:
             mtime = max(mtime, subtask.mtime())
         return mtime
 
-    def compress(self, random_sort: bool = False) -> bool:
+    @ui.work('ZIP')
+    def compress(self, random_sort: bool = False) -> ui.WorkResult:
         """Compress all test cases in the dataset into a single zip file.
         The basename of the corresponding subtask subdirectory is prepended
         to each file.
         """
         path = Path(self._directory, 'data.zip')
         if path.exists() and path.stat().st_mtime >= self.mtime():
-            return True
+            return ui.WorkResult(success=True, short_msg="OK")
 
         with ZipFile(path, 'w') as zip:
             compressed = 0
@@ -75,8 +76,9 @@ class Dataset:
                 compressed += subtask.write_to_zip(zip, random_sort)
 
             if compressed == 0:
-                ui.show_message("Warning", "no files in dataset", ui.WARNING)
-        return True
+                path.unlink()
+                return ui.WorkResult(success=False, short_msg='EMPTY DATASET')
+        return ui.WorkResult(success=True, short_msg="OK")
 
     def count(self) -> List[int]:
         return [st.count() for st in self._subtasks]

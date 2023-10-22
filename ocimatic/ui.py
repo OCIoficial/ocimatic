@@ -80,10 +80,10 @@ def workgroup_header(msg: str, length: int = 35) -> None:
     writeln()
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
     write(colorize('[%s]' % (msg), INFO))
-    if ocimatic.config['verbosity'] < 0:
-        write(' ')
-    else:
+    if ocimatic.config['verbosity'] > 0:
         writeln()
+    else:
+        write(' ')
     flush()
 
 
@@ -149,7 +149,7 @@ def work(action: str, formatter: str = "{}") -> Callable[[F2], F2]:
 
 
 def start_work(action: str, msg: str, length: int = 80) -> None:
-    if ocimatic.config['verbosity'] < 0:
+    if ocimatic.config['verbosity'] == 0:
         return
     msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
     msg = ' * [' + action + '] ' + msg + '  '
@@ -159,12 +159,12 @@ def start_work(action: str, msg: str, length: int = 80) -> None:
 
 def end_work(result: WorkResult) -> None:
     color = OK if result.success else ERROR
-    if ocimatic.config['verbosity'] < 0:
-        write(colorize("." if result.success else "⨯", color))
-    else:
+    if ocimatic.config['verbosity'] > 0:
         write(colorize(str(result.short_msg), color))
         writeln()
-    if result.long_msg and ocimatic.config['verbosity'] > 0:
+    else:
+        write(colorize("." if result.success else "⨯", color))
+    if result.long_msg and ocimatic.config['verbosity'] > 1:
         long_msg = result.long_msg.strip()
         long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))
         write(long_msg)

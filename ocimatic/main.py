@@ -51,6 +51,7 @@ class CLI:
 
     def run_contest_command(self, args: argparse.Namespace) -> None:
         assert args.command in CONTEST_COMMANDS
+        set_verbosity(args, 2)
         if args.command == "problemset":
             self.contest.build_problemset()
         elif args.command == "package":
@@ -60,6 +61,7 @@ class CLI:
         assert args.command in SINGLE_TASK_COMMANDS
         task = self._select_task(args)
 
+        set_verbosity(args, 2)
         if args.command == "run":
             task.run_solution(args.solution)
         elif args.command == "build":
@@ -80,29 +82,35 @@ class CLI:
     def run_multi_task_command(self, args: argparse.Namespace) -> None:
         assert args.command in MULTI_TASK_COMMANDS
 
-        if args.command == "check":
-            ocimatic.config['verbosity'] -= 1
-
         tasks = self._select_tasks(args)
+
         if not tasks:
             ui.show_message("Warning", "no tasks selected", ui.WARNING)
 
         for task in tasks:
             if args.command == "check":
+                set_verbosity(args, 0)
                 task.check_dataset()
             elif args.command == "expected":
+                set_verbosity(args, 0 if len(tasks) > 1 else 2)
                 task.gen_expected(sample=args.sample, solution=args.solution)
             elif args.command == "pdf":
+                set_verbosity(args, 2)
                 task.build_statement()
             elif args.command == "compress":
+                set_verbosity(args, 2)
                 task.compress_dataset(args.random_sort)
             elif args.command == "normalize":
+                set_verbosity(args, 2)
                 task.normalize()
             elif args.command == "testplan":
+                set_verbosity(args, 0 if len(tasks) > 1 else 2)
                 task.run_testplan(args.subtask)
             elif args.command == "validate":
+                set_verbosity(args, 0 if len(tasks) > 1 else 2)
                 task.validate_input(args.subtask)
             elif args.command == "score":
+                set_verbosity(args, 2)
                 task.score()
 
     def _select_tasks(self, args: argparse.Namespace) -> List[core.Task]:
@@ -123,6 +131,15 @@ class CLI:
             return [task]
         else:
             return self.contest.tasks
+
+
+def set_verbosity(args: argparse.Namespace, value: int) -> None:
+    """If `-v` was passed any number of times set that as the verbosity, otherwise use `value`
+    as the verbosity"""
+    if args.verbosity > 0:
+        ocimatic.config['verbosity'] = args.verbosity
+    else:
+        ocimatic.config['verbosity'] = value
 
 
 def add_contest_commands(subcommands: argparse._SubParsersAction) -> None:
@@ -247,9 +264,6 @@ def main() -> None:
     if args.timeout:
         ocimatic.config['timeout'] = args.timeout
     del args.timeout
-
-    ocimatic.config['verbosity'] = args.verbosity
-    del args.verbosity
 
     if args.command == "init":
         return new_contest(args)
