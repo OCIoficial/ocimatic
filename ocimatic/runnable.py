@@ -7,7 +7,7 @@ import time as pytime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Any, List, Union
+from typing import IO, Any, List, Optional, Union
 
 SIGNALS = {
     1: 'SIGHUP',
@@ -67,10 +67,10 @@ class Runnable(ABC):
         raise NotImplementedError("Class %s doesn't implement cmd()" % (self.__class__.__name__))
 
     def run(self,
-            in_path: Path = None,
-            out_path: Path = None,
+            in_path: Optional[Path] = None,
+            out_path: Optional[Path] = None,
             args: List[str] = [],
-            timeout: float = None) -> RunResult:
+            timeout: Optional[float] = None) -> RunResult:
         """Run binary redirecting standard input and output.
 
         Args:

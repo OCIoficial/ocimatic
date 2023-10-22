@@ -9,8 +9,7 @@ from typing import Counter, Dict, List, NoReturn, Optional
 import ocimatic
 from ocimatic import ui
 from ocimatic.runnable import RunSuccess
-from ocimatic.source_code import (BuildError, CppSource, PythonSource,
-                                  SourceCode)
+from ocimatic.source_code import (BuildError, CppSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
 
 
