@@ -19,4 +19,4 @@ class Config(TypedDict):
     contest_root: Path
 
 
-config: Config = {'timeout': 10, 'last_blank_page': True, 'verbosity': 0, 'contest_root': Path('/')}
+config: Config = {'timeout': 3, 'last_blank_page': True, 'verbosity': 0, 'contest_root': Path('/')}

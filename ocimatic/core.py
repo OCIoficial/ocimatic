@@ -63,6 +63,10 @@ class Contest:
                       if Path(dir, '.ocimatic_task').exists())
         self._tasks = [Task(d, i) for (i, (_, d)) in enumerate(dirs)]
 
+    @property
+    def directory(self) -> Path:
+        return self._directory
+
     @staticmethod
     def create_layout(dest: Path, config: ContestConfig) -> None:
         """Copy contest skeleton to `dest` and save configuration"""
@@ -135,7 +139,7 @@ class Contest:
 
         return st == 0
 
-    @ui.work('PDF', 'titlepage.tex')
+    @ui.work('LATEX', 'titlepage.tex')
     def compile_titlepage(self) -> ui.WorkResult:
         """Compile title page latex"""
         success = self._titlepage.compile() is not None
@@ -219,7 +223,7 @@ class Task:
         new_dir = Path(directory, self.codename)
         new_dir.mkdir()
 
-        result = self.compress_dataset()
+        result = self.compress_dataset(False)
         if result.success:
             dataset = Path(self._directory, 'dataset', 'data.zip')
             dataset_dst = Path(new_dir, 'data.zip')
@@ -232,7 +236,7 @@ class Task:
             shutil.copy2(Path(self._directory, 'statement', 'statement.pdf'), statement)
 
     @ui.task('Generating dataset input files')
-    def gen_input(self, subtask: Optional[int]) -> None:
+    def run_testplan(self, subtask: Optional[int]) -> None:
         if self._config.get("static_dataset", False):
             ui.fatal_error("Task has a static dataset.")
         testplan = Testplan(Path(self._directory, 'attic'), self._directory,
@@ -274,7 +278,7 @@ class Task:
         # testplan.validate_input(subtask)
 
     @ui.work('ZIP')
-    def compress_dataset(self, random_sort: bool = False) -> ui.WorkResult:
+    def compress_dataset(self, random_sort: bool) -> ui.WorkResult:
         """Compress dataset into a single file"""
         st = self._dataset.compress(random_sort=random_sort)
         return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
@@ -317,8 +321,8 @@ class Task:
     def normalize(self) -> None:
         self._dataset.normalize()
 
-    @ui.task('Running solutions')
-    def run_solutions(self, solution: Optional[Path] = None) -> None:
+    @ui.task('Running solution')
+    def run_solution(self, solution: Path) -> None:
         """Run all solutions reporting outcome and running time."""
         if solution:
             sol = self.load_solution_for_path(solution)
@@ -337,15 +341,11 @@ class Task:
             sol.run(self._dataset, self._checker, check=True, sample=True)
 
     @ui.task('Building solutions')
-    def build_solutions(self, solution: Optional[Path] = None) -> None:
+    def build_solution(self, solution: Path) -> None:
         """Force compilation of solutions."""
-        if solution:
-            sol = self.load_solution_for_path(solution)
-            if sol:
-                sol.build()
-        else:
-            for sol in self.solutions(True):
-                sol.build()
+        sol = self.load_solution_for_path(solution)
+        if sol:
+            sol.build()
 
     @ui.task('Generating expected output')
     def gen_expected(self, sample: bool = False, solution: Optional[Path] = None) -> None:
@@ -395,7 +395,7 @@ class Statement:
     def __str__(self) -> str:
         return str(self._source)
 
-    @ui.work('PDF')
+    @ui.work('LATEX')
     def build(self, blank_page: bool = False) -> ui.WorkResult:
         """Compile latex statement"""
         if self._num is not None:
