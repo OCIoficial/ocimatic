@@ -2,7 +2,7 @@ import re
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import (Any, Callable, Generator, Iterator, List, NoReturn, Optional, ParamSpec,
+from typing import (Callable, Concatenate, Generator, Iterator, List, NoReturn, Optional, ParamSpec,
                     Protocol, TextIO, TypeVar, cast)
 
 from colorama import Fore, Style
@@ -10,6 +10,7 @@ from colorama import Fore, Style
 import ocimatic
 
 _P = ParamSpec("_P")
+_S = TypeVar("_S")
 _T = TypeVar("_T")
 
 RESET = Style.RESET_ALL
@@ -203,43 +204,42 @@ def show_message(label: str, msg: str, color: str = INFO) -> None:
     write(' %s \n' % colorize(label + ': ' + str(msg), color))
 
 
-F = TypeVar("F", bound=Callable[..., Any])
+def contest_group(formatter: str = "{}") -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
 
+    def decorator(func: Callable[_P, _T]) -> Callable[_P, _T]:
 
-def contest_group(formatter: str = "{}") -> Callable[[F], F]:
-
-    def decorator(func: F) -> F:
-
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
             contest_group_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
 
-        return cast(F, wrapper)
+        return wrapper
 
     return decorator
 
 
-def workgroup(formatter: str = "{}") -> Callable[[F], F]:
+def workgroup(formatter: str = "{}") -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
 
-    def decorator(func: F) -> F:
+    def decorator(func: Callable[_P, _T]) -> Callable[_P, _T]:
 
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
             workgroup_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
 
-        return cast(F, wrapper)
+        return wrapper
 
     return decorator
 
 
-def task(action: str) -> Callable[[F], F]:
+def task(
+    action: str
+) -> Callable[[Callable[Concatenate[_S, _P], _T]], Callable[Concatenate[_S, _P], _T]]:
 
-    def decorator(func: F) -> F:
+    def decorator(func: Callable[Concatenate[_S, _P], _T]) -> Callable[Concatenate[_S, _P], _T]:
 
-        def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+        def wrapper(self: _S, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             task_header(str(self), action)
             return func(self, *args, **kwargs)
 
-        return cast(F, wrapper)
+        return wrapper
 
     return decorator
