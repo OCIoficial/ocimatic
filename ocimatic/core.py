@@ -8,6 +8,8 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, TypedDict
 
+import pypdf
+
 import ocimatic
 from ocimatic import pjson, ui
 from ocimatic.checkers import Checker
@@ -143,26 +145,19 @@ class Contest:
     @ui.work('MERGE', '{1}')
     def merge_pdfs(self, filename: str) -> ui.WorkResult:
         """Merge titlepage and statements pdfs into a single file """
-        if not shutil.which('gs'):
-            return ui.WorkResult(success=False, short_msg='Cannot find gs')
+        try:
+            merger = pypdf.PdfFileMerger()
+            for task in self._tasks:
+                merger.append(task.statement.pdf)
+            titlepage = Path(self._directory, 'titlepage.pdf')
+            if titlepage.exists():
+                merger.append(titlepage)
 
-        pdfs = ' '.join('"%s"' % t.statement.pdf for t in self._tasks if t.statement.pdf)
-        titlepage = Path(self._directory, 'titlepage.pdf')
-        if titlepage.exists():
-            pdfs = '"%s" %s' % (titlepage, pdfs)
-
-        cmd = ('gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite'
-               ' -dPDFSETTINGS=/prepress -sOutputFile=%s %s') % (Path(self._directory,
-                                                                      filename), pdfs)
-        complete = subprocess.run(cmd,
-                                  shell=True,
-                                  timeout=20,
-                                  stdin=subprocess.DEVNULL,
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL,
-                                  check=False)
-        st = complete.returncode == 0
-        return ui.WorkResult(success=st, short_msg='OK' if st else 'FAILED')
+            merger.write(Path(self._directory, filename))
+            merger.close()
+            return ui.WorkResult(success=True, short_msg='OK')
+        except Exception as exc:
+            return ui.WorkResult(success=False, short_msg="FAILED", long_msg=str(exc))
 
     @property
     def name(self) -> str:
