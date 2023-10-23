@@ -114,7 +114,7 @@ class Contest:
         self.merge_pdfs('twoside.pdf')
 
     @ui.contest_group('Building package')
-    def package(self) -> bool:
+    def package(self) -> None:
         """Package statements and datasets of all tasks into a single zip file"""
         tmpdir = Path(tempfile.mkdtemp())
         try:
@@ -130,14 +130,9 @@ class Contest:
             if twoside.exists():
                 shutil.copy2(twoside, Path(tmpdir, 'twoside.pdf'))
 
-            cmd = 'cd %s && zip -r contest.zip .' % tmpdir
-            st = subprocess.call(cmd, stdout=subprocess.DEVNULL, shell=True)
-            contest = Path(self._directory, '%s.zip' % self.name)
-            shutil.copy2(Path(tmpdir, 'contest.zip'), contest)
+            shutil.make_archive(self.name, "zip", tmpdir)
         finally:
             shutil.rmtree(tmpdir)
-
-        return st == 0
 
     @ui.work('LATEX', 'titlepage.tex')
     def compile_titlepage(self) -> ui.WorkResult:
@@ -370,9 +365,9 @@ class Task:
         generator.gen_expected(self._dataset, sample=sample)
 
     @ui.task('Building statement')
-    def build_statement(self, blank_page: bool = False) -> ui.WorkResult:
+    def build_statement(self, blank_page: bool = False) -> None:
         """Generate pdf for the statement"""
-        return self._statement.build(blank_page=blank_page)
+        self._statement.build(blank_page=blank_page)
 
 
 class Statement:

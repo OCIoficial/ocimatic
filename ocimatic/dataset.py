@@ -3,6 +3,7 @@ import shutil
 import string
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import List, Optional
 from zipfile import ZipFile
@@ -67,10 +68,8 @@ class Dataset:
         to each file.
         """
         path = Path(self._directory, 'data.zip')
-        if path.exists() and path.stat().st_mtime >= self.mtime():
-            return ui.WorkResult(success=True, short_msg="OK")
 
-        with ZipFile(path, 'w') as zip:
+        with ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED) as zip:
             compressed = 0
             for subtask in self._subtasks:
                 compressed += subtask.write_to_zip(zip, random_sort)

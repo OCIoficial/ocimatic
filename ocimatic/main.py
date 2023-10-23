@@ -1,7 +1,6 @@
 import argparse
-import ctypes
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import ocimatic
 from ocimatic import core, server, ui
@@ -9,7 +8,7 @@ from ocimatic import core, server, ui
 CONTEST_COMMANDS = ['problemset', 'package']
 SINGLE_TASK_COMMANDS = ["run", "build"]
 MULTI_TASK_COMMANDS = [
-    'check', 'expected', 'pdf', 'compress', 'normalize', 'testplan', 'validate', 'score'
+    'check', 'gen-expected', 'pdf', 'compress', 'normalize', 'run-testplan', 'validate', 'score'
 ]
 
 
@@ -51,21 +50,27 @@ class CLI:
 
     def run_contest_command(self, args: argparse.Namespace) -> None:
         assert args.command in CONTEST_COMMANDS
+        action: Callable[[core.Contest], None]
         set_verbosity(args, 2)
         if args.command == "problemset":
-            self.contest.build_problemset()
+            action = lambda contest: contest.build_problemset()
         elif args.command == "package":
-            self.contest.package()
+            action = lambda contest: self.contest.package()
+        action(self.contest)
 
     def run_single_task_command(self, args: argparse.Namespace) -> None:
-        assert args.command in SINGLE_TASK_COMMANDS
         task = self._select_task(args)
 
         set_verbosity(args, 2)
+        action: Callable[[core.Task], None]
         if args.command == "run":
-            task.run_solution(args.solution)
+            set_timeout(args)
+            action = lambda task: task.run_solution(args.solution)
         elif args.command == "build":
-            task.build_solution(args.solution)
+            action = lambda task: task.build_solution(args.solution)
+        else:
+            ui.fatal_error(f"invalid multi-task command: `{args.command}`")
+        action(task)
 
     def _select_task(self, args: argparse.Namespace) -> core.Task:
         task = None
@@ -80,38 +85,44 @@ class CLI:
         return task
 
     def run_multi_task_command(self, args: argparse.Namespace) -> None:
-        assert args.command in MULTI_TASK_COMMANDS
-
         tasks = self._select_tasks(args)
 
         if not tasks:
             ui.show_message("Warning", "no tasks selected", ui.WARNING)
 
+        action: Callable[[core.Task], None]
+        if args.command == "check":
+            set_timeout(args)
+            set_verbosity(args, 0)
+            action = lambda task: task.check_dataset()
+        elif args.command == "gen-expected":
+            set_verbosity(args, 0 if len(tasks) > 1 else 2)
+            if args.solution and len(tasks) > 1:
+                ui.fatal_error("A solution can only be specified when there's a single target task")
+            action = lambda task: task.gen_expected(sample=args.sample, solution=args.solution)
+        elif args.command == "pdf":
+            set_verbosity(args, 2)
+            action = lambda task: task.build_statement()
+        elif args.command == "compress":
+            set_verbosity(args, 2)
+            action = lambda task: task.compress_dataset(args.random_sort)
+        elif args.command == "normalize":
+            set_verbosity(args, 2)
+            action = lambda task: task.normalize()
+        elif args.command == "run-testplan":
+            set_verbosity(args, 0 if len(tasks) > 1 else 2)
+            action = lambda task: task.run_testplan(args.subtask)
+        elif args.command == "validate":
+            set_verbosity(args, 0 if len(tasks) > 1 else 2)
+            action = lambda task: task.validate_input(args.subtask)
+        elif args.command == "score":
+            set_verbosity(args, 2)
+            action = lambda task: task.score()
+        else:
+            ui.fatal_error(f"invalid multi-task command: `{args.command}`")
+
         for task in tasks:
-            if args.command == "check":
-                set_verbosity(args, 0)
-                task.check_dataset()
-            elif args.command == "expected":
-                set_verbosity(args, 0 if len(tasks) > 1 else 2)
-                task.gen_expected(sample=args.sample, solution=args.solution)
-            elif args.command == "pdf":
-                set_verbosity(args, 2)
-                task.build_statement()
-            elif args.command == "compress":
-                set_verbosity(args, 2)
-                task.compress_dataset(args.random_sort)
-            elif args.command == "normalize":
-                set_verbosity(args, 2)
-                task.normalize()
-            elif args.command == "testplan":
-                set_verbosity(args, 0 if len(tasks) > 1 else 2)
-                task.run_testplan(args.subtask)
-            elif args.command == "validate":
-                set_verbosity(args, 0 if len(tasks) > 1 else 2)
-                task.validate_input(args.subtask)
-            elif args.command == "score":
-                set_verbosity(args, 2)
-                task.score()
+            action(task)
 
     def _select_tasks(self, args: argparse.Namespace) -> List[core.Task]:
         contest = self.contest
@@ -142,6 +153,11 @@ def set_verbosity(args: argparse.Namespace, value: int) -> None:
         ocimatic.config['verbosity'] = value
 
 
+def set_timeout(args: argparse.Namespace) -> None:
+    if args.timeout:
+        ocimatic.config['timeout'] = args.timeout
+
+
 def add_contest_commands(subcommands: argparse._SubParsersAction) -> None:
     # init
     init = subcommands.add_parser("init", help="Initializes a contest in a new directory.")
@@ -163,31 +179,38 @@ def add_multitask_commands(subcommands: argparse._SubParsersAction) -> None:
     multitask_parser = argparse.ArgumentParser(add_help=False)
     multitask_parser.add_argument('--tasks', help="A comma separated list of tasks.")
 
-    subcommands.add_parser(
+    # check
+    check_parser = subcommands.add_parser(
         "check",
         help="""Check input/output correcteness by running all correct solutions against all
         test cases and sample inputs""",
         parents=[multitask_parser])
+    check_parser.add_argument("--timeout", type=float)
 
-    expected_parser = subcommands.add_parser('expected',
-                                             help="""
+    # expected
+    gen_expected_parser = subcommands.add_parser('gen-expected',
+                                                 help="""
         Generate expected output by running a correct solution against all the input data.
         By default it will choose any correct solution preferring solutions
         written in C++.
         """,
-                                             parents=[multitask_parser])
-    expected_parser.add_argument("solution",
-                                 nargs="?",
-                                 type=Path,
-                                 help="""
-        A path to a solution. If specified, generate expected output running that solution.""")
-    expected_parser.add_argument("--sample",
-                                 help="Generate expected output for sample input as well.",
-                                 action="store_true",
-                                 default=False)
+                                                 parents=[multitask_parser])
+    gen_expected_parser.add_argument("solution",
+                                     nargs="?",
+                                     type=Path,
+                                     help="""
+        A path to a solution. If specified, generate expected output running that solution.
+        This setting can only be provided if there's a single target task.
+        """)
+    gen_expected_parser.add_argument("--sample",
+                                     help="Generate expected output for sample input as well.",
+                                     action="store_true",
+                                     default=False)
 
+    # pdf
     subcommands.add_parser("pdf", help="Compile the statement's pdf", parents=[multitask_parser])
 
+    # compress
     compress_parser = subcommands.add_parser("compress",
                                              help="Generate zip file with all test data.",
                                              parents=[multitask_parser])
@@ -198,16 +221,19 @@ def add_multitask_commands(subcommands: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Add random prefix to output filenames to sort testcases whithin a subtask randomly")
 
-    testplan_parser = subcommands.add_parser("testplan",
-                                             help="Run testplan.",
-                                             parents=[multitask_parser])
-    testplan_parser.add_argument("--subtask", '-st', type=int)
+    # testplan
+    run_testplan_parser = subcommands.add_parser("run-testplan",
+                                                 help="Run testplan.",
+                                                 parents=[multitask_parser])
+    run_testplan_parser.add_argument("--subtask", '-st', type=int)
 
+    # validate
     validate_parser = subcommands.add_parser("validate",
                                              help="Run input validators.",
                                              parents=[multitask_parser])
     validate_parser.add_argument("--subtask", '-st', type=int)
 
+    # score
     subcommands.add_parser("score",
                            help="Print the score parameters for cms.",
                            parents=[multitask_parser])
@@ -227,11 +253,12 @@ def add_single_task_command(subcommands: argparse._SubParsersAction) -> None:
     parent_parser.add_argument("solution", help="A path to a solution", type=Path)
 
     # run
-    subcommands.add_parser(
+    run_parser = subcommands.add_parser(
         "run",
         help=
         "Run solutions against all test data and displays the output of the checker and running time.",
         parents=[parent_parser])
+    run_parser.add_argument("--timeout", type=float)
 
     # build
     subcommands.add_parser("build", help="Build a solution.", parents=[parent_parser])
@@ -250,7 +277,6 @@ def add_server_command(subcommands: argparse._SubParsersAction) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--verbosity", "-v", action="count", default=0)
-    parser.add_argument("--timeout", type=float)
 
     subcommands = parser.add_subparsers(title="commands", dest="command")
 
@@ -260,10 +286,6 @@ def main() -> None:
     add_server_command(subcommands)
 
     args = parser.parse_args()
-
-    if args.timeout:
-        ocimatic.config['timeout'] = args.timeout
-    del args.timeout
 
     if args.command == "init":
         return new_contest(args)
