@@ -1,8 +1,9 @@
 import re
 import sys
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import (Any, Callable, Generator, Iterator, List, NamedTuple, NoReturn, Optional,
-                    ParamSpec, TextIO, TypeVar, cast)
+                    ParamSpec, Protocol, TextIO, TypeVar, cast)
 
 from colorama import Fore, Style
 
@@ -41,10 +42,20 @@ IO = TextIO
 IO_STREAMS: List[Optional[IO]] = [sys.stdout]
 
 
-class WorkResult(NamedTuple):
+@dataclass(kw_only=True)
+class WorkResult:
     success: bool
     short_msg: str
     long_msg: Optional[str] = None
+
+    def into_work_result(self) -> 'WorkResult':
+        return self
+
+
+class IntoWorkResult(Protocol):
+
+    def into_work_result(self) -> WorkResult:
+        ...
 
 
 @contextmanager
@@ -107,7 +118,7 @@ def solution_group(
 
     def decorator(func: Callable[_P, SolutionGroup[_T]]) -> Callable[_P, _T]:
 
-        def wrapper(*args: Any, **kwargs: Any) -> _T:
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
             solution_group_header(formatter.format(*args, **kwargs))
             gen = func(*args, **kwargs)
             try:
@@ -136,23 +147,20 @@ def solution_group_footer() -> None:
     flush()
 
 
-_TWorkResult = TypeVar('_TWorkResult', bound=WorkResult)
+_TIntoWorkResult = TypeVar('_TIntoWorkResult', bound=IntoWorkResult)
 
 
 def work(
-        action: str,
-        formatter: str = "{}"
-) -> Callable[[Callable[_P, _TWorkResult]], Callable[_P, _TWorkResult]]:
+    action: str,
+    formatter: str = "{}"
+) -> Callable[[Callable[_P, _TIntoWorkResult]], Callable[_P, _TIntoWorkResult]]:
 
-    def decorator(func: Callable[_P, _TWorkResult]) -> Callable[_P, _TWorkResult]:
+    def decorator(func: Callable[_P, _TIntoWorkResult]) -> Callable[_P, _TIntoWorkResult]:
 
-        def wrapper(*args: Any, **kwargs: Any) -> _TWorkResult:
-            if not CAPTURE_WORKS:
-                start_work(action, formatter.format(*args, **kwargs))
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _TIntoWorkResult:
+            start_work(action, formatter.format(*args, **kwargs))
             result = func(*args, **kwargs)
-            if CAPTURE_WORKS:
-                CAPTURE_WORKS[-1].append(result)
-            end_work(result)
+            end_work(result.into_work_result())
             return result
 
         return wrapper
@@ -193,16 +201,6 @@ def fatal_error(message: str) -> NoReturn:
 
 def show_message(label: str, msg: str, color: str = INFO) -> None:
     write(' %s \n' % colorize(label + ': ' + str(msg), color))
-
-
-CAPTURE_WORKS: List[List[WorkResult]] = []
-
-
-@contextmanager
-def capture_works() -> Iterator[List[WorkResult]]:
-    CAPTURE_WORKS.append([])
-    yield CAPTURE_WORKS[-1]
-    CAPTURE_WORKS.pop()
 
 
 F = TypeVar("F", bound=Callable[..., Any])

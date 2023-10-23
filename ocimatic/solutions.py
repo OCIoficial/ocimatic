@@ -50,7 +50,7 @@ class Solution:
     def run(self,
             dataset: Dataset,
             checker: Checker,
-            check: bool = False,
+            check_mode: bool = False,
             sample: bool = False) -> ui.SolutionGroup[None]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
@@ -58,7 +58,7 @@ class Solution:
             yield ui.WorkResult(success=False, short_msg="Failed", long_msg=build_result.msg)
         else:
             yield ui.WorkResult(success=True, short_msg="OK")
-            dataset.run(build_result, checker, sample=sample, check=check)
+            dataset.run(build_result, checker, sample=sample, check_mode=check_mode)
 
     @ui.solution_group()
     def gen_expected(self, dataset: Dataset, sample: bool = False) -> ui.SolutionGroup[None]:

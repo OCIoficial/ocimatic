@@ -325,7 +325,7 @@ class Task:
         cases and sample input.
         """
         for sol in self.solutions():
-            sol.run(self._dataset, self._checker, check=True, sample=True)
+            sol.run(self._dataset, self._checker, check_mode=True, sample=True)
 
     @ui.task('Building solutions')
     def build_solution(self, solution: Path) -> None:

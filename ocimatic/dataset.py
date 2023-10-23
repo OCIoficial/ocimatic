@@ -4,13 +4,15 @@ import string
 import subprocess
 import tempfile
 import zipfile
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, TypeAlias, final
 from zipfile import ZipFile
 
 import ocimatic
 from ocimatic import ui
-from ocimatic.checkers import Checker, CheckerError
+from ocimatic.checkers import Checker, CheckerError, CheckerSuccess
 from ocimatic.runnable import RunError, Runnable, RunResult, RunSuccess
 from ocimatic.source_code import (BuildError, CppSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
@@ -39,12 +41,12 @@ class Dataset:
     def run(self,
             runnable: Runnable,
             checker: Checker,
-            check: bool = False,
+            check_mode: bool = False,
             sample: bool = False) -> None:
         for subtask in self._subtasks:
-            subtask.run(runnable, checker, check=check)
+            subtask.run(runnable, checker, check_mode=check_mode)
         if sample:
-            self._sampledata.run(runnable, checker, check=check)
+            self._sampledata.run(runnable, checker, check_mode=check_mode)
 
     def validate(self, validators: List[Optional[Path]], stn: Optional[int]) -> None:
         assert len(validators) == len(self._subtasks)
@@ -126,9 +128,9 @@ class TestGroup:
         return len(self._tests)
 
     @ui.workgroup()
-    def run(self, runnable: Runnable, checker: Checker, check: bool = False) -> None:
+    def run(self, runnable: Runnable, checker: Checker, check_mode: bool = False) -> None:
         for test in self._tests:
-            test.run(runnable, checker, check=check)
+            test.run(runnable, checker, check_mode=check_mode)
 
     @ui.workgroup()
     def gen_expected(self, runnable: Runnable) -> None:
@@ -166,6 +168,52 @@ class Subtask(TestGroup):
             test.validate(build)
 
 
+class TestResult:
+
+    @dataclass
+    class Success:
+        checker_result: CheckerSuccess
+        run_result: RunSuccess
+        check_mode: bool
+
+        def into_work_result(self) -> WorkResult:
+            outcome = self.checker_result.outcome
+            st = outcome == 1.0
+            if self.check_mode:
+                msg = 'OK' if st else 'FAILED'
+                return WorkResult(success=st, short_msg=msg)
+
+            msg = f'{outcome} [{self.run_result.time:.2f}s]'
+            if self.checker_result.msg is not None:
+                msg += ' - %s' % self.checker_result.msg
+            return WorkResult(success=st, short_msg=msg)
+
+    @dataclass
+    class NoExpectedOutput:
+
+        def into_work_result(self) -> WorkResult:
+            return WorkResult(success=False, short_msg='No expected output file')
+
+    @dataclass
+    class RuntimeError:
+        run_result: RunError
+
+        def into_work_result(self) -> WorkResult:
+            return WorkResult(success=False,
+                              short_msg=self.run_result.msg,
+                              long_msg=self.run_result.stderr)
+
+    @dataclass
+    class CheckerError:
+        checker_result: CheckerError
+
+        def into_work_result(self) -> WorkResult:
+            msg = f'Failed to run checker: `{self.checker_result.msg}`'
+            return WorkResult(success=False, short_msg=msg)
+
+    T = Success | CheckerError | RuntimeError | NoExpectedOutput
+
+
 class Test:
     """A single test file. Expected output file may not exist"""
 
@@ -201,36 +249,26 @@ class Test:
             return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
 
     @ui.work('Run')
-    def run(self, runnable: Runnable, checker: Checker, check: bool = False) -> WorkResult:
+    def run(self, runnable: Runnable, checker: Checker, check_mode: bool = False) -> TestResult.T:
         """Run runnable redirect this test as standard input and check output correctness"""
         if not self.expected_path.exists():
-            return WorkResult(success=False, short_msg='No expected output file')
+            return TestResult.NoExpectedOutput()
 
         out_path = Path(tempfile.mkstemp()[1])
 
-        result = runnable.run(self.in_path, out_path, timeout=ocimatic.config['timeout'])
+        run_result = runnable.run(self.in_path, out_path, timeout=ocimatic.config['timeout'])
 
         # Execution failed
-        if isinstance(result, RunError):
-            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
+        if isinstance(run_result, RunError):
+            return TestResult.RuntimeError(run_result)
 
         checker_result = checker.run(self.in_path, self.expected_path, out_path)
 
         # Checker failed
         if isinstance(checker_result, CheckerError):
-            msg = f'Failed to run checker: `{checker_result.msg}`'
-            return WorkResult(success=False, short_msg=msg)
+            return TestResult.CheckerError(checker_result)
 
-        outcome = checker_result.outcome
-        st = outcome == 1.0
-        if check:
-            msg = 'OK' if st else 'FAILED'
-            return WorkResult(success=st, short_msg=msg)
-
-        msg = f'{outcome} [{result.time:.2f}s]'
-        if checker_result.msg is not None:
-            msg += ' - %s' % checker_result.msg
-        return WorkResult(success=st, short_msg=msg)
+        return TestResult.Success(checker_result, run_result, check_mode)
 
     @property
     def in_path(self) -> Path:
