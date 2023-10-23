@@ -313,13 +313,11 @@ class Task:
     @ui.task('Running solution')
     def run_solution(self, solution: Path) -> None:
         """Run all solutions reporting outcome and running time."""
-        if solution:
-            sol = self.load_solution_for_path(solution)
-            if sol:
-                sol.run(self._dataset, self._checker)
+        sol = self.load_solution_for_path(solution)
+        if sol:
+            sol.run(self._dataset, self._checker)
         else:
-            for sol in self.solutions(True):
-                sol.run(self._dataset, self._checker)
+            ui.show_message('Error', 'Solution not found', ui.ERROR)
 
     @ui.task('Checking dataset')
     def check_dataset(self) -> None:
