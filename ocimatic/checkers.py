@@ -1,3 +1,5 @@
+import difflib
+import itertools
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
@@ -53,22 +55,19 @@ class DiffChecker(Checker):
             expected_path (FilePath)
             out_path (FilePath)
         """
-        assert shutil.which('diff')
         assert in_path.exists()
         assert expected_path.exists()
         assert out_path.exists()
-        complete = subprocess.run(
-            ['diff', '-q', str(expected_path), str(out_path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False)
-        # @TODO(NL 20/10/1990) Check if returncode is nonzero because there
-        # is a difference between files or because there was an error executing
-        # diff.
-        if complete.returncode == 0:
-            return CheckerSuccess(outcome=1.0)
-        else:
-            return CheckerSuccess(outcome=0)
+
+        expected = open(expected_path).readlines()
+        out = open(out_path).readlines()
+        if len(expected) != len(out):
+            return CheckerSuccess(outcome=0.0)
+
+        for (a, b) in zip(expected, out):
+            if a != b:
+                return CheckerSuccess(outcome=0.0)
+        return CheckerSuccess(outcome=1.0)
 
 
 class CustomChecker(Checker):
