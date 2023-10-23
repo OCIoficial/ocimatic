@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Generator, Iterable, List, Optional
+from typing import List, Optional
 
 from ocimatic import ui
 from ocimatic.checkers import Checker

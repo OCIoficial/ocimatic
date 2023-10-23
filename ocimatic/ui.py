@@ -2,8 +2,8 @@ import re
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import (Any, Callable, Generator, Iterator, List, NamedTuple, NoReturn, Optional,
-                    ParamSpec, Protocol, TextIO, TypeVar, cast)
+from typing import (Any, Callable, Generator, Iterator, List, NoReturn, Optional, ParamSpec,
+                    Protocol, TextIO, TypeVar, cast)
 
 from colorama import Fore, Style
 

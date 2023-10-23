@@ -3,7 +3,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, TypedDict
@@ -256,8 +255,9 @@ class Task:
                 Path(self._directory, 'solutions'), self._directory,
                 Path.cwd()
         ]:
-            if Path(dir, path).is_file():
-                return Solution.load(self.codename, Path(dir, path), self._managers_dir)
+            sol = Solution.load(self.codename, Path(dir, path), self._managers_dir)
+            if sol:
+                return sol
         return None
 
     @ui.task('Validating dataset input files')
