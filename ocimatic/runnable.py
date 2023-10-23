@@ -7,7 +7,7 @@ import time as pytime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Any, List, Optional, Union
+from typing import IO, Any, List, Optional
 
 SIGNALS = {
     1: 'SIGHUP',
@@ -57,7 +57,7 @@ class RunError:
     stderr: str
 
 
-RunResult = Union[RunSuccess, RunError]
+RunResult = RunSuccess | RunError
 
 
 class Runnable(ABC):
@@ -126,7 +126,7 @@ class Runnable(ABC):
 
 class Binary(Runnable):
 
-    def __init__(self, path: Union[str, Path]):
+    def __init__(self, path: str | Path):
         self._path = path
 
     def cmd(self) -> List[str]:

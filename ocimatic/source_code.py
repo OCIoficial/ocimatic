@@ -2,7 +2,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional
 
 import ocimatic
 from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
@@ -28,7 +28,7 @@ class SourceCode(ABC):
         return btime < mtime
 
     @abstractmethod
-    def build(self, force: bool = False) -> Union[Runnable, BuildError]:
+    def build(self, force: bool = False) -> Runnable | BuildError:
         raise NotImplementedError("Class %s doesn't implement build()" % (self.__class__.__name__))
 
 
@@ -51,7 +51,7 @@ class CppSource(SourceCode):
         cmd.extend(str(s) for s in self._sources)
         return cmd
 
-    def build(self, force: bool = False) -> Union[Binary, BuildError]:
+    def build(self, force: bool = False) -> Binary | BuildError:
         self._out.parent.mkdir(parents=True, exist_ok=True)
         if force or CppSource.should_build(self._sources, self._out):
             cmd = self.build_cmd()
@@ -76,7 +76,7 @@ class RustSource(SourceCode):
         cmd = ['rustc', '--edition=2021', '-O', '-o', str(self._out), str(self._source)]
         return cmd
 
-    def build(self, force: bool = False) -> Union[Binary, BuildError]:
+    def build(self, force: bool = False) -> Binary | BuildError:
         self._out.parent.mkdir(parents=True, exist_ok=True)
         if force or RustSource.should_build([self._source], self._out):
             cmd = self.build_cmd()
@@ -101,7 +101,7 @@ class JavaSource(SourceCode):
     def build_cmd(self) -> List[str]:
         return ['javac', '-d', str(self._out), str(self._source)]
 
-    def build(self, force: bool = False) -> Union[JavaClasses, BuildError]:
+    def build(self, force: bool = False) -> JavaClasses | BuildError:
         if force or JavaSource.should_build([self._source], self._out):
             self._out.mkdir(parents=True, exist_ok=True)
             cmd = self.build_cmd()

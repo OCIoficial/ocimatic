@@ -8,6 +8,9 @@ from colorama import Fore, Style
 
 import ocimatic
 
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
+
 RESET = Style.RESET_ALL
 BOLD = Style.BRIGHT
 RED = Fore.RED
@@ -40,7 +43,7 @@ IO_STREAMS: List[Optional[IO]] = [sys.stdout]
 
 class WorkResult(NamedTuple):
     success: bool
-    short_msg: Optional[str] = None
+    short_msg: str
     long_msg: Optional[str] = None
 
 
@@ -96,17 +99,15 @@ def contest_group_header(msg: str, length: int = 35) -> None:
     flush()
 
 
-P = ParamSpec("P")
-T = TypeVar("T")
-SolutionGroup = Generator[WorkResult, None, T]
+SolutionGroup = Generator[WorkResult, None, _T]
 
 
 def solution_group(
-        formatter: str = "{}") -> Callable[[Callable[P, SolutionGroup[T]]], Callable[P, T]]:
+        formatter: str = "{}") -> Callable[[Callable[_P, SolutionGroup[_T]]], Callable[_P, _T]]:
 
-    def decorator(func: Callable[P, SolutionGroup[T]]) -> Callable[P, T]:
+    def decorator(func: Callable[_P, SolutionGroup[_T]]) -> Callable[_P, _T]:
 
-        def wrapper(*args: Any, **kwargs: Any) -> T:
+        def wrapper(*args: Any, **kwargs: Any) -> _T:
             solution_group_header(formatter.format(*args, **kwargs))
             gen = func(*args, **kwargs)
             try:
@@ -115,7 +116,7 @@ def solution_group(
                     end_work(result)
             except StopIteration as exc:
                 solution_group_footer()
-                return cast(T, exc.value)
+                return cast(_T, exc.value)
 
         return wrapper
 
@@ -135,14 +136,17 @@ def solution_group_footer() -> None:
     flush()
 
 
-F2 = TypeVar('F2', bound=Callable[..., WorkResult])
+_TWorkResult = TypeVar('_TWorkResult', bound=WorkResult)
 
 
-def work(action: str, formatter: str = "{}") -> Callable[[F2], F2]:
+def work(
+        action: str,
+        formatter: str = "{}"
+) -> Callable[[Callable[_P, _TWorkResult]], Callable[_P, _TWorkResult]]:
 
-    def decorator(func: F2) -> F2:
+    def decorator(func: Callable[_P, _TWorkResult]) -> Callable[_P, _TWorkResult]:
 
-        def wrapper(*args: Any, **kwargs: Any) -> WorkResult:
+        def wrapper(*args: Any, **kwargs: Any) -> _TWorkResult:
             if not CAPTURE_WORKS:
                 start_work(action, formatter.format(*args, **kwargs))
             result = func(*args, **kwargs)
@@ -151,7 +155,7 @@ def work(action: str, formatter: str = "{}") -> Callable[[F2], F2]:
             end_work(result)
             return result
 
-        return cast(F2, wrapper)
+        return wrapper
 
     return decorator
 

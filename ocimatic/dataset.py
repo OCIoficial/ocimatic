@@ -11,7 +11,7 @@ from zipfile import ZipFile
 import ocimatic
 from ocimatic import ui
 from ocimatic.checkers import Checker, CheckerError
-from ocimatic.runnable import RunError, Runnable, RunSuccess
+from ocimatic.runnable import RunError, Runnable, RunResult, RunSuccess
 from ocimatic.source_code import (BuildError, CppSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
 

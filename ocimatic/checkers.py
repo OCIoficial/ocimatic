@@ -1,11 +1,7 @@
-import difflib
-import itertools
-import shutil
-import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 from ocimatic.runnable import RunSuccess
 from ocimatic.source_code import BuildError, CppSource, RustSource, SourceCode
@@ -22,7 +18,7 @@ class CheckerError:
     msg: str
 
 
-CheckerResult = Union[CheckerSuccess, CheckerError]
+CheckerResult = CheckerSuccess | CheckerError
 
 
 class Checker(ABC):

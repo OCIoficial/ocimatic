@@ -1,6 +1,6 @@
 import subprocess
 from pathlib import Path
-from typing import Iterator, List, Optional, Text, Union, cast
+from typing import Iterator, List, Optional, Text, cast
 
 from ansi2html import Ansi2HTMLConverter
 from flask import Flask, Response, render_template, request
@@ -68,7 +68,7 @@ def save_solution(content: str, suffix: str) -> Path:
 
 
 @app.route('/submit', methods=['POST'])
-def submit() -> Union[Response, str]:
+def submit() -> Response | str:
     assert contest
     data = request.get_json()
     print(data)
@@ -85,7 +85,7 @@ def submit() -> Union[Response, str]:
         return 'Invalid solution'
 
     ocimatic_path = Path(Path(__file__).parents[1], 'bin', 'ocimatic').resolve()
-    cmd: List[Union[Path, str]] = ['python', ocimatic_path, 'run', '--task', task.name, filepath]
+    cmd: List[Path | str] = ['python', ocimatic_path, 'run', '--task', task.name, filepath]
 
     def stream() -> Iterator[str]:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
