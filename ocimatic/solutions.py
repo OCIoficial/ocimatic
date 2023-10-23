@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Generator, Iterable, List, Optional
 
 from ocimatic import ui
 from ocimatic.checkers import Checker
@@ -51,7 +51,7 @@ class Solution:
             dataset: Dataset,
             checker: Checker,
             check: bool = False,
-            sample: bool = False) -> Iterable[ui.WorkResult]:
+            sample: bool = False) -> ui.SolutionGroup[None]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
@@ -61,7 +61,7 @@ class Solution:
             dataset.run(build_result, checker, sample=sample, check=check)
 
     @ui.solution_group()
-    def gen_expected(self, dataset: Dataset, sample: bool = False) -> Iterable[ui.WorkResult]:
+    def gen_expected(self, dataset: Dataset, sample: bool = False) -> ui.SolutionGroup[None]:
         """Generate expected output files for all test cases in the given dataset
         running this solution."""
         build_result = self._source.build()

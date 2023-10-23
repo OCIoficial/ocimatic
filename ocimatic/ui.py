@@ -1,8 +1,8 @@
 import re
 import sys
 from contextlib import contextmanager
-from typing import (Any, Callable, Iterable, Iterator, List, NamedTuple, NoReturn, Optional, TextIO,
-                    TypeVar, cast)
+from typing import (Any, Callable, Generator, Iterator, List, NamedTuple, NoReturn, Optional,
+                    ParamSpec, TextIO, TypeVar, cast)
 
 from colorama import Fore, Style
 
@@ -96,18 +96,26 @@ def contest_group_header(msg: str, length: int = 35) -> None:
     flush()
 
 
-F1 = TypeVar("F1", bound=Callable[..., Iterable[WorkResult]])
+P = ParamSpec("P")
+T = TypeVar("T")
+SolutionGroup = Generator[WorkResult, None, T]
 
 
-def solution_group(formatter: str = "{}") -> Callable[[F1], Callable[..., None]]:
+def solution_group(
+        formatter: str = "{}") -> Callable[[Callable[P, SolutionGroup[T]]], Callable[P, T]]:
 
-    def decorator(func: F1) -> Callable[..., None]:
+    def decorator(func: Callable[P, SolutionGroup[T]]) -> Callable[P, T]:
 
-        def wrapper(*args: Any, **kwargs: Any) -> None:
+        def wrapper(*args: Any, **kwargs: Any) -> T:
             solution_group_header(formatter.format(*args, **kwargs))
-            for result in func(*args, **kwargs):
-                end_work(result)
-            solution_group_footer()
+            gen = func(*args, **kwargs)
+            try:
+                while True:
+                    result = next(gen)
+                    end_work(result)
+            except StopIteration as exc:
+                solution_group_footer()
+                return cast(T, exc.value)
 
         return wrapper
 
