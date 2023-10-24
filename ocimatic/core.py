@@ -13,7 +13,7 @@ import pypdf
 import ocimatic
 from ocimatic import pjson, ui
 from ocimatic.checkers import Checker
-from ocimatic.dataset import Dataset, RuntimeStats, Test
+from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
 from ocimatic.solutions import Solution
 from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
 from ocimatic.testplan import Testplan
@@ -140,7 +140,8 @@ class Contest:
     def compile_titlepage(self) -> ui.WorkResult:
         """Compile title page latex"""
         success = self._titlepage.compile() is not None
-        return ui.WorkResult(success=success, short_msg='OK' if success else 'FAILED')
+        return ui.WorkResult(status=ui.Status.from_bool(success),
+                             short_msg='OK' if success else 'FAILED')
 
     @ui.work('MERGE', '{1}')
     def merge_pdfs(self, filename: str) -> ui.WorkResult:
@@ -155,9 +156,9 @@ class Contest:
 
             merger.write(Path(self._directory, filename))
             merger.close()
-            return ui.WorkResult(success=True, short_msg='OK')
+            return ui.WorkResult.success(short_msg='OK')
         except Exception as exc:
-            return ui.WorkResult(success=False, short_msg="FAILED", long_msg=str(exc))
+            return ui.WorkResult.fail(short_msg="FAILED", long_msg=str(exc))
 
     @property
     def name(self) -> str:
@@ -214,14 +215,14 @@ class Task:
         new_dir.mkdir()
 
         result = self._dataset.compress(False)
-        if result.success:
+        if result.status is ui.Status.success:
             dataset = Path(self._directory, 'dataset', 'data.zip')
             dataset_dst = Path(new_dir, 'data.zip')
             if dataset.exists():
                 shutil.copy2(dataset, dataset_dst)
 
         result = self.statement.build(blank_page=False)
-        if result.success:
+        if result.status is ui.Status.success:
             statement = Path(new_dir, 'statement.pdf')
             shutil.copy2(Path(self._directory, 'statement', 'statement.pdf'), statement)
 
@@ -318,7 +319,7 @@ class Task:
         if not sol:
             return ui.show_message('Error', 'Solution not found', ui.ERROR)
 
-        results = sol.run(self._dataset, self._checker)
+        results = sol.run(self._dataset, self._checker, RunMode.run_solution)
         if results:
             stats = results.runtime_stats()
             ui.show_message('Max running time', f" {stats.max:.3f}s")
@@ -332,10 +333,7 @@ class Task:
         stats = RuntimeStats.unit()
         solutions = list(self.solutions())
         for sol in solutions:
-            results = sol.run(self._dataset,
-                              self._checker,
-                              check_mode=True,
-                              run_on_sample_data=True)
+            results = sol.run(self._dataset, self._checker, RunMode.check_correct)
             if results:
                 stats += results.runtime_stats()
 
@@ -397,7 +395,7 @@ class Statement:
         return str(self._source)
 
     @ui.work('LATEX')
-    def build(self, blank_page: bool) -> ui.WorkResult:
+    def build(self, blank_page: bool) -> ui.Result:
         """Compile latex statement"""
         if self._num is not None:
             os.environ['OCIMATIC_PROBLEM_NUMBER'] = chr(ord('A') + self._num)
@@ -408,7 +406,10 @@ class Statement:
 
         success = self._source.compile() is not None
 
-        return ui.WorkResult(success=success, short_msg='OK' if success else 'FAILED')
+        if success:
+            return ui.Result.success('OK')
+        else:
+            return ui.Result.fail('FAILED')
 
     def io_samples(self) -> List[Test]:
         """Find sample input data in the satement"""

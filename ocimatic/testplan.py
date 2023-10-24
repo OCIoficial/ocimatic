@@ -8,7 +8,7 @@ from typing import Counter, Dict, List, NoReturn, Optional
 
 import ocimatic
 from ocimatic import ui
-from ocimatic.runnable import RunSuccess
+from ocimatic.runnable import RunError, RunSuccess
 from ocimatic.source_code import (BuildError, CppSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
 
@@ -145,13 +145,12 @@ class Copy(Command):
     @ui.work('Copy', '{0}')
     def run(self, dst: Path) -> WorkResult:
         if not self._file.exists():
-            return WorkResult(success=False, short_msg='No such file')
+            return WorkResult.fail(short_msg='No such file')
         try:
             shutil.copy(self._file, self.dst_file(dst))
-            (st, msg) = (True, 'OK')
-            return WorkResult(success=st, short_msg=msg)
+            return WorkResult.success(short_msg='OK')
         except Exception:  # pylint: disable=broad-except
-            return WorkResult(success=False, short_msg='Error when copying file')
+            return WorkResult.fail(short_msg='Error when copying file')
 
 
 class Echo(Command):
@@ -167,7 +166,7 @@ class Echo(Command):
     def run(self, dst_dir: Path) -> WorkResult:
         with self.dst_file(dst_dir).open('w') as test_file:
             test_file.write(' '.join(self._args) + '\n')
-            return WorkResult(success=True, short_msg='Ok')
+            return WorkResult.success(short_msg='Ok')
 
 
 class Script(Command):
@@ -187,15 +186,14 @@ class Script(Command):
     def run(self, dst_dir: Path) -> WorkResult:
         build_result = self._script.build()
         if isinstance(build_result, BuildError):
-            return WorkResult(success=False,
-                              short_msg='Failed to build generator',
-                              long_msg=build_result.msg)
+            return WorkResult.fail(short_msg='Failed to build generator', long_msg=build_result.msg)
         result = build_result.run(out_path=self.dst_file(dst_dir),
                                   args=[self._seed_arg(dst_dir), *self._args])
-        if isinstance(result, RunSuccess):
-            return WorkResult(success=True, short_msg='OK')
-        else:
-            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
+        match result:
+            case RunSuccess(_):
+                return WorkResult.success(short_msg='OK')
+            case RunError(msg, stderr):
+                return WorkResult.fail(short_msg=msg, long_msg=stderr)
 
     def _seed_arg(self, dir: Path) -> str:
         return f'{dir.name}-{self._group}-{self._idx}'

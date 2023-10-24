@@ -2,8 +2,9 @@ import re
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import (Callable, Concatenate, Generator, Iterator, List, NoReturn, Optional, ParamSpec,
-                    Protocol, TextIO, TypeVar, cast)
+from enum import Enum
+from typing import (Callable, Concatenate, Generator, Iterator, List, Literal, NoReturn, Optional,
+                    ParamSpec, Protocol, TextIO, TypeVar, cast)
 
 from colorama import Fore, Style
 
@@ -43,20 +44,60 @@ IO = TextIO
 IO_STREAMS: List[Optional[IO]] = [sys.stdout]
 
 
-@dataclass(kw_only=True)
+class Status(Enum):
+    success = "sucess"
+    fail = "fail"
+    info = "info"
+
+    @staticmethod
+    def from_bool(b: bool) -> 'Status':
+        return Status.success if b else Status.fail
+
+
+class IntoWorkResult(Protocol):
+
+    def into_work_result(self) -> 'WorkResult':
+        ...
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
 class WorkResult:
-    success: bool
+    status: Status
     short_msg: str
-    long_msg: Optional[str] = None
+    long_msg: str | None = None
+
+    @staticmethod
+    def success(short_msg: str, long_msg: str | None = None) -> 'WorkResult':
+        return WorkResult(status=Status.success, short_msg=short_msg, long_msg=long_msg)
+
+    @staticmethod
+    def fail(short_msg: str, long_msg: str | None = None) -> 'WorkResult':
+        return WorkResult(status=Status.fail, short_msg=short_msg, long_msg=long_msg)
+
+    @staticmethod
+    def info(short_msg: str, long_msg: str | None = None) -> 'WorkResult':
+        return WorkResult(status=Status.info, short_msg=short_msg, long_msg=long_msg)
 
     def into_work_result(self) -> 'WorkResult':
         return self
 
 
-class IntoWorkResult(Protocol):
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Result:
+    status: Literal[Status.success, Status.fail]
+    short_msg: str
+    long_msg: str | None = None
+
+    @staticmethod
+    def success(short_msg: str, long_msg: str | None = None) -> 'Result':
+        return Result(status=Status.success, short_msg=short_msg, long_msg=long_msg)
+
+    @staticmethod
+    def fail(short_msg: str, long_msg: str | None = None) -> 'Result':
+        return Result(status=Status.fail, short_msg=short_msg, long_msg=long_msg)
 
     def into_work_result(self) -> WorkResult:
-        ...
+        return WorkResult(status=self.status, short_msg=self.short_msg, long_msg=self.long_msg)
 
 
 @contextmanager
@@ -111,7 +152,7 @@ def contest_group_header(msg: str, length: int = 35) -> None:
     flush()
 
 
-SolutionGroup = Generator[WorkResult, None, _T]
+SolutionGroup = Generator[Result, None, _T]
 
 
 def solution_group(
@@ -124,7 +165,7 @@ def solution_group(
             gen = func(*args, **kwargs)
             try:
                 while True:
-                    result = next(gen)
+                    result = next(gen).into_work_result()
                     end_work(result)
             except StopIteration as exc:
                 solution_group_footer()
@@ -179,12 +220,18 @@ def start_work(action: str, msg: str, length: int = 80) -> None:
 
 
 def end_work(result: WorkResult) -> None:
-    color = OK if result.success else ERROR
+    match result.status:
+        case Status.info:
+            color = INFO
+        case Status.success:
+            color = OK
+        case Status.fail:
+            color = ERROR
     if ocimatic.config['verbosity'] > 0:
         write(colorize(str(result.short_msg), color))
         writeln()
     else:
-        write(colorize("." if result.success else "⨯", color))
+        write(colorize("x" if result.status is Status.fail else ".", color))
     if result.long_msg and ocimatic.config['verbosity'] > 1:
         long_msg = result.long_msg.strip()
         long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))

@@ -5,7 +5,7 @@ from typing import List, Optional, Set
 
 from ocimatic import ui
 from ocimatic.checkers import Checker
-from ocimatic.dataset import Dataset, DatasetResults
+from ocimatic.dataset import Dataset, DatasetResults, RunMode
 from ocimatic.source_code import (BuildError, CppSource, JavaSource, PythonSource, RustSource,
                                   SourceCode)
 
@@ -54,22 +54,16 @@ class Solution:
         return Solution(source)
 
     @ui.solution_group()
-    def run(self,
-            dataset: Dataset,
-            checker: Checker,
-            check_mode: bool = False,
-            run_on_sample_data: bool = False) -> ui.SolutionGroup[Optional[DatasetResults]]:
+    def run(self, dataset: Dataset, checker: Checker,
+            mode: RunMode) -> ui.SolutionGroup[Optional[DatasetResults]]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
-            yield ui.WorkResult(success=False, short_msg="Failed", long_msg=build_result.msg)
+            yield ui.Result.fail(short_msg="Failed", long_msg=build_result.msg)
             return None
         else:
-            yield ui.WorkResult(success=True, short_msg="OK")
-            return dataset.run(build_result,
-                               checker,
-                               run_on_sample_data=run_on_sample_data,
-                               check_mode=check_mode)
+            yield ui.Result.success(short_msg="OK")
+            return dataset.run(build_result, checker, mode)
 
     @ui.solution_group()
     def gen_expected(self, dataset: Dataset, sample: bool = False) -> ui.SolutionGroup[None]:
@@ -77,9 +71,9 @@ class Solution:
         running this solution."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
-            yield ui.WorkResult(success=False, short_msg="Failed", long_msg=build_result.msg)
+            yield ui.Result.fail(short_msg="Failed", long_msg=build_result.msg)
         else:
-            yield ui.WorkResult(success=True, short_msg="OK")
+            yield ui.Result.success(short_msg="OK")
             dataset.gen_expected(build_result, sample=sample)
 
     @ui.work('Build')
@@ -87,9 +81,9 @@ class Solution:
         """Build solution."""
         result = self._source.build(True)
         if isinstance(result, BuildError):
-            return ui.WorkResult(success=False, short_msg='Failed', long_msg=result.msg)
+            return ui.WorkResult.fail(short_msg='Failed', long_msg=result.msg)
         else:
-            return ui.WorkResult(success=True, short_msg='OK')
+            return ui.WorkResult.success(short_msg='OK')
 
     @property
     def name(self) -> str:

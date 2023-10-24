@@ -7,7 +7,7 @@ import time as pytime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Any, List, Optional
+from typing import IO, Any, List, Optional, overload
 
 SIGNALS = {
     1: 'SIGHUP',
@@ -57,7 +57,12 @@ class RunError:
     stderr: str
 
 
-RunResult = RunSuccess | RunError
+@dataclass
+class RunTLE:
+    pass
+
+
+RunResult = RunSuccess | RunTLE | RunError
 
 
 class Runnable(ABC):
@@ -65,6 +70,21 @@ class Runnable(ABC):
     @abstractmethod
     def cmd(self) -> List[str]:
         raise NotImplementedError("Class %s doesn't implement cmd()" % (self.__class__.__name__))
+
+    @overload
+    def run(self,
+            in_path: Optional[Path] = None,
+            out_path: Optional[Path] = None,
+            args: List[str] = []) -> RunSuccess | RunError:
+        ...
+
+    @overload
+    def run(self,
+            in_path: Optional[Path] = None,
+            out_path: Optional[Path] = None,
+            args: List[str] = [],
+            timeout: Optional[float] = None) -> RunResult:
+        ...
 
     def run(self,
             in_path: Optional[Path] = None,
@@ -105,7 +125,7 @@ class Runnable(ABC):
                                           stderr=subprocess.PIPE,
                                           check=False)
             except subprocess.TimeoutExpired:
-                return RunError(msg='Execution timed out', stderr='')
+                return RunTLE()
             time = pytime.monotonic() - start
             ret = complete.returncode
             status = ret == 0

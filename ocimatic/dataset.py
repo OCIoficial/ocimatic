@@ -1,25 +1,34 @@
 import itertools
 import random
 import shutil
-import statistics
 import string
 import subprocess
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional
+from typing import Dict, Iterable, Iterator, List, Literal, Optional
 from zipfile import ZipFile
 
 import ocimatic
 from ocimatic import ui
 from ocimatic.checkers import Checker, CheckerError, CheckerSuccess
-from ocimatic.runnable import RunError, Runnable, RunSuccess
+from ocimatic.runnable import RunError, Runnable, RunSuccess, RunTLE
 from ocimatic.source_code import (BuildError, CppSource, PythonSource, SourceCode)
 from ocimatic.ui import WorkResult
 
 IN = ".in"
 SOL = ".sol"
+
+
+class RunMode(Enum):
+    run_solution = 'run_solution'
+    check_correct = 'check_correct'
+    check_partial = 'check_partial'
+
+    def is_check(self) -> bool:
+        return self in [RunMode.check_correct, RunMode.check_partial]
 
 
 class TestResult:
@@ -28,51 +37,51 @@ class TestResult:
     class Success:
         checker_result: CheckerSuccess
         run_result: RunSuccess
-        check_mode: bool
 
         def running_time(self) -> float:
             return self.run_result.time
 
-        def into_work_result(self) -> WorkResult:
-            outcome = self.checker_result.outcome
-            st = outcome == 1.0
-            if self.check_mode:
-                msg = 'OK' if st else 'FAILED'
-                return WorkResult(success=st, short_msg=msg)
+        @property
+        def outcome(self) -> float:
+            return self.checker_result.outcome
 
-            msg = f'{outcome} [{self.run_result.time:.3f}s]'
+        def into_work_result(self) -> WorkResult:
+            msg = f'{self.outcome} [{self.run_result.time:.3f}s]'
             if self.checker_result.msg is not None:
                 msg += ' - %s' % self.checker_result.msg
-            return WorkResult(success=st, short_msg=msg)
+            return WorkResult(status=ui.Status.from_bool(self.outcome == 1.0), short_msg=msg)
 
     @dataclass
-    class CheckerError:
-        checker_result: CheckerError
-        run_result: RunSuccess
-
-        def running_time(self) -> float:
-            return self.run_result.time
+    class TimeLimitExceeded:
+        run_result: RunTLE
 
         def into_work_result(self) -> WorkResult:
-            msg = f'Failed to run checker: `{self.checker_result.msg}`'
-            return WorkResult(success=False, short_msg=msg)
+            return WorkResult(status=ui.Status.fail, short_msg="Execution timed out")
 
     @dataclass
     class RuntimeError:
         run_result: RunError
 
         def into_work_result(self) -> WorkResult:
-            return WorkResult(success=False,
+            return WorkResult(status=ui.Status.fail,
                               short_msg=self.run_result.msg,
                               long_msg=self.run_result.stderr)
+
+    @dataclass
+    class CheckerError:
+        checker_result: CheckerError
+
+        def into_work_result(self) -> WorkResult:
+            msg = f'Failed to run checker: `{self.checker_result.msg}`'
+            return WorkResult(status=ui.Status.fail, short_msg=msg)
 
     @dataclass
     class NoExpectedOutput:
 
         def into_work_result(self) -> WorkResult:
-            return WorkResult(success=False, short_msg='No expected output file')
+            return WorkResult(status=ui.Status.fail, short_msg='No expected output file')
 
-    T = Success | RuntimeError | CheckerError | NoExpectedOutput
+    T = Success | TimeLimitExceeded | RuntimeError | CheckerError | NoExpectedOutput
 
 
 class Test:
@@ -94,23 +103,25 @@ class Test:
     @ui.work('Validate', '{0}')
     def validate(self, validator: Runnable) -> WorkResult:
         result = validator.run(self._in_path, None)
-        if isinstance(result, RunSuccess):
-            return WorkResult(success=True, short_msg='OK')
-        else:
-            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
+        match result:
+            case RunSuccess(_):
+                return WorkResult.success(short_msg='OK')
+            case RunError(msg, stderr):
+                return WorkResult.fail(short_msg=msg, long_msg=stderr)
 
     @ui.work('Gen')
     def gen_expected(self, runnable: Runnable) -> WorkResult:
         """Run binary with this test as input to generate expected output file
         """
-        result = runnable.run(self.in_path, self.expected_path, timeout=ocimatic.config['timeout'])
-        if isinstance(result, RunSuccess):
-            return WorkResult(success=True, short_msg='OK')
-        else:
-            return WorkResult(success=False, short_msg=result.msg, long_msg=result.stderr)
+        result = runnable.run(self.in_path, self.expected_path)
+        match result:
+            case RunSuccess(_):
+                return WorkResult.success(short_msg='OK')
+            case RunError(msg, stderr):
+                return WorkResult.fail(short_msg=msg, long_msg=stderr)
 
     @ui.work('Run')
-    def run(self, runnable: Runnable, checker: Checker, check_mode: bool = False) -> TestResult.T:
+    def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> TestResult.T:
         """Run runnable redirect this test as standard input and check output correctness"""
         if not self.expected_path.exists():
             return TestResult.NoExpectedOutput()
@@ -119,17 +130,21 @@ class Test:
 
         run_result = runnable.run(self.in_path, out_path, timeout=ocimatic.config['timeout'])
 
-        # Execution failed
+        # Runtime Error
         if isinstance(run_result, RunError):
             return TestResult.RuntimeError(run_result)
+
+        # Time limit exceeded
+        if isinstance(run_result, RunTLE):
+            return TestResult.TimeLimitExceeded(run_result)
 
         checker_result = checker.run(self.in_path, self.expected_path, out_path)
 
         # Checker failed
         if isinstance(checker_result, CheckerError):
-            return TestResult.CheckerError(checker_result, run_result)
+            return TestResult.CheckerError(checker_result)
 
-        return TestResult.Success(checker_result, run_result, check_mode)
+        return TestResult.Success(checker_result, run_result)
 
     @property
     def in_path(self) -> Path:
@@ -142,9 +157,9 @@ class Test:
     @ui.work('Normalize')
     def normalize(self) -> WorkResult:
         if not shutil.which('dos2unix'):
-            return WorkResult(success=False, short_msg='Cannot find dos2unix')
+            return WorkResult.fail(short_msg='Cannot find dos2unix')
         if not shutil.which('sed'):
-            return WorkResult(success=False, short_msg='Cannot find sed')
+            return WorkResult.fail(short_msg='Cannot find sed')
         tounix_input = 'dos2unix "%s"' % self.in_path
         tounix_expected = 'dos2unix "%s"' % self.expected_path
         sed_input = "sed -i -e '$a\\' \"%s\"" % self.in_path
@@ -155,7 +170,8 @@ class Test:
         if self.expected_path.exists():
             st += subprocess.call(tounix_expected, stdout=null, stderr=null, shell=True)
             st += subprocess.call(sed_expected, stdout=null, stderr=null, shell=True)
-        return WorkResult(success=st == 0, short_msg='OK' if st == 0 else 'FAILED')
+        return WorkResult(status=ui.Status.from_bool(st == 0),
+                          short_msg='OK' if st == 0 else 'FAILED')
 
 
 class TestGroup:
@@ -196,13 +212,10 @@ class TestGroup:
         return len(self._tests)
 
     @ui.workgroup()
-    def run(self,
-            runnable: Runnable,
-            checker: Checker,
-            check_mode: bool = False) -> List[TestResult.T]:
+    def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> List[TestResult.T]:
         results = []
         for test in self._tests:
-            results.append(test.run(runnable, checker, check_mode=check_mode))
+            results.append(test.run(runnable, checker, mode))
         return results
 
     @ui.workgroup()
@@ -260,7 +273,7 @@ class RuntimeStats:
 @dataclass
 class DatasetResults:
     subtasks: Dict[str, List[TestResult.T]]
-    sample: Optional[List[TestResult.T]]
+    sample: List[TestResult.T]
 
     def runtime_stats(self, include_sample: bool = False) -> RuntimeStats:
         running_times = list(self.running_times(include_sample))
@@ -275,7 +288,7 @@ class DatasetResults:
         if include_sample and self.sample is not None:
             tests = itertools.chain(tests, self.sample)
         for test in tests:
-            if isinstance(test, TestResult.Success) or isinstance(test, TestResult.CheckerError):
+            if isinstance(test, TestResult.Success):
                 yield test.running_time()
 
 
@@ -296,19 +309,13 @@ class Dataset:
         if sample:
             self._sampledata.gen_expected(runnable)
 
-    def run(self,
-            runnable: Runnable,
-            checker: Checker,
-            check_mode: bool = False,
-            run_on_sample_data: bool = False) -> DatasetResults:
+    def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> DatasetResults:
         subtasks: Dict[str, List[TestResult.T]] = {}
         for subtask in self._subtasks:
-            result = subtask.run(runnable, checker, check_mode=check_mode)
+            result = subtask.run(runnable, checker, mode)
             subtasks[str(subtask)] = result
 
-        sample = None
-        if run_on_sample_data:
-            sample = self._sampledata.run(runnable, checker, check_mode=check_mode)
+        sample = self._sampledata.run(runnable, checker, mode)
         return DatasetResults(subtasks, sample)
 
     def validate(self, validators: List[Optional[Path]], stn: Optional[int]) -> None:
@@ -327,7 +334,7 @@ class Dataset:
         return mtime
 
     @ui.work('ZIP')
-    def compress(self, random_sort: bool = False) -> ui.WorkResult:
+    def compress(self, random_sort: bool = False) -> ui.Result:
         """Compress all test cases in the dataset into a single zip file.
         The basename of the corresponding subtask subdirectory is prepended
         to each file.
@@ -341,8 +348,8 @@ class Dataset:
 
             if compressed == 0:
                 path.unlink()
-                return ui.WorkResult(success=False, short_msg='EMPTY DATASET')
-        return ui.WorkResult(success=True, short_msg="OK")
+                return ui.Result.fail('EMPTY DATASET')
+        return ui.Result.success('OK')
 
     def count(self) -> List[int]:
         return [st.count() for st in self._subtasks]
