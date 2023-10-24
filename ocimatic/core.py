@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shutil
+import statistics
 import tempfile
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, TypedDict
@@ -314,10 +315,17 @@ class Task:
     def run_solution(self, solution: Path) -> None:
         """Run all solutions reporting outcome and running time."""
         sol = self.load_solution_for_path(solution)
-        if sol:
-            sol.run(self._dataset, self._checker)
-        else:
-            ui.show_message('Error', 'Solution not found', ui.ERROR)
+        if not sol:
+            return ui.show_message('Error', 'Solution not found', ui.ERROR)
+
+        results = sol.run(self._dataset, self._checker)
+        if results:
+            max_time = max(results.running_times(), default=0.0)
+            min_time = min(results.running_times())
+            mean_time = statistics.mean(results.running_times())
+            ui.show_message('Max running time', f" {max_time:.3f}s")
+            ui.show_message('Min running time', f" {min_time:.3f}s")
+            ui.show_message('Mean running time', f"{mean_time:.3f}s")
 
     @ui.task('Checking dataset')
     def check_dataset(self) -> None:
@@ -325,7 +333,7 @@ class Task:
         cases and sample input.
         """
         for sol in self.solutions():
-            sol.run(self._dataset, self._checker, check_mode=True, sample=True)
+            sol.run(self._dataset, self._checker, check_mode=True, run_on_sample_data=True)
 
     @ui.task('Building solutions')
     def build_solution(self, solution: Path) -> None:

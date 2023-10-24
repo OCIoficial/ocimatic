@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from ocimatic import ui
 from ocimatic.checkers import Checker
-from ocimatic.dataset import Dataset
+from ocimatic.dataset import Dataset, DatasetResult
 from ocimatic.source_code import (BuildError, CppSource, JavaSource, PythonSource, RustSource,
                                   SourceCode)
 
@@ -51,14 +51,18 @@ class Solution:
             dataset: Dataset,
             checker: Checker,
             check_mode: bool = False,
-            sample: bool = False) -> ui.SolutionGroup[None]:
+            run_on_sample_data: bool = False) -> ui.SolutionGroup[Optional[DatasetResult]]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
             yield ui.WorkResult(success=False, short_msg="Failed", long_msg=build_result.msg)
+            return None
         else:
             yield ui.WorkResult(success=True, short_msg="OK")
-            dataset.run(build_result, checker, sample=sample, check_mode=check_mode)
+            return dataset.run(build_result,
+                               checker,
+                               run_on_sample_data=run_on_sample_data,
+                               check_mode=check_mode)
 
     @ui.solution_group()
     def gen_expected(self, dataset: Dataset, sample: bool = False) -> ui.SolutionGroup[None]:
