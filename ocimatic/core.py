@@ -332,11 +332,31 @@ class Task:
         """
         stats = RuntimeStats.unit()
         solutions = list(self.solutions())
+
+        if not solutions:
+            ui.show_message('Error', 'At least one correct solution needed', ui.ERROR)
+            return
+
+        failed: List[Solution] = []
         for sol in solutions:
             results = sol.run(self._dataset, self._checker, RunMode.check_correct)
-            if results:
-                stats += results.runtime_stats()
+            if results is None or not results.check_all_correct():
+                failed.append(sol)
+                continue
+            stats += results.runtime_stats()
 
+        if failed:
+            ui.writeln()
+            ui.show_message(
+                'Error',
+                'The following correct solutions failed to run or produced wrong results. Run the solutions individually with `ocimatic run` for more information.',
+                ui.ERROR)
+            for sol in failed:
+                ui.writeln(' * ' + str(sol))
+
+            return
+
+        ui.writeln()
         ui.show_message('Max running time', f" {stats.max:.3f}s")
         ui.show_message('Min running time', f" {stats.min:.3f}s")
 

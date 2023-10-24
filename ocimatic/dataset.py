@@ -8,7 +8,7 @@ import zipfile
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Literal, Optional
+from typing import Dict, Iterable, Iterator, List, Optional
 from zipfile import ZipFile
 
 import ocimatic
@@ -27,10 +27,8 @@ class RunMode(Enum):
     check_correct = 'check_correct'
     check_partial = 'check_partial'
 
-    def is_check(self) -> bool:
-        return self in [RunMode.check_correct, RunMode.check_partial]
 
-
+@dataclass(frozen=True, kw_only=True, slots=True)
 class TestResult:
 
     @dataclass
@@ -45,24 +43,32 @@ class TestResult:
         def outcome(self) -> float:
             return self.checker_result.outcome
 
-        def into_work_result(self) -> WorkResult:
+        def is_correct(self) -> bool:
+            return self.outcome == 1.0
+
+        def into_work_result(self, mode: RunMode) -> WorkResult:
             msg = f'{self.outcome} [{self.run_result.time:.3f}s]'
             if self.checker_result.msg is not None:
                 msg += ' - %s' % self.checker_result.msg
-            return WorkResult(status=ui.Status.from_bool(self.outcome == 1.0), short_msg=msg)
+            if mode is RunMode.check_partial:
+                return WorkResult.info(short_msg=msg)
+            else:
+                return WorkResult(status=ui.Status.from_bool(self.is_correct()), short_msg=msg)
 
     @dataclass
     class TimeLimitExceeded:
         run_result: RunTLE
 
-        def into_work_result(self) -> WorkResult:
+        def into_work_result(self, mode: RunMode) -> WorkResult:
+            del mode
             return WorkResult(status=ui.Status.fail, short_msg="Execution timed out")
 
     @dataclass
     class RuntimeError:
         run_result: RunError
 
-        def into_work_result(self) -> WorkResult:
+        def into_work_result(self, mode: RunMode) -> WorkResult:
+            del mode
             return WorkResult(status=ui.Status.fail,
                               short_msg=self.run_result.msg,
                               long_msg=self.run_result.stderr)
@@ -71,17 +77,24 @@ class TestResult:
     class CheckerError:
         checker_result: CheckerError
 
-        def into_work_result(self) -> WorkResult:
+        def into_work_result(self, mode: RunMode) -> WorkResult:
+            del mode
             msg = f'Failed to run checker: `{self.checker_result.msg}`'
             return WorkResult(status=ui.Status.fail, short_msg=msg)
 
     @dataclass
     class NoExpectedOutput:
 
-        def into_work_result(self) -> WorkResult:
+        def into_work_result(self, mode: RunMode) -> WorkResult:
+            del mode
             return WorkResult(status=ui.Status.fail, short_msg='No expected output file')
 
-    T = Success | TimeLimitExceeded | RuntimeError | CheckerError | NoExpectedOutput
+    def into_work_result(self) -> WorkResult:
+        return self.kind.into_work_result(self.mode)
+
+    Kind = Success | TimeLimitExceeded | RuntimeError | CheckerError | NoExpectedOutput
+    kind: Kind
+    mode: RunMode
 
 
 class Test:
@@ -121,7 +134,12 @@ class Test:
                 return WorkResult.fail(short_msg=msg, long_msg=stderr)
 
     @ui.work('Run')
-    def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> TestResult.T:
+    def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> TestResult:
+        """Run runnable redirect this test as standard input and check output correctness"""
+        kind = self.run_inner(runnable, checker)
+        return TestResult(mode=mode, kind=kind)
+
+    def run_inner(self, runnable: Runnable, checker: Checker) -> TestResult.Kind:
         """Run runnable redirect this test as standard input and check output correctness"""
         if not self.expected_path.exists():
             return TestResult.NoExpectedOutput()
@@ -212,7 +230,7 @@ class TestGroup:
         return len(self._tests)
 
     @ui.workgroup()
-    def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> List[TestResult.T]:
+    def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> List[TestResult]:
         results = []
         for test in self._tests:
             results.append(test.run(runnable, checker, mode))
@@ -272,8 +290,17 @@ class RuntimeStats:
 
 @dataclass
 class DatasetResults:
-    subtasks: Dict[str, List[TestResult.T]]
-    sample: List[TestResult.T]
+    subtasks: Dict[str, List[TestResult]]
+    sample: List[TestResult]
+
+    def check_all_correct(self) -> bool:
+        """Returns whether all test cases have a correct answer"""
+        for test in self.iter_all(include_sample=True):
+            if not isinstance(test.kind, TestResult.Success):
+                return False
+            if not test.kind.is_correct():
+                return False
+        return True
 
     def runtime_stats(self, include_sample: bool = False) -> RuntimeStats:
         running_times = list(self.running_times(include_sample))
@@ -282,14 +309,17 @@ class DatasetResults:
             min=min(running_times),
         )
 
-    def running_times(self, include_sample: bool = False) -> Iterator[float]:
-        """Returns running times of all successful runs"""
-        tests: Iterable[TestResult.T] = (t for st in self.subtasks.values() for t in st)
+    def iter_all(self, include_sample: bool = False) -> Iterator[TestResult]:
+        tests: Iterable[TestResult] = (t for st in self.subtasks.values() for t in st)
         if include_sample and self.sample is not None:
             tests = itertools.chain(tests, self.sample)
-        for test in tests:
-            if isinstance(test, TestResult.Success):
-                yield test.running_time()
+        yield from tests
+
+    def running_times(self, include_sample: bool = False) -> Iterator[float]:
+        """Returns running times of all successful runs"""
+        for test in self.iter_all(include_sample):
+            if isinstance(test.kind, TestResult.Success):
+                yield test.kind.running_time()
 
 
 class Dataset:
@@ -310,7 +340,7 @@ class Dataset:
             self._sampledata.gen_expected(runnable)
 
     def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> DatasetResults:
-        subtasks: Dict[str, List[TestResult.T]] = {}
+        subtasks: Dict[str, List[TestResult]] = {}
         for subtask in self._subtasks:
             result = subtask.run(runnable, checker, mode)
             subtasks[str(subtask)] = result
