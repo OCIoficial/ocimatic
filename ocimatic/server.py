@@ -80,7 +80,7 @@ def submit() -> Response | str:
     if not task:
         return 'Task not found'
 
-    solution = task.load_solution_for_path(filepath)
+    solution = task.load_solution_from_path(filepath)
     if not solution:
         return 'Invalid solution'
 

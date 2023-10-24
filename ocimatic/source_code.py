@@ -2,7 +2,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Set
 
 import ocimatic
 from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
@@ -15,11 +15,16 @@ class BuildError:
 
 class SourceCode(ABC):
 
-    def __init__(self, name: str):
-        self.name = name
+    def __init__(self, file: Path):
+        self._file = file
+        self.name = str(file.relative_to(ocimatic.config['contest_root']))
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def file(self) -> Path:
+        return self._file
 
     @staticmethod
     def should_build(sources: List[Path], out: Path) -> bool:
@@ -29,31 +34,36 @@ class SourceCode(ABC):
 
     @abstractmethod
     def build(self, force: bool = False) -> Runnable | BuildError:
-        raise NotImplementedError("Class %s doesn't implement build()" % (self.__class__.__name__))
+        ...
+
+    @abstractmethod
+    def line_comment_str(self) -> str:
+        ...
 
 
 class CppSource(SourceCode):
 
     def __init__(self,
-                 source: Path,
-                 extra_sources: List[Path] = [],
+                 file: Path,
+                 extra_files: List[Path] = [],
                  include: Optional[Path] = None,
                  out: Optional[Path] = None):
-        super().__init__(str(source.relative_to(ocimatic.config['contest_root'])))
-        self._sources = [source] + extra_sources
+        super().__init__(file)
+        self._source = file
+        self._extra_files = extra_files
         self._include = include
-        self._out = out or Path(source.parent, '.build', f'{source.stem}-cpp')
+        self._out = out or Path(file.parent, '.build', f'{file.stem}-cpp')
 
     def build_cmd(self) -> List[str]:
         cmd = ['g++', '-std=c++17', '-O2', '-o', str(self._out)]
         if self._include:
             cmd.extend(['-I', str(self._include)])
-        cmd.extend(str(s) for s in self._sources)
+        cmd.extend(str(s) for s in self.files)
         return cmd
 
     def build(self, force: bool = False) -> Binary | BuildError:
         self._out.parent.mkdir(parents=True, exist_ok=True)
-        if force or CppSource.should_build(self._sources, self._out):
+        if force or CppSource.should_build(self.files, self._out):
             cmd = self.build_cmd()
             complete = subprocess.run(cmd,
                                       stdout=subprocess.DEVNULL,
@@ -63,22 +73,28 @@ class CppSource(SourceCode):
             if complete.returncode != 0:
                 return BuildError(msg=complete.stderr)
         return Binary(self._out)
+
+    @property
+    def files(self) -> List[Path]:
+        return [self._file] + self._extra_files
+
+    def line_comment_str(self) -> str:
+        return "//"
 
 
 class RustSource(SourceCode):
 
-    def __init__(self, source: Path, out: Optional[Path] = None):
-        super().__init__(str(source.relative_to(ocimatic.config['contest_root'])))
-        self._source = source
-        self._out = out or Path(source.parent, '.build', f'{source.stem}-rs')
+    def __init__(self, file: Path, out: Optional[Path] = None):
+        super().__init__(file)
+        self._out = out or Path(file.parent, '.build', f'{file.stem}-rs')
 
     def build_cmd(self) -> List[str]:
-        cmd = ['rustc', '--edition=2021', '-O', '-o', str(self._out), str(self._source)]
+        cmd = ['rustc', '--edition=2021', '-O', '-o', str(self._out), str(self._file)]
         return cmd
 
     def build(self, force: bool = False) -> Binary | BuildError:
         self._out.parent.mkdir(parents=True, exist_ok=True)
-        if force or RustSource.should_build([self._source], self._out):
+        if force or RustSource.should_build([self._file], self._out):
             cmd = self.build_cmd()
             complete = subprocess.run(cmd,
                                       stdout=subprocess.DEVNULL,
@@ -88,12 +104,15 @@ class RustSource(SourceCode):
             if complete.returncode != 0:
                 return BuildError(msg=complete.stderr)
         return Binary(self._out)
+
+    def line_comment_str(self) -> str:
+        return "//"
 
 
 class JavaSource(SourceCode):
 
     def __init__(self, classname: str, source: Path, out: Optional[Path] = None):
-        super().__init__(str(source))
+        super().__init__(source)
         self._classname = classname
         self._source = source
         self._out = out or Path(source.parent, '.build', f"{source.stem}-java")
@@ -114,16 +133,21 @@ class JavaSource(SourceCode):
                 return BuildError(msg=complete.stderr)
         return JavaClasses(self._classname, self._out)
 
+    def line_comment_str(self) -> str:
+        return "//"
+
 
 class PythonSource(SourceCode):
 
-    def __init__(self, source: Path):
-        super().__init__(str(source))
-        self._source = source
+    def __init__(self, file: Path):
+        super().__init__(file)
 
     def build(self, force: bool = False) -> Python3:
         del force
-        return Python3(self._source)
+        return Python3(self._file)
+
+    def line_comment_str(self) -> str:
+        return "#"
 
 
 class LatexSource:

@@ -13,7 +13,7 @@ import pypdf
 import ocimatic
 from ocimatic import pjson, ui
 from ocimatic.checkers import Checker
-from ocimatic.dataset import Dataset, Test
+from ocimatic.dataset import Dataset, RuntimeStats, Test
 from ocimatic.solutions import Solution
 from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
 from ocimatic.testplan import Testplan
@@ -233,7 +233,7 @@ class Task:
                             Path(self._directory, 'dataset'))
         testplan.run(subtask)
 
-    def load_solution_for_path(self, path: Path) -> Optional[Solution]:
+    def load_solution_from_path(self, path: Path) -> Optional[Solution]:
         """Search for a solution matching a path. The behavior depends on whether the path
         is absolute or relative. If absolute, it will match a solution for the
         corresponding path. If it is relative, it will try to match the path
@@ -314,7 +314,7 @@ class Task:
     @ui.task('Running solution')
     def run_solution(self, solution: Path) -> None:
         """Run all solutions reporting outcome and running time."""
-        sol = self.load_solution_for_path(solution)
+        sol = self.load_solution_from_path(solution)
         if not sol:
             return ui.show_message('Error', 'Solution not found', ui.ERROR)
 
@@ -323,20 +323,29 @@ class Task:
             stats = results.runtime_stats()
             ui.show_message('Max running time', f" {stats.max:.3f}s")
             ui.show_message('Min running time', f" {stats.min:.3f}s")
-            ui.show_message('Mean running time', f"{stats.mean:.3f}s")
 
     @ui.task('Checking dataset')
     def check_dataset(self) -> None:
         """Check input/output correctness by running all correct solutions againt all test
         cases and sample input.
         """
-        for sol in self.solutions():
-            sol.run(self._dataset, self._checker, check_mode=True, run_on_sample_data=True)
+        stats = RuntimeStats.unit()
+        solutions = list(self.solutions())
+        for sol in solutions:
+            results = sol.run(self._dataset,
+                              self._checker,
+                              check_mode=True,
+                              run_on_sample_data=True)
+            if results:
+                stats += results.runtime_stats()
+
+        ui.show_message('Max running time', f" {stats.max:.3f}s")
+        ui.show_message('Min running time', f" {stats.min:.3f}s")
 
     @ui.task('Building solutions')
     def build_solution(self, solution: Path) -> None:
         """Force compilation of solutions."""
-        sol = self.load_solution_for_path(solution)
+        sol = self.load_solution_from_path(solution)
         if sol:
             sol.build()
 
@@ -353,7 +362,7 @@ class Task:
             return
         generator = None
         if solution:
-            generator = self.load_solution_for_path(solution)
+            generator = self.load_solution_from_path(solution)
         else:
             keys: Dict[type, int] = {CppSource: 0, RustSource: 1, JavaSource: 0}
             sols = sorted(self._correct, key=lambda sol: keys.get(type(sol.source), len(keys)))
@@ -370,9 +379,7 @@ class Task:
 
 
 class Statement:
-    """Represents a statement. A statement is composed by a latex source and a pdf
-    file.
-    """
+    """Represents a statement. A statement is composed by a latex source and a pdf file."""
 
     def __init__(self, directory: Path, num: Optional[int] = None, codename: Optional[str] = None):
         assert Path(directory, 'statement.tex').exists()

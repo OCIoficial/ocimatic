@@ -245,7 +245,16 @@ class Subtask(TestGroup):
 class RuntimeStats:
     max: float
     min: float
-    mean: float
+
+    @staticmethod
+    def unit() -> 'RuntimeStats':
+        return RuntimeStats(max=float('-inf'), min=float('inf'))
+
+    def __add__(self, other: 'RuntimeStats') -> 'RuntimeStats':
+        return RuntimeStats(max=max(self.max, other.max), min=min(self.min, other.min))
+
+    def __iadd__(self, other: 'RuntimeStats') -> 'RuntimeStats':
+        return self + other
 
 
 @dataclass
@@ -255,9 +264,10 @@ class DatasetResults:
 
     def runtime_stats(self, include_sample: bool = False) -> RuntimeStats:
         running_times = list(self.running_times(include_sample))
-        return RuntimeStats(max=max(running_times),
-                            min=min(running_times),
-                            mean=statistics.mean(running_times))
+        return RuntimeStats(
+            max=max(running_times),
+            min=min(running_times),
+        )
 
     def running_times(self, include_sample: bool = False) -> Iterator[float]:
         """Returns running times of all successful runs"""

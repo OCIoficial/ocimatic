@@ -55,7 +55,7 @@ class CLI:
         if args.command == "problemset":
             action = lambda contest: contest.build_problemset()
         elif args.command == "package":
-            action = lambda contest: self.contest.package()
+            action = lambda contest: contest.package()
         action(self.contest)
 
     def run_single_task_command(self, args: argparse.Namespace) -> None:

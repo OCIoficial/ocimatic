@@ -1,11 +1,18 @@
+import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, DatasetResults
 from ocimatic.source_code import (BuildError, CppSource, JavaSource, PythonSource, RustSource,
                                   SourceCode)
+
+
+@dataclass
+class SolutionComment:
+    should_fail: Set[int]
 
 
 class Solution:
@@ -33,7 +40,7 @@ class Solution:
         if source_path.suffix == '.cpp':
             grader = Path(managers_dir, 'grader.cpp')
             source = CppSource(source_path,
-                               extra_sources=[grader] if grader.exists() else [],
+                               extra_files=[grader] if grader.exists() else [],
                                include=managers_dir)
         elif source_path.suffix == '.java':
             source = JavaSource(codename, source_path)
@@ -94,3 +101,18 @@ class Solution:
     @property
     def source(self) -> SourceCode:
         return self._source
+
+    def extract_comment(self) -> SolutionComment | None:
+        comment_str = self._source.line_comment_str()
+        comment_pattern = rf"\s*{comment_str}\s*@ocimatic\s+should-fail\s*=\s*\[(st\d+\s*(,\s*st\d+)*(\s*,)?\s*)\]"
+
+        first_line = next(open(self._source.file))
+        if not first_line:
+            return None
+
+        m = re.match(comment_pattern, first_line)
+        if not m:
+            return None
+
+        should_fail = set(int(st.strip().removeprefix('st')) for st in m.group(1).split(','))
+        return SolutionComment(should_fail=should_fail)
