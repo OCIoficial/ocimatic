@@ -320,12 +320,10 @@ class Task:
 
         results = sol.run(self._dataset, self._checker)
         if results:
-            max_time = max(results.running_times(), default=0.0)
-            min_time = min(results.running_times())
-            mean_time = statistics.mean(results.running_times())
-            ui.show_message('Max running time', f" {max_time:.3f}s")
-            ui.show_message('Min running time', f" {min_time:.3f}s")
-            ui.show_message('Mean running time', f"{mean_time:.3f}s")
+            stats = results.runtime_stats()
+            ui.show_message('Max running time', f" {stats.max:.3f}s")
+            ui.show_message('Min running time', f" {stats.min:.3f}s")
+            ui.show_message('Mean running time', f"{stats.mean:.3f}s")
 
     @ui.task('Checking dataset')
     def check_dataset(self) -> None:

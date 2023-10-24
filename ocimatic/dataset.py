@@ -242,9 +242,22 @@ class Subtask(TestGroup):
 
 
 @dataclass
-class DatasetResult:
+class RuntimeStats:
+    max: float
+    min: float
+    mean: float
+
+
+@dataclass
+class DatasetResults:
     subtasks: Dict[str, List[TestResult.T]]
     sample: Optional[List[TestResult.T]]
+
+    def runtime_stats(self, include_sample: bool = False) -> RuntimeStats:
+        running_times = list(self.running_times(include_sample))
+        return RuntimeStats(max=max(running_times),
+                            min=min(running_times),
+                            mean=statistics.mean(running_times))
 
     def running_times(self, include_sample: bool = False) -> Iterator[float]:
         """Returns running times of all successful runs"""
@@ -277,7 +290,7 @@ class Dataset:
             runnable: Runnable,
             checker: Checker,
             check_mode: bool = False,
-            run_on_sample_data: bool = False) -> DatasetResult:
+            run_on_sample_data: bool = False) -> DatasetResults:
         subtasks: Dict[str, List[TestResult.T]] = {}
         for subtask in self._subtasks:
             result = subtask.run(runnable, checker, check_mode=check_mode)
@@ -286,7 +299,7 @@ class Dataset:
         sample = None
         if run_on_sample_data:
             sample = self._sampledata.run(runnable, checker, check_mode=check_mode)
-        return DatasetResult(subtasks, sample)
+        return DatasetResults(subtasks, sample)
 
     def validate(self, validators: List[Optional[Path]], stn: Optional[int]) -> None:
         assert len(validators) == len(self._subtasks)

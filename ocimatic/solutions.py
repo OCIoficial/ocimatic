@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from ocimatic import ui
 from ocimatic.checkers import Checker
-from ocimatic.dataset import Dataset, DatasetResult
+from ocimatic.dataset import Dataset, DatasetResults
 from ocimatic.source_code import (BuildError, CppSource, JavaSource, PythonSource, RustSource,
                                   SourceCode)
 
@@ -51,7 +51,7 @@ class Solution:
             dataset: Dataset,
             checker: Checker,
             check_mode: bool = False,
-            run_on_sample_data: bool = False) -> ui.SolutionGroup[Optional[DatasetResult]]:
+            run_on_sample_data: bool = False) -> ui.SolutionGroup[Optional[DatasetResults]]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
