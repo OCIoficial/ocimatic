@@ -321,7 +321,8 @@ class Task:
     @ui.task('Checking dataset')
     def check_dataset(self) -> None:
         """Check input/output correctness by running all correct solutions againt all test
-        cases and sample input.
+        cases and sample input. Use the result of correct solutions to set a timeout and then run
+        partial solutions with that timeout and ensure they fail the subtasks they are suppose to fail.
         """
         stats = RuntimeStats.unit()
         correct = list(self._correct)
@@ -331,21 +332,21 @@ class Task:
             return
 
         # Run correct solutions
-        failed: List[Solution] = []
+        failed_correct = []
         for sol in correct:
             results = sol.run(self._dataset, self._checker, RunMode.check_correct)
             if results is None or not results.check_all_correct():
-                failed.append(sol)
+                failed_correct.append(sol)
                 continue
             stats += results.runtime_stats()
 
-        if failed:
+        if failed_correct:
             ui.writeln()
             ui.show_message(
                 'Error',
-                'The following correct solutions failed to run or produced wrong results. Run the solutions individually with `ocimatic run` for more information.',
+                'The following correct solutions failed to run or produced wrong results. Run solutions individually with `ocimatic run` for more detailed information.',
                 ui.ERROR)
-            for sol in failed:
+            for sol in failed_correct:
                 ui.writeln(' * ' + str(sol))
             return
 
@@ -361,8 +362,24 @@ class Task:
             f'Running partial solutions with timeout set to {timeout:.1f}s (round({stats.max:.3f} * 1.5, 1))',
             ui.INFO)
         ocimatic.config['timeout'] = timeout
+        failed_partial = []
         for sol in self._partial:
             results = sol.run(self._dataset, self._checker, RunMode.check_partial)
+            if results is None or not sol.check_should_fail(results):
+                failed_partial.append(sol)
+
+        if failed_partial:
+            ui.writeln(
+                """
+The following partial solutions had problems when running or didn't fail the subtasks they were supposed to.
+Run solutions individually with `ocimatic run` for more detailed information. To specify which tasks the solution
+should fail, you must add a comment at the beginning of the file (first line) with the following format:
+// @ocimatic should-fail=[st1, st2]
+If no comment is specified, ocimatic will assume that all subtasks must fail.
+""", ui.ERROR)
+            for sol in failed_partial:
+                ui.writeln(' * ' + str(sol))
+            return
 
     @ui.task('Building solutions')
     def build_solution(self, solution: Path) -> None:

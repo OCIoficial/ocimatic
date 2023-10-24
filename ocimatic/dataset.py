@@ -8,7 +8,7 @@ import zipfile
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional
+from typing import Iterable, Iterator, List, Optional, Set
 from zipfile import ZipFile
 
 import ocimatic
@@ -95,6 +95,19 @@ class TestResult:
 
     def into_work_result(self) -> WorkResult:
         return self.kind.into_work_result(self.mode)
+
+    def is_proper_fail(self) -> bool:
+        """Check whether the test was a "proper" failure, i.e., it had an expected output and the
+        checker run succesfully, but the solution itself proproduced a wrong answer, runtime error,
+        or time limit exceeded"""
+
+        match self.kind:
+            case TestResult.RuntimeError(_) | TestResult.TimeLimitExceeded:
+                return True
+            case TestResult.Success(_):
+                return not self.kind.is_correct()
+            case _:
+                return False
 
     Kind = Success | TimeLimitExceeded | RuntimeError | CheckerError | NoExpectedOutput
     kind: Kind
@@ -294,7 +307,7 @@ class RuntimeStats:
 
 @dataclass
 class DatasetResults:
-    subtasks: Dict[str, List[TestResult]]
+    subtasks: List[List[TestResult]]
     sample: List[TestResult]
 
     def check_all_correct(self) -> bool:
@@ -306,6 +319,18 @@ class DatasetResults:
                 return False
         return True
 
+    def check_should_fail(self, should_fail: Set[int] | None) -> bool:
+        """Check that the results fails the subtasks specified in `should_fail`. If `None` all subtasks
+        must fail. Subtask number are specified counting form 1.
+        """
+        if should_fail is None:
+            should_fail = set(st + 1 for (st, _) in enumerate(self.subtasks))
+        for (st, tests) in enumerate(self.subtasks):
+            if (st + 1) in should_fail and not any(t.is_proper_fail() for t in tests):
+                return False
+
+        return True
+
     def runtime_stats(self, include_sample: bool = False) -> RuntimeStats:
         running_times = list(self.running_times(include_sample))
         return RuntimeStats(
@@ -314,7 +339,7 @@ class DatasetResults:
         )
 
     def iter_all(self, include_sample: bool = False) -> Iterator[TestResult]:
-        tests: Iterable[TestResult] = (t for st in self.subtasks.values() for t in st)
+        tests: Iterable[TestResult] = (t for st in self.subtasks for t in st)
         if include_sample and self.sample is not None:
             tests = itertools.chain(tests, self.sample)
         yield from tests
@@ -344,10 +369,10 @@ class Dataset:
             self._sampledata.gen_expected(runnable)
 
     def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> DatasetResults:
-        subtasks: Dict[str, List[TestResult]] = {}
+        subtasks = []
         for subtask in self._subtasks:
             result = subtask.run(runnable, checker, mode)
-            subtasks[str(subtask)] = result
+            subtasks.append(result)
 
         sample = self._sampledata.run(runnable, checker, mode)
         return DatasetResults(subtasks, sample)

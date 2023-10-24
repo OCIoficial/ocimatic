@@ -22,6 +22,10 @@ class Solution:
     def __init__(self, source: SourceCode):
         self._source = source
 
+    def check_should_fail(self, results: DatasetResults) -> bool:
+        comment = self._source.comment
+        return results.check_should_fail(comment.should_fail)
+
     @staticmethod
     def load_solutions_in_dir(codename: str, dir: Path, managers_dir: Path) -> List['Solution']:
         """Search for solutions in a directory."""

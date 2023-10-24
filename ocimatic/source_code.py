@@ -1,3 +1,4 @@
+import re
 import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -13,11 +14,17 @@ class BuildError:
     msg: str
 
 
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SolutionComment:
+    should_fail: Set[int] | None
+
+
 class SourceCode(ABC):
 
     def __init__(self, file: Path):
         self._file = file
         self.name = str(file.relative_to(ocimatic.config['contest_root']))
+        self.comment = extract_comment(file, SourceCode.line_comment_str())
 
     def __str__(self) -> str:
         return self.name
@@ -36,8 +43,9 @@ class SourceCode(ABC):
     def build(self, force: bool = False) -> Runnable | BuildError:
         ...
 
+    @classmethod
     @abstractmethod
-    def line_comment_str(self) -> str:
+    def line_comment_str(cls) -> str:
         ...
 
 
@@ -78,7 +86,8 @@ class CppSource(SourceCode):
     def files(self) -> List[Path]:
         return [self._file] + self._extra_files
 
-    def line_comment_str(self) -> str:
+    @classmethod
+    def line_comment_str(cls) -> str:
         return "//"
 
 
@@ -105,7 +114,8 @@ class RustSource(SourceCode):
                 return BuildError(msg=complete.stderr)
         return Binary(self._out)
 
-    def line_comment_str(self) -> str:
+    @classmethod
+    def line_comment_str(cls) -> str:
         return "//"
 
 
@@ -133,7 +143,8 @@ class JavaSource(SourceCode):
                 return BuildError(msg=complete.stderr)
         return JavaClasses(self._classname, self._out)
 
-    def line_comment_str(self) -> str:
+    @classmethod
+    def line_comment_str(cls) -> str:
         return "//"
 
 
@@ -146,8 +157,25 @@ class PythonSource(SourceCode):
         del force
         return Python3(self._file)
 
-    def line_comment_str(self) -> str:
+    @classmethod
+    def line_comment_str(cls) -> str:
         return "#"
+
+
+def extract_comment(file: Path, comment_str: str) -> SolutionComment:
+    first_line = next(open(file))
+    if not first_line:
+        return SolutionComment(should_fail=None)
+
+    pattern = rf"\s*{comment_str}\s*@ocimatic\s+should-fail\s*=\s*\[((\s*st\d+)(,\s*st\d+)(\s*,)?\s*)\]"
+    m = re.match(pattern, first_line.strip())
+
+    if not m:
+        return SolutionComment(should_fail=None)
+
+    should_fail = set(int(st.strip().removeprefix('st')) for st in m.group(1).split(","))
+
+    return SolutionComment(should_fail=should_fail)
 
 
 class LatexSource:
