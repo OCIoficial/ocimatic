@@ -60,18 +60,22 @@ class TestResult:
         run_result: RunTLE
 
         def into_work_result(self, mode: RunMode) -> WorkResult:
-            del mode
-            return WorkResult(status=ui.Status.fail, short_msg="Execution timed out")
+            if mode is RunMode.check_partial:
+                return WorkResult.info(short_msg="Execution timed out")
+            else:
+                return WorkResult.fail(short_msg="Execution timed out")
 
     @dataclass
     class RuntimeError:
         run_result: RunError
 
         def into_work_result(self, mode: RunMode) -> WorkResult:
-            del mode
-            return WorkResult(status=ui.Status.fail,
-                              short_msg=self.run_result.msg,
-                              long_msg=self.run_result.stderr)
+            if mode is RunMode.check_partial:
+                return WorkResult.info(short_msg=self.run_result.msg,
+                                       long_msg=self.run_result.stderr)
+            else:
+                return WorkResult.fail(short_msg=self.run_result.msg,
+                                       long_msg=self.run_result.stderr)
 
     @dataclass
     class CheckerError:

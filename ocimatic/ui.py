@@ -107,10 +107,10 @@ def capture_io(stream: Optional[IO]) -> Iterator[None]:
     IO_STREAMS.pop()
 
 
-def write(text: str) -> None:
+def write(text: str, color: str = RESET) -> None:
     stream = IO_STREAMS[-1]
     if stream:
-        stream.write(text)
+        stream.write(colorize(text, color))
 
 
 def flush() -> None:
@@ -119,8 +119,8 @@ def flush() -> None:
         stream.flush()
 
 
-def writeln(text: str = '') -> None:
-    write(text + '\n')
+def writeln(text: str = '', color: str = RESET) -> None:
+    write(text + '\n', color)
 
 
 def task_header(name: str, msg: str) -> None:
@@ -222,16 +222,19 @@ def start_work(action: str, msg: str, length: int = 80) -> None:
 def end_work(result: WorkResult) -> None:
     match result.status:
         case Status.info:
+            char = '.'
             color = INFO
         case Status.success:
+            char = '✓'
             color = OK
         case Status.fail:
+            char = 'x'
             color = ERROR
     if ocimatic.config['verbosity'] > 0:
         write(colorize(str(result.short_msg), color))
         writeln()
     else:
-        write(colorize("x" if result.status is Status.fail else ".", color))
+        write(colorize(char, color))
     if result.long_msg and ocimatic.config['verbosity'] > 1:
         long_msg = result.long_msg.strip()
         long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))

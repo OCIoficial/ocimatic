@@ -282,13 +282,6 @@ class Task:
     def __str__(self) -> str:
         return self.name
 
-    def solutions(self, partial: bool = False) -> Iterable[Solution]:
-        for solution in self._correct:
-            yield solution
-        if partial:
-            for solution in self._partial:
-                yield solution
-
     @property
     def statement(self) -> 'Statement':
         return self._statement
@@ -331,14 +324,15 @@ class Task:
         cases and sample input.
         """
         stats = RuntimeStats.unit()
-        solutions = list(self.solutions())
+        correct = list(self._correct)
 
-        if not solutions:
+        if not correct:
             ui.show_message('Error', 'At least one correct solution needed', ui.ERROR)
             return
 
+        # Run correct solutions
         failed: List[Solution] = []
-        for sol in solutions:
+        for sol in correct:
             results = sol.run(self._dataset, self._checker, RunMode.check_correct)
             if results is None or not results.check_all_correct():
                 failed.append(sol)
@@ -353,12 +347,22 @@ class Task:
                 ui.ERROR)
             for sol in failed:
                 ui.writeln(' * ' + str(sol))
-
             return
 
         ui.writeln()
-        ui.show_message('Max running time', f" {stats.max:.3f}s")
-        ui.show_message('Min running time', f" {stats.min:.3f}s")
+        ui.writeln('All correct solutions produced correct results', color=ui.OK)
+        ui.writeln(f" Max running time: {stats.max:.3f}s")
+        ui.writeln(f" Min running time: {stats.min:.3f}s")
+
+        # Run partial solutions
+        timeout = round(stats.max * 1.5, 1)
+        ui.writeln()
+        ui.writeln(
+            f'Running partial solutions with timeout set to {timeout:.1f}s (round({stats.max:.3f} * 1.5, 1))',
+            ui.INFO)
+        ocimatic.config['timeout'] = timeout
+        for sol in self._partial:
+            results = sol.run(self._dataset, self._checker, RunMode.check_partial)
 
     @ui.task('Building solutions')
     def build_solution(self, solution: Path) -> None:
