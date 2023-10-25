@@ -6,8 +6,9 @@ import tempfile
 import time as pytime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from io import FileIO
 from pathlib import Path
-from typing import IO, Any, List, Optional, overload
+from typing import IO, Any, List, Optional, TextIO, overload
 
 SIGNALS = {
     1: 'SIGHUP',
@@ -74,21 +75,21 @@ class Runnable(ABC):
     @overload
     def run(self,
             in_path: Optional[Path] = None,
-            out_path: Optional[Path] = None,
+            out_path: Path | None = None,
             args: List[str] = []) -> RunSuccess | RunError:
         ...
 
     @overload
     def run(self,
             in_path: Optional[Path] = None,
-            out_path: Optional[Path] = None,
+            out_path: Path | None = None,
             args: List[str] = [],
             timeout: Optional[float] = None) -> RunResult:
         ...
 
     def run(self,
             in_path: Optional[Path] = None,
-            out_path: Optional[Path] = None,
+            out_path: Path | None = None,
             args: List[str] = [],
             timeout: Optional[float] = None) -> RunResult:
         """Run binary redirecting standard input and output.
@@ -107,10 +108,11 @@ class Runnable(ABC):
                 in_path = Path(os.devnull)
             in_file = stack.enter_context(in_path.open('r'))
 
-            if out_path:
-                out_file: IO[Any] = stack.enter_context(out_path.open('w+'))
+            stdout: TextIO
+            if out_path is None:
+                stdout = stack.enter_context(tempfile.TemporaryFile('w+'))
             else:
-                out_file = stack.enter_context(tempfile.TemporaryFile('w+'))
+                stdout = stack.enter_context(out_path.open('w+'))
 
             cmd = self.cmd()
             cmd.extend(args)
@@ -120,7 +122,7 @@ class Runnable(ABC):
                 complete = subprocess.run(cmd,
                                           timeout=timeout,
                                           stdin=in_file,
-                                          stdout=out_file,
+                                          stdout=stdout,
                                           text=True,
                                           stderr=subprocess.PIPE,
                                           check=False)
@@ -139,8 +141,8 @@ class Runnable(ABC):
                     msg = 'Execution ended with error (return code %d)' % ret
                 return RunError(msg=msg, stderr=complete.stderr)
 
-            out_file.seek(0)
-            return RunSuccess(time=time, stdout=out_file.read(), stderr=complete.stderr)
+            stdout.seek(0)
+            return RunSuccess(time=time, stdout=stdout.read(), stderr=complete.stderr)
         assert False
 
 

@@ -117,10 +117,9 @@ class Contest:
     @ui.contest_group('Building package')
     def package(self) -> None:
         """Package statements and datasets of all tasks into a single zip file"""
-        tmpdir = Path(tempfile.mkdtemp())
-        try:
+        with tempfile.TemporaryDirectory() as tmpdir:
             for task in self._tasks:
-                task.copy_to(tmpdir)
+                task.copy_to(Path(tmpdir))
 
             self.build_problemset_twoside()
             self.build_problemset_oneside()
@@ -132,8 +131,6 @@ class Contest:
                 shutil.copy2(twoside, Path(tmpdir, 'twoside.pdf'))
 
             shutil.make_archive(self.name, "zip", tmpdir)
-        finally:
-            shutil.rmtree(tmpdir)
 
     @ui.work('LATEX', 'titlepage.tex')
     def compile_titlepage(self) -> ui.WorkResult:
@@ -146,7 +143,7 @@ class Contest:
     def merge_pdfs(self, filename: str) -> ui.WorkResult:
         """Merge titlepage and statements pdfs into a single file """
         try:
-            merger = pypdf.PdfFileMerger()
+            merger = pypdf.PdfMerger()
             for task in self._tasks:
                 merger.append(task.statement.pdf)
             titlepage = Path(self._directory, 'titlepage.pdf')
@@ -383,6 +380,7 @@ should pass/fail, you must either have a `should-pass` or `should-fail` comment 
 example, to specify that a task should pass subtasks 1 and 2, write the following comment at the top of the solution:
 // @ocimatic should-pass=[st1, st2]
 If no comment is specified, ocimatic will assume that all subtasks should fail.
+
 Solutions:
 """, ui.ERROR)
             for sol in failed_partial:

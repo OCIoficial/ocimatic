@@ -143,7 +143,7 @@ class Test:
 
     @ui.work('Validate', '{0}')
     def validate(self, validator: Runnable) -> WorkResult:
-        result = validator.run(self._in_path, None)
+        result = validator.run(in_path=self._in_path, out_path=None)
         match result:
             case RunSuccess(_):
                 return WorkResult.success(short_msg='OK')
@@ -153,7 +153,7 @@ class Test:
     @ui.work('Gen')
     def gen_expected(self, runnable: Runnable) -> WorkResult:
         """Run binary with this test as input to generate expected output file"""
-        result = runnable.run(self.in_path, self.expected_path)
+        result = runnable.run(in_path=self.in_path, out_path=self.expected_path)
         match result:
             case RunSuccess(_):
                 return WorkResult.success(short_msg='OK')
@@ -163,35 +163,36 @@ class Test:
     @ui.work('Run')
     def run(self, runnable: Runnable, checker: Checker, mode: RunMode,
             timeout: float | None) -> TestResult:
-        """Run runnable redirect this test as standard input and check output correctness"""
+        """Run runnable redirecting this test as its standard input and check output correctness"""
         kind = self.run_inner(runnable, checker, timeout)
         return TestResult(mode=mode, kind=kind)
 
     def run_inner(self, runnable: Runnable, checker: Checker,
                   timeout: float | None) -> TestResult.Kind:
-        """Run runnable redirect this test as standard input and check output correctness"""
         if not self.expected_path.exists():
             return TestResult.NoExpectedOutput()
 
-        out_path = Path(tempfile.mkstemp()[1])
+        # We could use NamedTemporaryFile but the documentation says not every platform can use the
+        # name to reopen the file while still open, so we create a temporary directory and a file
+        # inside it instead.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir, 'out')
 
-        run_result = runnable.run(self.in_path, out_path, timeout=timeout)
+            run_result = runnable.run(in_path=self.in_path, out_path=out_path, timeout=timeout)
 
-        # Runtime Error
-        if isinstance(run_result, RunError):
-            return TestResult.RuntimeError(run_result)
+            if isinstance(run_result, RunError):
+                return TestResult.RuntimeError(run_result)
 
-        # Time limit exceeded
-        if isinstance(run_result, RunTLE):
-            return TestResult.TimeLimitExceeded(run_result)
+            if isinstance(run_result, RunTLE):
+                return TestResult.TimeLimitExceeded(run_result)
 
-        checker_result = checker.run(self.in_path, self.expected_path, out_path)
+            checker_result = checker.run(self.in_path, self.expected_path, out_path)
 
-        # Checker failed
-        if isinstance(checker_result, CheckerError):
-            return TestResult.CheckerError(checker_result)
+            # Checker failed
+            if isinstance(checker_result, CheckerError):
+                return TestResult.CheckerError(checker_result)
 
-        return TestResult.CheckerRunned(checker_result, run_result)
+            return TestResult.CheckerRunned(checker_result, run_result)
 
     @property
     def in_path(self) -> Path:
