@@ -24,9 +24,6 @@ jobs:
       - name: mypy
         run: |
           mypy .
-      - name: isort
+      - name: ruff format
         run: |
-          isort . --check --ws
-      - name: yapf
-        run: |
-          yapf --recursive --diff .
+          ruff format --check .

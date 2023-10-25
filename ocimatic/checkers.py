@@ -22,26 +22,28 @@ CheckerResult = CheckerSuccess | CheckerError
 
 
 class Checker(ABC):
-    """Check solutions
-    """
+    """Check solutions"""
 
     @abstractmethod
     def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
-        raise NotImplementedError("Class %s doesn't implement run()" % (self.__class__.__name__))
+        raise NotImplementedError(
+            "Class %s doesn't implement run()" % (self.__class__.__name__)
+        )
 
     @staticmethod
-    def find_in_directory(dir: Path) -> 'Checker':
+    def find_in_directory(dir: Path) -> "Checker":
         for f in dir.iterdir():
-            if f.name == 'checker.cpp':
-                return CustomChecker(CppSource(f, include=dir, out=Path(dir, 'checker')))
-            elif f.name == 'checker.rs':
-                return CustomChecker(RustSource(f, out=Path(dir, 'checker')))
+            if f.name == "checker.cpp":
+                return CustomChecker(
+                    CppSource(f, include=dir, out=Path(dir, "checker"))
+                )
+            elif f.name == "checker.rs":
+                return CustomChecker(RustSource(f, out=Path(dir, "checker")))
         return DiffChecker()
 
 
 class DiffChecker(Checker):
-    """White diff checker
-    """
+    """White diff checker"""
 
     def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
         """Performs a white diff between expected output and output files.
@@ -60,14 +62,13 @@ class DiffChecker(Checker):
         if len(expected) != len(out):
             return CheckerSuccess(outcome=0.0)
 
-        for (a, b) in zip(expected, out):
+        for a, b in zip(expected, out):
             if a != b:
                 return CheckerSuccess(outcome=0.0)
         return CheckerSuccess(outcome=1.0)
 
 
 class CustomChecker(Checker):
-
     def __init__(self, code: SourceCode):
         """
         Args:
@@ -90,13 +91,15 @@ class CustomChecker(Checker):
         build_result = self._code.build()
         if isinstance(build_result, BuildError):
             return CheckerError(msg="Failed to build checker")
-        result = build_result.run(args=[str(in_path), str(expected_path), str(out_path)])
+        result = build_result.run(
+            args=[str(in_path), str(expected_path), str(out_path)]
+        )
         if isinstance(result, RunSuccess):
             try:
                 stderr = result.stderr.strip()
                 msg = stderr if stderr != "" else None
                 return CheckerSuccess(outcome=float(result.stdout), msg=msg)
             except ValueError:
-                return CheckerError(msg='output must be a valid float')
+                return CheckerError(msg="output must be a valid float")
         else:
             return CheckerError(msg=result.msg)

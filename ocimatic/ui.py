@@ -3,8 +3,21 @@ import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import (Callable, Concatenate, Generator, Iterator, List, Literal, NoReturn, Optional,
-                    ParamSpec, Protocol, TextIO, TypeVar, cast)
+from typing import (
+    Callable,
+    Concatenate,
+    Generator,
+    Iterator,
+    List,
+    Literal,
+    NoReturn,
+    Optional,
+    ParamSpec,
+    Protocol,
+    TextIO,
+    TypeVar,
+    cast,
+)
 
 from colorama import Fore, Style
 
@@ -37,7 +50,7 @@ def bold(text: str) -> str:
 
 
 def decolorize(text: str) -> str:
-    return re.sub(r'\033\[[0-9]+m', '', text)
+    return re.sub(r"\033\[[0-9]+m", "", text)
 
 
 IO = TextIO
@@ -50,13 +63,12 @@ class Status(Enum):
     info = "info"
 
     @staticmethod
-    def from_bool(b: bool) -> 'Status':
+    def from_bool(b: bool) -> "Status":
         return Status.success if b else Status.fail
 
 
 class IntoWorkResult(Protocol):
-
-    def into_work_result(self) -> 'WorkResult':
+    def into_work_result(self) -> "WorkResult":
         ...
 
 
@@ -67,18 +79,18 @@ class WorkResult:
     long_msg: str | None = None
 
     @staticmethod
-    def success(short_msg: str, long_msg: str | None = None) -> 'WorkResult':
+    def success(short_msg: str, long_msg: str | None = None) -> "WorkResult":
         return WorkResult(status=Status.success, short_msg=short_msg, long_msg=long_msg)
 
     @staticmethod
-    def fail(short_msg: str, long_msg: str | None = None) -> 'WorkResult':
+    def fail(short_msg: str, long_msg: str | None = None) -> "WorkResult":
         return WorkResult(status=Status.fail, short_msg=short_msg, long_msg=long_msg)
 
     @staticmethod
-    def info(short_msg: str, long_msg: str | None = None) -> 'WorkResult':
+    def info(short_msg: str, long_msg: str | None = None) -> "WorkResult":
         return WorkResult(status=Status.info, short_msg=short_msg, long_msg=long_msg)
 
-    def into_work_result(self) -> 'WorkResult':
+    def into_work_result(self) -> "WorkResult":
         return self
 
 
@@ -89,15 +101,17 @@ class Result:
     long_msg: str | None = None
 
     @staticmethod
-    def success(short_msg: str, long_msg: str | None = None) -> 'Result':
+    def success(short_msg: str, long_msg: str | None = None) -> "Result":
         return Result(status=Status.success, short_msg=short_msg, long_msg=long_msg)
 
     @staticmethod
-    def fail(short_msg: str, long_msg: str | None = None) -> 'Result':
+    def fail(short_msg: str, long_msg: str | None = None) -> "Result":
         return Result(status=Status.fail, short_msg=short_msg, long_msg=long_msg)
 
     def into_work_result(self) -> WorkResult:
-        return WorkResult(status=self.status, short_msg=self.short_msg, long_msg=self.long_msg)
+        return WorkResult(
+            status=self.status, short_msg=self.short_msg, long_msg=self.long_msg
+        )
 
 
 @contextmanager
@@ -119,14 +133,14 @@ def flush() -> None:
         stream.flush()
 
 
-def writeln(text: str = '', color: str = RESET) -> None:
-    write(text + '\n', color)
+def writeln(text: str = "", color: str = RESET) -> None:
+    write(text + "\n", color)
 
 
 def task_header(name: str, msg: str) -> None:
     """Print header for task"""
-    write('\n\n')
-    write(colorize('[%s] %s' % (name, msg), BOLD + YELLOW))
+    write("\n\n")
+    write(colorize("[%s] %s" % (name, msg), BOLD + YELLOW))
     writeln()
     flush()
 
@@ -134,20 +148,20 @@ def task_header(name: str, msg: str) -> None:
 def workgroup_header(msg: str, length: int = 35) -> None:
     """Header for a generic group of works"""
     writeln()
-    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    write(colorize('[%s]' % (msg), INFO))
-    if ocimatic.config['verbosity'] > 0:
+    msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
+    write(colorize("[%s]" % (msg), INFO))
+    if ocimatic.config["verbosity"] > 0:
         writeln()
     else:
-        write(' ')
+        write(" ")
     flush()
 
 
 def contest_group_header(msg: str, length: int = 35) -> None:
     """Header for a group of works involving a contest"""
-    write('\n\n')
-    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    write(colorize('[%s]' % (msg), INFO + YELLOW))
+    write("\n\n")
+    msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
+    write(colorize("[%s]" % (msg), INFO + YELLOW))
     writeln()
     flush()
 
@@ -156,10 +170,9 @@ SolutionGroup = Generator[Result, None, _T]
 
 
 def solution_group(
-        formatter: str = "{}") -> Callable[[Callable[_P, SolutionGroup[_T]]], Callable[_P, _T]]:
-
+    formatter: str = "{}"
+) -> Callable[[Callable[_P, SolutionGroup[_T]]], Callable[_P, _T]]:
     def decorator(func: Callable[_P, SolutionGroup[_T]]) -> Callable[_P, _T]:
-
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
             solution_group_header(formatter.format(*args, **kwargs))
             gen = func(*args, **kwargs)
@@ -179,8 +192,8 @@ def solution_group(
 def solution_group_header(msg: str, length: int = 40) -> None:
     """Header for a group of works involving a solution"""
     writeln()
-    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    write(colorize('[%s]' % (msg), INFO + BLUE) + ' ')
+    msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
+    write(colorize("[%s]" % (msg), INFO + BLUE) + " ")
     flush()
 
 
@@ -189,16 +202,15 @@ def solution_group_footer() -> None:
     flush()
 
 
-_TIntoWorkResult = TypeVar('_TIntoWorkResult', bound=IntoWorkResult)
+_TIntoWorkResult = TypeVar("_TIntoWorkResult", bound=IntoWorkResult)
 
 
 def work(
-    action: str,
-    formatter: str = "{}"
+    action: str, formatter: str = "{}"
 ) -> Callable[[Callable[_P, _TIntoWorkResult]], Callable[_P, _TIntoWorkResult]]:
-
-    def decorator(func: Callable[_P, _TIntoWorkResult]) -> Callable[_P, _TIntoWorkResult]:
-
+    def decorator(
+        func: Callable[_P, _TIntoWorkResult]
+    ) -> Callable[_P, _TIntoWorkResult]:
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _TIntoWorkResult:
             start_work(action, formatter.format(*args, **kwargs))
             result = func(*args, **kwargs)
@@ -211,10 +223,10 @@ def work(
 
 
 def start_work(action: str, msg: str, length: int = 80) -> None:
-    if ocimatic.config['verbosity'] == 0:
+    if ocimatic.config["verbosity"] == 0:
         return
-    msg = '....' + msg[-length - 4:] if len(msg) - 4 > length else msg
-    msg = ' * [' + action + '] ' + msg + '  '
+    msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
+    msg = " * [" + action + "] " + msg + "  "
     write(colorize(msg, MAGENTA))
     flush()
 
@@ -222,20 +234,20 @@ def start_work(action: str, msg: str, length: int = 80) -> None:
 def end_work(result: WorkResult) -> None:
     match result.status:
         case Status.info:
-            char = '.'
+            char = "."
             color = INFO
         case Status.success:
-            char = '✓'
+            char = "✓"
             color = OK
         case Status.fail:
-            char = 'x'
+            char = "x"
             color = ERROR
-    if ocimatic.config['verbosity'] > 0:
+    if ocimatic.config["verbosity"] > 0:
         write(colorize(str(result.short_msg), color))
         writeln()
     else:
         write(colorize(char, color))
-    if result.long_msg and ocimatic.config['verbosity'] > 1:
+    if result.long_msg and ocimatic.config["verbosity"] > 1:
         long_msg = result.long_msg.strip()
         long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))
         write(long_msg)
@@ -245,19 +257,19 @@ def end_work(result: WorkResult) -> None:
 
 
 def fatal_error(message: str) -> NoReturn:
-    writeln(colorize('ocimatic: ' + message, INFO + RED))
+    writeln(colorize("ocimatic: " + message, INFO + RED))
     writeln()
     sys.exit(1)
 
 
 def show_message(label: str, msg: str, color: str = INFO) -> None:
-    write(' %s \n' % colorize(label + ': ' + str(msg), color))
+    write(" %s \n" % colorize(label + ": " + str(msg), color))
 
 
-def contest_group(formatter: str = "{}") -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
-
+def contest_group(
+    formatter: str = "{}"
+) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
     def decorator(func: Callable[_P, _T]) -> Callable[_P, _T]:
-
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
             contest_group_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
@@ -268,9 +280,7 @@ def contest_group(formatter: str = "{}") -> Callable[[Callable[_P, _T]], Callabl
 
 
 def workgroup(formatter: str = "{}") -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
-
     def decorator(func: Callable[_P, _T]) -> Callable[_P, _T]:
-
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
             workgroup_header(formatter.format(*args, **kwargs))
             return func(*args, **kwargs)
@@ -283,9 +293,9 @@ def workgroup(formatter: str = "{}") -> Callable[[Callable[_P, _T]], Callable[_P
 def task(
     action: str
 ) -> Callable[[Callable[Concatenate[_S, _P], _T]], Callable[Concatenate[_S, _P], _T]]:
-
-    def decorator(func: Callable[Concatenate[_S, _P], _T]) -> Callable[Concatenate[_S, _P], _T]:
-
+    def decorator(
+        func: Callable[Concatenate[_S, _P], _T]
+    ) -> Callable[Concatenate[_S, _P], _T]:
         def wrapper(self: _S, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             task_header(str(self), action)
             return func(self, *args, **kwargs)

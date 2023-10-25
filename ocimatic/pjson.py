@@ -8,18 +8,17 @@ def load(file_path: Path) -> Any:
 
 
 class PJSONFile:
-
     def __init__(self, file_path: Path):
         self._file_path = file_path
 
     def _load_json(self) -> Any:
         if not self._file_path.exists():
             return {}
-        with self._file_path.open('r') as json_file:
+        with self._file_path.open("r") as json_file:
             return json.load(json_file)
 
     def _dump_json(self, obj: Any) -> Any:
-        with self._file_path.open('w') as json_file:
+        with self._file_path.open("w") as json_file:
             return json.dump(obj, json_file, indent=4)
 
     def get_path(self, path: Any) -> Any:
@@ -51,7 +50,6 @@ class PJSONFile:
 
 
 class PJSONBase:
-
     def __init__(self, json_file: PJSONFile, path: List[str]):
         self._json_file = json_file
         self._path = path
@@ -76,7 +74,6 @@ class PJSONBase:
 
 
 class PJSONMap(PJSONBase):
-
     def __iter__(self) -> Iterable[Tuple[str, Any]]:
         obj = self._get_self_path()
         for key, val in obj:
@@ -96,7 +93,6 @@ class PJSONMap(PJSONBase):
 
 
 class PJSONArray(PJSONBase):
-
     def append(self, val: Any) -> None:
         arr = self._get_self_path()
         arr.append(val)

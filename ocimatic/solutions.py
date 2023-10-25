@@ -6,8 +6,17 @@ from typing import List, Optional, Set
 from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, DatasetResults, RunMode
-from ocimatic.source_code import (BuildError, CppSource, JavaSource, OcimaticComment, PythonSource,
-                                  RustSource, ShouldFail, ShouldPass, SourceCode)
+from ocimatic.source_code import (
+    BuildError,
+    CppSource,
+    JavaSource,
+    OcimaticComment,
+    PythonSource,
+    RustSource,
+    ShouldFail,
+    ShouldPass,
+    SourceCode,
+)
 
 
 @dataclass
@@ -16,7 +25,7 @@ class SolutionComment:
 
 
 class SolutionSpec:
-    """Specification of which """
+    """Specification of which"""
 
     subtasks_spec: ShouldFail | ShouldPass | None
 
@@ -27,7 +36,9 @@ class SolutionSpec:
             case 1:
                 self.subtasks_spec = comments[0]
             case _:
-                ui.fatal_error(f"Only on of should-pass or should-fail should be specified: {name}")
+                ui.fatal_error(
+                    f"Only on of should-pass or should-fail should be specified: {name}"
+                )
 
     def should_pass(self, results: DatasetResults) -> Set[int]:
         """Return the set of subtasks the solution should pass based on the spec. It must fail the complement."""
@@ -42,44 +53,53 @@ class SolutionSpec:
 
 
 class Solution:
-
     def __init__(self, source: SourceCode):
         self._source = source
         self._spec = SolutionSpec(source.name, source.comments)
-        self.is_partial = source.file.parent.name == 'partial'
+        self.is_partial = source.file.parent.name == "partial"
 
     def should_pass(self, results: DatasetResults) -> Set[int]:
         return self._spec.should_pass(results)
 
     def check_results(self, results: DatasetResults) -> bool:
         assert self.is_partial
-        return results.check_passes_correct_subtasks(should_pass=self.should_pass(results))
+        return results.check_passes_correct_subtasks(
+            should_pass=self.should_pass(results)
+        )
 
     @staticmethod
-    def load_solutions_in_dir(codename: str, dir: Path, managers_dir: Path) -> List['Solution']:
+    def load_solutions_in_dir(
+        codename: str, dir: Path, managers_dir: Path
+    ) -> List["Solution"]:
         """Search for solutions in a directory."""
         assert dir.is_dir()
         return [
-            solution for file_path in dir.iterdir()
-            for solution in [Solution.load(codename, file_path, managers_dir)] if solution
+            solution
+            for file_path in dir.iterdir()
+            for solution in [Solution.load(codename, file_path, managers_dir)]
+            if solution
         ]
 
     @staticmethod
-    def load(codename: str, source_path: Path, managers_dir: Path) -> Optional['Solution']:
+    def load(
+        codename: str, source_path: Path, managers_dir: Path
+    ) -> Optional["Solution"]:
         if not source_path.is_file():
             return None
 
         source: SourceCode
-        if source_path.suffix == '.cpp':
-            grader = Path(managers_dir, 'grader.cpp')
-            source = CppSource(source_path,
-                               extra_files=[grader] if grader.exists() else [],
-                               include=managers_dir)
-        elif source_path.suffix == '.java':
+        if source_path.suffix == ".cpp":
+            grader = Path(managers_dir, "grader.cpp")
+            source = CppSource(
+                source_path,
+                extra_files=[grader] if grader.exists() else [],
+                include=managers_dir,
+            )
+        elif source_path.suffix == ".java":
             source = JavaSource(codename, source_path)
-        elif source_path.suffix == '.py':
+        elif source_path.suffix == ".py":
             source = PythonSource(source_path)
-        elif source_path.suffix == '.rs':
+        elif source_path.suffix == ".rs":
             source = RustSource(source_path)
         else:
             return None
@@ -87,8 +107,9 @@ class Solution:
         return Solution(source)
 
     @ui.solution_group()
-    def run(self, dataset: Dataset, checker: Checker, mode: RunMode,
-            timeout: float | None) -> ui.SolutionGroup[Optional[DatasetResults]]:
+    def run(
+        self, dataset: Dataset, checker: Checker, mode: RunMode, timeout: float | None
+    ) -> ui.SolutionGroup[Optional[DatasetResults]]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
@@ -99,7 +120,9 @@ class Solution:
             return dataset.run(build_result, checker, mode, timeout)
 
     @ui.solution_group()
-    def gen_expected(self, dataset: Dataset, sample: bool = False) -> ui.SolutionGroup[None]:
+    def gen_expected(
+        self, dataset: Dataset, sample: bool = False
+    ) -> ui.SolutionGroup[None]:
         """Generate expected output files for all test cases in the given dataset
         running this solution."""
         build_result = self._source.build()
@@ -109,14 +132,14 @@ class Solution:
             yield ui.Result.success(short_msg="OK")
             dataset.gen_expected(build_result, sample=sample)
 
-    @ui.work('Build')
+    @ui.work("Build")
     def build(self) -> ui.WorkResult:
         """Build solution."""
         result = self._source.build(True)
         if isinstance(result, BuildError):
-            return ui.WorkResult.fail(short_msg='Failed', long_msg=result.msg)
+            return ui.WorkResult.fail(short_msg="Failed", long_msg=result.msg)
         else:
-            return ui.WorkResult.success(short_msg='OK')
+            return ui.WorkResult.success(short_msg="OK")
 
     @property
     def name(self) -> str:
@@ -141,5 +164,7 @@ class Solution:
         if not m:
             return None
 
-        should_fail = set(int(st.strip().removeprefix('st')) for st in m.group(1).split(','))
+        should_fail = set(
+            int(st.strip().removeprefix("st")) for st in m.group(1).split(",")
+        )
         return SolutionComment(should_fail=should_fail)

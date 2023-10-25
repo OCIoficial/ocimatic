@@ -10,37 +10,37 @@ from pathlib import Path
 from typing import List, Optional, TextIO, overload
 
 SIGNALS = {
-    1: 'SIGHUP',
-    2: 'SIGINT',
-    3: 'SIGQUIT',
-    4: 'SIGILL',
-    5: 'SIGTRAP',
-    6: 'SIGABRT',
-    7: 'SIGEMT',
-    8: 'SIGFPE',
-    9: 'SIGKILL',
-    10: 'SIGBUS',
-    11: 'SIGSEGV',
-    12: 'SIGSYS',
-    13: 'SIGPIPE',
-    14: 'SIGALRM',
-    15: 'SIGTERM',
-    16: 'SIGURG',
-    17: 'SIGSTOP',
-    18: 'SIGTSTP',
-    19: 'SIGCONT',
-    20: 'SIGCHLD',
-    21: 'SIGTTIN',
-    22: 'SIGTTOU',
-    23: 'SIGIO',
-    24: 'SIGXCPU',
-    25: 'SIGXFSZ',
-    26: 'SIGVTALRM',
-    27: 'SIGPROF',
-    28: 'SIGWINCH',
-    29: 'SIGINFO',
-    30: 'SIGUSR1',
-    31: 'SIGUSR2',
+    1: "SIGHUP",
+    2: "SIGINT",
+    3: "SIGQUIT",
+    4: "SIGILL",
+    5: "SIGTRAP",
+    6: "SIGABRT",
+    7: "SIGEMT",
+    8: "SIGFPE",
+    9: "SIGKILL",
+    10: "SIGBUS",
+    11: "SIGSEGV",
+    12: "SIGSYS",
+    13: "SIGPIPE",
+    14: "SIGALRM",
+    15: "SIGTERM",
+    16: "SIGURG",
+    17: "SIGSTOP",
+    18: "SIGTSTP",
+    19: "SIGCONT",
+    20: "SIGCHLD",
+    21: "SIGTTIN",
+    22: "SIGTTOU",
+    23: "SIGIO",
+    24: "SIGXCPU",
+    25: "SIGXFSZ",
+    26: "SIGVTALRM",
+    27: "SIGPROF",
+    28: "SIGWINCH",
+    29: "SIGINFO",
+    30: "SIGUSR1",
+    31: "SIGUSR2",
 }
 
 
@@ -66,31 +66,38 @@ RunResult = RunSuccess | RunTLE | RunError
 
 
 class Runnable(ABC):
-
     @abstractmethod
     def cmd(self) -> List[str]:
-        raise NotImplementedError("Class %s doesn't implement cmd()" % (self.__class__.__name__))
+        raise NotImplementedError(
+            "Class %s doesn't implement cmd()" % (self.__class__.__name__)
+        )
 
     @overload
-    def run(self,
-            in_path: Optional[Path] = None,
-            out_path: Path | None = None,
-            args: List[str] = []) -> RunSuccess | RunError:
+    def run(
+        self,
+        in_path: Optional[Path] = None,
+        out_path: Path | None = None,
+        args: List[str] = [],
+    ) -> RunSuccess | RunError:
         ...
 
     @overload
-    def run(self,
-            in_path: Optional[Path] = None,
-            out_path: Path | None = None,
-            args: List[str] = [],
-            timeout: Optional[float] = None) -> RunResult:
+    def run(
+        self,
+        in_path: Optional[Path] = None,
+        out_path: Path | None = None,
+        args: List[str] = [],
+        timeout: Optional[float] = None,
+    ) -> RunResult:
         ...
 
-    def run(self,
-            in_path: Optional[Path] = None,
-            out_path: Path | None = None,
-            args: List[str] = [],
-            timeout: Optional[float] = None) -> RunResult:
+    def run(
+        self,
+        in_path: Optional[Path] = None,
+        out_path: Path | None = None,
+        args: List[str] = [],
+        timeout: Optional[float] = None,
+    ) -> RunResult:
         """Run binary redirecting standard input and output.
 
         Args:
@@ -105,26 +112,28 @@ class Runnable(ABC):
         with contextlib.ExitStack() as stack:
             if not in_path:
                 in_path = Path(os.devnull)
-            in_file = stack.enter_context(in_path.open('r'))
+            in_file = stack.enter_context(in_path.open("r"))
 
             stdout: TextIO
             if out_path is None:
-                stdout = stack.enter_context(tempfile.TemporaryFile('w+'))
+                stdout = stack.enter_context(tempfile.TemporaryFile("w+"))
             else:
-                stdout = stack.enter_context(out_path.open('w+'))
+                stdout = stack.enter_context(out_path.open("w+"))
 
             cmd = self.cmd()
             cmd.extend(args)
 
             start = pytime.monotonic()
             try:
-                complete = subprocess.run(cmd,
-                                          timeout=timeout,
-                                          stdin=in_file,
-                                          stdout=stdout,
-                                          text=True,
-                                          stderr=subprocess.PIPE,
-                                          check=False)
+                complete = subprocess.run(
+                    cmd,
+                    timeout=timeout,
+                    stdin=in_file,
+                    stdout=stdout,
+                    text=True,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                )
             except subprocess.TimeoutExpired:
                 return RunTLE()
             time = pytime.monotonic() - start
@@ -133,11 +142,11 @@ class Runnable(ABC):
             if not status:
                 if ret < 0:
                     sig = -ret
-                    msg = 'Execution killed with signal %d' % sig
+                    msg = "Execution killed with signal %d" % sig
                     if sig in SIGNALS:
-                        msg += ': %s' % SIGNALS[sig]
+                        msg += ": %s" % SIGNALS[sig]
                 else:
-                    msg = 'Execution ended with error (return code %d)' % ret
+                    msg = "Execution ended with error (return code %d)" % ret
                 return RunError(msg=msg, stderr=complete.stderr)
 
             stdout.seek(0)
@@ -146,7 +155,6 @@ class Runnable(ABC):
 
 
 class Binary(Runnable):
-
     def __init__(self, path: str | Path):
         self._path = path
 
@@ -158,19 +166,17 @@ class Binary(Runnable):
 
 
 class JavaClasses(Runnable):
-
     def __init__(self, classname: str, classes: Path):
         self._classname = classname
         self._classes = classes
 
     def cmd(self) -> List[str]:
-        return ['java', '-cp', str(self._classes), self._classname]
+        return ["java", "-cp", str(self._classes), self._classname]
 
 
 class Python3(Runnable):
-
     def __init__(self, script: Path):
         self._script = script
 
     def cmd(self) -> List[str]:
-        return ['python3', str(self._script)]
+        return ["python3", str(self._script)]

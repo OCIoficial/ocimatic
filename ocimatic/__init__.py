@@ -6,7 +6,7 @@
     :license: Beer-Ware, see LICENSE.rst for more details.
 """
 
-__version__ = '0.1.0'
+__version__ = "0.1.0"
 
 from pathlib import Path
 from typing import TypedDict
@@ -18,4 +18,4 @@ class Config(TypedDict):
     contest_root: Path
 
 
-config: Config = {'last_blank_page': True, 'verbosity': 1, 'contest_root': Path('/')}
+config: Config = {"last_blank_page": True, "verbosity": 1, "contest_root": Path("/")}
