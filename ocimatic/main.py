@@ -120,9 +120,9 @@ class CLI:
                         "------------------------------------------------", ui.ERROR
                     )
                 else:
-                    ui.writeln("-------------------", ui.OK)
-                    ui.writeln("| No issues found |", ui.OK)
-                    ui.writeln("-------------------", ui.OK)
+                    ui.writeln("--------------------", ui.OK)
+                    ui.writeln("| No issues found! |", ui.OK)
+                    ui.writeln("--------------------", ui.OK)
             return
         elif args.command == "gen-expected":
             set_verbosity(args, 0 if len(tasks) > 1 else 2)

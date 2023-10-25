@@ -25,7 +25,7 @@ class ContestConfig(TypedDict, total=False):
 def find_contest_root() -> tuple[Path, Path | None]:
     """Find the root contest's directory.
 
-    Returns the absolute path to the roof of the contest and the last directory
+    Returns the absolute path to the root of the contest and the last directory
     before reaching the root, this correspond to the directory of the task in
     which ocimatic was called. If the function reach system root the program exists
     with an error.
@@ -370,9 +370,8 @@ subtasks (and fail the rest): [{should_pass}]
         and ensure they fail the subtasks they are suppose to fail.
         """
         stats = RuntimeStats.unit()
-        correct = list(self._correct)
 
-        if not correct:
+        if not self._correct:
             ui.show_message("Error", "At least one correct solution needed", ui.ERROR)
             return False
 
@@ -380,7 +379,7 @@ subtasks (and fail the rest): [{should_pass}]
         ui.writeln()
         ui.writeln("[Running correct solutions]", ui.INFO)
         failed_correct = []
-        for sol in correct:
+        for sol in self._correct:
             results = sol.run(self._dataset, self._checker, RunMode.check_correct, None)
             if results is None or not results.check_all_correct():
                 failed_correct.append(sol)
@@ -408,12 +407,18 @@ Solutions with issues:
         ui.writeln("All correct solutions produced correct results", ui.OK)
 
         # Run partial solutions
+
         timeout = round(stats.max * 1.5, 1)
         ui.writeln()
         ui.writeln(
             f"[Running partial solutions with timeout set to {timeout:.1f}s (round({stats.max:.3f} * 1.5, 1))]",
             ui.INFO,
         )
+        if not self._partial:
+            ui.writeln()
+            ui.writeln("No partial solutions", ui.WARNING)
+            return True
+
         failed_partial = []
         for sol in self._partial:
             results = sol.run(
@@ -560,5 +565,4 @@ class Statement:
 def write_stats(stats: RuntimeStats) -> None:
     ui.writeln("Running time", ui.INFO)
     ui.writeln(f"  Max: {stats.max:.3f}s", ui.INFO)
-    ui.writeln(f"  Min: {stats.min:.3f}s", ui.INFO)
     ui.writeln(f"  Min: {stats.min:.3f}s", ui.INFO)
