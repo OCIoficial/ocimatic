@@ -32,7 +32,10 @@ class RunMode(Enum):
 class TestResult:
 
     @dataclass
-    class Success:
+    class CheckerRunned:
+        """The solution runned without runtime errors and the checker was succesfully runned on the output.
+        This could mean a correct answer, a wrong answer or partial score if the checker returns something
+        greater than 0.0 but less than 1.0."""
         checker_result: CheckerSuccess
         run_result: RunSuccess
 
@@ -57,6 +60,7 @@ class TestResult:
 
     @dataclass
     class TimeLimitExceeded:
+        """The solution exceeded the time limit."""
         run_result: RunTLE
 
         def into_work_result(self, mode: RunMode) -> WorkResult:
@@ -67,6 +71,7 @@ class TestResult:
 
     @dataclass
     class RuntimeError:
+        """The solution had a runtime error."""
         run_result: RunError
 
         def into_work_result(self, mode: RunMode) -> WorkResult:
@@ -79,6 +84,7 @@ class TestResult:
 
     @dataclass
     class CheckerError:
+        """There was an error running the checker. This means the checker must be fixed."""
         checker_result: CheckerError
 
         def into_work_result(self, mode: RunMode) -> WorkResult:
@@ -88,6 +94,8 @@ class TestResult:
 
     @dataclass
     class NoExpectedOutput:
+        """The test didn't have a corresponding expectd output. This means `ocimatic gen-expected`
+        hasn't been run."""
 
         def into_work_result(self, mode: RunMode) -> WorkResult:
             del mode
@@ -96,20 +104,23 @@ class TestResult:
     def into_work_result(self) -> WorkResult:
         return self.kind.into_work_result(self.mode)
 
+    def is_correct(self) -> bool:
+        return isinstance(self.kind, TestResult.CheckerRunned) and self.kind.is_correct()
+
     def is_proper_fail(self) -> bool:
         """Check whether the test was a "proper" failure, i.e., it had an expected output and the
         checker run succesfully, but the solution itself proproduced a wrong answer, runtime error,
         or time limit exceeded"""
 
         match self.kind:
-            case TestResult.RuntimeError(_) | TestResult.TimeLimitExceeded:
+            case TestResult.RuntimeError(_) | TestResult.TimeLimitExceeded(_):
                 return True
-            case TestResult.Success(_):
+            case TestResult.CheckerRunned(_):
                 return not self.kind.is_correct()
             case _:
                 return False
 
-    Kind = Success | TimeLimitExceeded | RuntimeError | CheckerError | NoExpectedOutput
+    Kind = CheckerRunned | TimeLimitExceeded | RuntimeError | CheckerError | NoExpectedOutput
     kind: Kind
     mode: RunMode
 
@@ -141,8 +152,7 @@ class Test:
 
     @ui.work('Gen')
     def gen_expected(self, runnable: Runnable) -> WorkResult:
-        """Run binary with this test as input to generate expected output file
-        """
+        """Run binary with this test as input to generate expected output file"""
         result = runnable.run(self.in_path, self.expected_path)
         match result:
             case RunSuccess(_):
@@ -179,7 +189,7 @@ class Test:
         if isinstance(checker_result, CheckerError):
             return TestResult.CheckerError(checker_result)
 
-        return TestResult.Success(checker_result, run_result)
+        return TestResult.CheckerRunned(checker_result, run_result)
 
     @property
     def in_path(self) -> Path:
@@ -313,20 +323,22 @@ class DatasetResults:
     def check_all_correct(self) -> bool:
         """Returns whether all test cases have a correct answer"""
         for test in self.iter_all(include_sample=True):
-            if not isinstance(test.kind, TestResult.Success):
+            if not isinstance(test.kind, TestResult.CheckerRunned):
                 return False
             if not test.kind.is_correct():
                 return False
         return True
 
-    def check_should_fail(self, should_fail: Set[int] | None) -> bool:
-        """Check that the results fails the subtasks specified in `should_fail`. If `None` all subtasks
-        must fail. Subtask number are specified counting form 1.
-        """
-        if should_fail is None:
-            should_fail = set(st + 1 for (st, _) in enumerate(self.subtasks))
+    def check_passes_correct_subtasks(self, should_pass: Set[int]) -> bool:
+        """Check that the results passes all subtasks specified in `should_pass` and fails the rest.
+        If `None` all subtasks must fail. Subtask number are specified counting form 1."""
+        if should_pass is None:
+            should_pass = set()
         for (st, tests) in enumerate(self.subtasks):
-            if (st + 1) in should_fail and not any(t.is_proper_fail() for t in tests):
+            in_should_pass = (st + 1) in should_pass
+            if in_should_pass and not all(t.is_correct() for t in tests):
+                return False
+            if not in_should_pass and not any(t.is_proper_fail() for t in tests):
                 return False
 
         return True
@@ -347,7 +359,7 @@ class DatasetResults:
     def running_times(self, include_sample: bool = False) -> Iterator[float]:
         """Returns running times of all successful runs"""
         for test in self.iter_all(include_sample):
-            if isinstance(test.kind, TestResult.Success):
+            if isinstance(test.kind, TestResult.CheckerRunned):
                 yield test.kind.running_time()
 
 

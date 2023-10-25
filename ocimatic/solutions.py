@@ -6,8 +6,8 @@ from typing import List, Optional, Set
 from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, DatasetResults, RunMode
-from ocimatic.source_code import (BuildError, CppSource, JavaSource, PythonSource, RustSource,
-                                  SourceCode)
+from ocimatic.source_code import (BuildError, CppSource, JavaSource, OcimaticComment, PythonSource,
+                                  RustSource, ShouldFail, ShouldPass, SourceCode)
 
 
 @dataclass
@@ -15,16 +15,45 @@ class SolutionComment:
     should_fail: Set[int]
 
 
+class SolutionSpec:
+    """Specification of which """
+
+    subtasks_spec: ShouldFail | ShouldPass | None
+
+    def __init__(self, name: str, comments: List[OcimaticComment]) -> None:
+        match len(comments):
+            case 0:
+                self.subtasks_spec = None
+            case 1:
+                self.subtasks_spec = comments[0]
+            case _:
+                ui.fatal_error(f"Only on of should-pass or should-fail should be specified: {name}")
+
+    def should_pass(self, results: DatasetResults) -> Set[int]:
+        """Return the set of subtasks the solution should pass based on the spec. It must fail the complement."""
+        all_subtasks = set(st + 1 for st in range(len(results.subtasks)))
+        match self.subtasks_spec:
+            case ShouldFail(subtasks=subtasks):
+                return all_subtasks.difference(subtasks)
+            case ShouldPass(subtasks=subtasks):
+                return all_subtasks.intersection(subtasks)
+            case None:
+                return set()
+
+
 class Solution:
-    """Abstract class to represent a solution
-    """
 
     def __init__(self, source: SourceCode):
         self._source = source
+        self._spec = SolutionSpec(source.name, source.comments)
+        self.is_partial = source.file.parent.name == 'partial'
 
-    def check_should_fail(self, results: DatasetResults) -> bool:
-        comment = self._source.comment
-        return results.check_should_fail(comment.should_fail)
+    def should_pass(self, results: DatasetResults) -> Set[int]:
+        return self._spec.should_pass(results)
+
+    def check_results(self, results: DatasetResults) -> bool:
+        assert self.is_partial
+        return results.check_passes_correct_subtasks(should_pass=self.should_pass(results))
 
     @staticmethod
     def load_solutions_in_dir(codename: str, dir: Path, managers_dir: Path) -> List['Solution']:
@@ -101,7 +130,7 @@ class Solution:
         return self._source
 
     def extract_comment(self) -> SolutionComment | None:
-        comment_str = self._source.line_comment_str()
+        comment_str = self._source.line_comment_start()
         comment_pattern = rf"\s*{comment_str}\s*@ocimatic\s+should-fail\s*=\s*\[(st\d+\s*(,\s*st\d+)*(\s*,)?\s*)\]"
 
         first_line = next(open(self._source.file))

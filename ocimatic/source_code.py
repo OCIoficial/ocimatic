@@ -3,9 +3,10 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Set
+from typing import Iterable, Iterator, List, Optional, Set
 
 import ocimatic
+from ocimatic import ui
 from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
 
 
@@ -15,16 +16,43 @@ class BuildError:
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
-class SolutionComment:
-    should_fail: Set[int] | None
+class ShouldFail:
+    REGEX = re.compile(r"\s+should-fail\s*=\s*\[(\s*st\d+\s*(,\s*st\d+\s*)*(,\s*)?)\]")
+    subtasks: Set[int]
+
+    @staticmethod
+    def parse(comment: str) -> Optional['ShouldFail']:
+        m = ShouldFail.REGEX.match(comment)
+        if not m:
+            return None
+        subtasks = set(int(st.strip().removeprefix('st')) for st in m.group(1).split(","))
+        return ShouldFail(subtasks=subtasks)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class ShouldPass:
+    REGEX = re.compile(r"\s+should-pass\s*=\s*\[(\s*st\d+\s*(,\s*st\d+\s*)*(,\s*)?)\]")
+    subtasks: Set[int]
+
+    @staticmethod
+    def parse(comment: str) -> Optional['ShouldPass']:
+        m = ShouldPass.REGEX.match(comment)
+        if not m:
+            return None
+        subtasks = set(int(st.strip().removeprefix('st')) for st in m.group(1).split(","))
+        return ShouldPass(subtasks=subtasks)
+
+
+OcimaticComment = ShouldFail | ShouldPass
 
 
 class SourceCode(ABC):
 
     def __init__(self, file: Path):
+        relative_path = file.relative_to(ocimatic.config['contest_root'])
         self._file = file
-        self.name = str(file.relative_to(ocimatic.config['contest_root']))
-        self.comment = extract_comment(file, SourceCode.line_comment_str())
+        self.name = str(relative_path)
+        self.comments = list(parse_comments(file, self.__class__.line_comment_start()))
 
     def __str__(self) -> str:
         return self.name
@@ -45,7 +73,7 @@ class SourceCode(ABC):
 
     @classmethod
     @abstractmethod
-    def line_comment_str(cls) -> str:
+    def line_comment_start(cls) -> str:
         ...
 
 
@@ -87,7 +115,7 @@ class CppSource(SourceCode):
         return [self._file] + self._extra_files
 
     @classmethod
-    def line_comment_str(cls) -> str:
+    def line_comment_start(cls) -> str:
         return "//"
 
 
@@ -115,7 +143,7 @@ class RustSource(SourceCode):
         return Binary(self._out)
 
     @classmethod
-    def line_comment_str(cls) -> str:
+    def line_comment_start(cls) -> str:
         return "//"
 
 
@@ -144,7 +172,7 @@ class JavaSource(SourceCode):
         return JavaClasses(self._classname, self._out)
 
     @classmethod
-    def line_comment_str(cls) -> str:
+    def line_comment_start(cls) -> str:
         return "//"
 
 
@@ -158,24 +186,28 @@ class PythonSource(SourceCode):
         return Python3(self._file)
 
     @classmethod
-    def line_comment_str(cls) -> str:
+    def line_comment_start(cls) -> str:
         return "#"
 
 
-def extract_comment(file: Path, comment_str: str) -> SolutionComment:
-    first_line = next(open(file))
-    if not first_line:
-        return SolutionComment(should_fail=None)
+def parse_comments(file: Path, comment_start: str) -> Iterator[OcimaticComment]:
+    for m in comment_iter(file, comment_start):
+        for parser in [ShouldFail.parse, ShouldPass.parse]:
+            parsed = parser(m.group(1))
+            if parsed:
+                yield parsed
+                break
+        else:
+            path = file.relative_to(ocimatic.config['contest_root'])
+            ui.fatal_error(f"Invalid comment `{m.group(0)}` in {path}")
 
-    pattern = rf"\s*{comment_str}\s*@ocimatic\s+should-fail\s*=\s*\[((\s*st\d+)(,\s*st\d+)(\s*,)?\s*)\]"
-    m = re.match(pattern, first_line.strip())
 
-    if not m:
-        return SolutionComment(should_fail=None)
-
-    should_fail = set(int(st.strip().removeprefix('st')) for st in m.group(1).split(","))
-
-    return SolutionComment(should_fail=should_fail)
+def comment_iter(file: Path, comment_start: str) -> Iterator[re.Match]:
+    pattern = re.compile(rf"\s*{comment_start}\s*@ocimatic(.*)")
+    for line in open(file):
+        m = pattern.match(line)
+        if m:
+            yield m
 
 
 class LatexSource:

@@ -3,10 +3,9 @@ import json
 import os
 import re
 import shutil
-import statistics
 import tempfile
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple, TypedDict
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 import pypdf
 
@@ -314,9 +313,15 @@ class Task:
 
         results = sol.run(self._dataset, self._checker, RunMode.run_solution)
         if results:
-            stats = results.runtime_stats()
-            ui.show_message('Max running time', f" {stats.max:.3f}s")
-            ui.show_message('Min running time', f" {stats.min:.3f}s")
+            write_stats(results.runtime_stats())
+
+            if sol.is_partial and not sol.check_results(results):
+                should_pass = ', '.join(f'st{st}' for st in sorted(sol.should_pass(results)))
+                ui.write(
+                    f"""
+The results don't match the solution's specification. The solution should pass the following
+subtasks (and fail the rest): [{should_pass}]
+""", ui.ERROR)
 
     @ui.task('Checking dataset')
     def check_dataset(self) -> None:
@@ -332,6 +337,8 @@ class Task:
             return
 
         # Run correct solutions
+        ui.writeln()
+        ui.writeln(f'Running correct solutions', ui.INFO)
         failed_correct = []
         for sol in correct:
             results = sol.run(self._dataset, self._checker, RunMode.check_correct)
@@ -347,13 +354,13 @@ class Task:
                 'The following correct solutions failed to run or produced wrong results. Run solutions individually with `ocimatic run` for more detailed information.',
                 ui.ERROR)
             for sol in failed_correct:
-                ui.writeln(' * ' + str(sol))
+                ui.writeln(' * ' + str(sol), ui.ERROR)
             return
 
         ui.writeln()
+        write_stats(stats)
+        ui.writeln()
         ui.writeln('All correct solutions produced correct results', color=ui.OK)
-        ui.writeln(f" Max running time: {stats.max:.3f}s")
-        ui.writeln(f" Min running time: {stats.min:.3f}s")
 
         # Run partial solutions
         timeout = round(stats.max * 1.5, 1)
@@ -365,21 +372,25 @@ class Task:
         failed_partial = []
         for sol in self._partial:
             results = sol.run(self._dataset, self._checker, RunMode.check_partial)
-            if results is None or not sol.check_should_fail(results):
+            if (results is None or not sol.check_results(results)):
                 failed_partial.append(sol)
 
         if failed_partial:
             ui.writeln(
                 """
-The following partial solutions had problems when running or didn't fail the subtasks they were supposed to.
+The following partial solutions had problems when running or didn't pass/fail the subtasks they were supposed to.
 Run solutions individually with `ocimatic run` for more detailed information. To specify which tasks the solution
-should fail, you must add a comment at the beginning of the file (first line) with the following format:
-// @ocimatic should-fail=[st1, st2]
-If no comment is specified, ocimatic will assume that all subtasks must fail.
-""", ui.ERROR)
+should pass/fail, you must either have a `should-pass` or `should-fail` comment at the beginning of the file. For
+example, to specify that a task should pass subtasks 1 and 2, write the following comment at the top of the solution:
+// @ocimatic should-pass=[st1, st2]
+If no comment is specified, ocimatic will assume that all subtasks should fail.""", ui.ERROR)
             for sol in failed_partial:
-                ui.writeln(' * ' + str(sol))
+                ui.writeln(' * ' + str(sol), ui.ERROR)
             return
+
+        ui.writeln()
+        ui.writeln('All partial solutions passed/failed the subtasks they were supposed to.',
+                   color=ui.OK)
 
     @ui.task('Building solutions')
     def build_solution(self, solution: Path) -> None:
@@ -477,3 +488,9 @@ class Statement:
             scores = [100]
 
         return scores
+
+
+def write_stats(stats: RuntimeStats) -> None:
+    ui.writeln("Running time", ui.INFO)
+    ui.writeln(f"  Max: {stats.max:.3f}s")
+    ui.writeln(f"  Min: {stats.min:.3f}s")
