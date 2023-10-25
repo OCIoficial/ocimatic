@@ -8,7 +8,8 @@ from ocimatic import core, server, ui
 CONTEST_COMMANDS = ['problemset', 'package']
 SINGLE_TASK_COMMANDS = ["run", "build"]
 MULTI_TASK_COMMANDS = [
-    'check', 'gen-expected', 'pdf', 'compress', 'normalize', 'run-testplan', 'validate', 'score'
+    'check-dataset', 'gen-expected', 'pdf', 'compress', 'normalize', 'run-testplan',
+    'validate-input', 'score'
 ]
 
 
@@ -90,9 +91,25 @@ class CLI:
             ui.show_message("Warning", "no tasks selected", ui.WARNING)
 
         action: Callable[[core.Task], None]
-        if args.command == "check":
+        if args.command == "check-dataset":
             set_verbosity(args, 0)
-            action = lambda task: task.check_dataset()
+            failed = []
+            for task in tasks:
+                if not task.check_dataset():
+                    failed.append(task)
+            if len(tasks) > 1 and failed:
+                ui.write(
+                    """
+
+------------------------------------------------
+Some tasks have issues that need to be resolved.
+
+Tasks with issues:
+""", ui.ERROR)
+                for task in failed:
+                    ui.writeln(f" * {task.name}", ui.ERROR)
+                ui.writeln("------------------------------------------------", ui.ERROR)
+            return
         elif args.command == "gen-expected":
             set_verbosity(args, 0 if len(tasks) > 1 else 2)
             if args.solution and len(tasks) > 1:
@@ -110,7 +127,7 @@ class CLI:
         elif args.command == "run-testplan":
             set_verbosity(args, 0 if len(tasks) > 1 else 2)
             action = lambda task: task.run_testplan(args.subtask)
-        elif args.command == "validate":
+        elif args.command == "validate-input":
             set_verbosity(args, 0 if len(tasks) > 1 else 2)
             action = lambda task: task.validate_input(args.subtask)
         elif args.command == "score":
@@ -172,11 +189,12 @@ def add_multitask_commands(subcommands: argparse._SubParsersAction) -> None:
     multitask_parser = argparse.ArgumentParser(add_help=False)
     multitask_parser.add_argument('--tasks', help="A comma separated list of tasks.")
 
-    # check
+    # check-dataset
     subcommands.add_parser(
-        "check",
+        "check-dataset",
         help="""Check input/output correcteness by running all correct solutions against all
-        test cases and sample inputs""",
+        test cases and sample inputs. Also check robustness by checking partial solutions pass/fail
+        the subtasks they are suppose to.""",
         parents=[multitask_parser])
 
     # expected
@@ -219,8 +237,8 @@ def add_multitask_commands(subcommands: argparse._SubParsersAction) -> None:
                                                  parents=[multitask_parser])
     run_testplan_parser.add_argument("--subtask", '-st', type=int)
 
-    # validate
-    validate_parser = subcommands.add_parser("validate",
+    # validate-input
+    validate_parser = subcommands.add_parser("validate-input",
                                              help="Run input validators.",
                                              parents=[multitask_parser])
     validate_parser.add_argument("--subtask", '-st', type=int)

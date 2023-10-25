@@ -312,16 +312,28 @@ class Task:
         if results:
             write_stats(results.runtime_stats())
 
-            if sol.is_partial and not sol.check_results(results):
+            if sol.is_partial:
                 should_pass = ', '.join(f'st{st}' for st in sorted(sol.should_pass(results)))
-                ui.write(
-                    f"""
+                if sol.check_results(results):
+                    ui.writeln()
+                    ui.writeln(
+                        "Solution passed the subtasks it was supposed to pass: [{should_pass}]",
+                        ui.OK)
+                else:
+                    ui.write(
+                        f"""
 The results don't match the solution's specification. The solution should pass the following
 subtasks (and fail the rest): [{should_pass}]
 """, ui.ERROR)
+            else:
+                ui.writeln()
+                if results.check_all_correct():
+                    ui.writeln("All test passed", ui.OK)
+                else:
+                    ui.writeln("Some test failed", ui.ERROR)
 
     @ui.task('Checking dataset')
-    def check_dataset(self) -> None:
+    def check_dataset(self) -> bool:
         """Check input/output correctness by running all correct solutions againt all test
         cases and sample input. Use the result of correct solutions to set a timeout and then run
         partial solutions with that timeout and ensure they fail the subtasks they are suppose to fail.
@@ -331,11 +343,11 @@ subtasks (and fail the rest): [{should_pass}]
 
         if not correct:
             ui.show_message('Error', 'At least one correct solution needed', ui.ERROR)
-            return
+            return False
 
         # Run correct solutions
         ui.writeln()
-        ui.writeln(f'Running correct solutions', ui.INFO)
+        ui.writeln(f'[Running correct solutions]', ui.INFO)
         failed_correct = []
         for sol in correct:
             results = sol.run(self._dataset, self._checker, RunMode.check_correct, None)
@@ -345,25 +357,28 @@ subtasks (and fail the rest): [{should_pass}]
             stats += results.runtime_stats()
 
         if failed_correct:
-            ui.writeln()
-            ui.show_message(
-                'Error',
-                'The following correct solutions failed to run or produced wrong results. Run solutions individually with `ocimatic run` for more detailed information.',
-                ui.ERROR)
+            ui.write(
+                """
+Some correct solutions failed to run or produced wrong results. Run solutions individually with
+`ocimatic run` to get more detailed information.
+
+Solutions with issues:
+""", ui.ERROR)
+
             for sol in failed_correct:
                 ui.writeln(' * ' + str(sol), ui.ERROR)
-            return
+            return False
 
         ui.writeln()
         write_stats(stats)
         ui.writeln()
-        ui.writeln('All correct solutions produced correct results', color=ui.OK)
+        ui.writeln('All correct solutions produced correct results', ui.OK)
 
         # Run partial solutions
         timeout = round(stats.max * 1.5, 1)
         ui.writeln()
         ui.writeln(
-            f'Running partial solutions with timeout set to {timeout:.1f}s (round({stats.max:.3f} * 1.5, 1))',
+            f'[Running partial solutions with timeout set to {timeout:.1f}s (round({stats.max:.3f} * 1.5, 1))]',
             ui.INFO)
         failed_partial = []
         for sol in self._partial:
@@ -374,22 +389,24 @@ subtasks (and fail the rest): [{should_pass}]
         if failed_partial:
             ui.write(
                 """
-The following partial solutions had problems when running or didn't pass/fail the subtasks they were supposed to.
-Run solutions individually with `ocimatic run` for more detailed information. To specify which tasks the solution
-should pass/fail, you must either have a `should-pass` or `should-fail` comment at the beginning of the file. For
-example, to specify that a task should pass subtasks 1 and 2, write the following comment at the top of the solution:
+Some partial solutions had issues when running or didn't pass/fail the subtasks they were supposed to.
+Run them individually with `ocimatic run` to get more detailed information. To specify which tasks the
+solution should pass/fail, you must either have a `should-pass` or `should-fail` comment at the
+beginning of the file. For example, to specify that a task should pass subtasks 1 and 2, write the
+following comment at the beginning of the file:
 // @ocimatic should-pass=[st1, st2]
 If no comment is specified, ocimatic will assume that all subtasks should fail.
 
-Solutions:
+Solutions with issues:
 """, ui.ERROR)
             for sol in failed_partial:
                 ui.writeln(' * ' + str(sol), ui.ERROR)
-            return
+            return False
 
         ui.writeln()
         ui.writeln('All partial solutions passed/failed the subtasks they were supposed to.',
                    color=ui.OK)
+        return True
 
     @ui.task('Building solutions')
     def build_solution(self, solution: Path) -> None:
@@ -491,5 +508,5 @@ class Statement:
 
 def write_stats(stats: RuntimeStats) -> None:
     ui.writeln("Running time", ui.INFO)
-    ui.writeln(f"  Max: {stats.max:.3f}s")
-    ui.writeln(f"  Min: {stats.min:.3f}s")
+    ui.writeln(f"  Max: {stats.max:.3f}s", ui.INFO)
+    ui.writeln(f"  Min: {stats.min:.3f}s", ui.INFO)
