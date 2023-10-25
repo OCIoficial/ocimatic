@@ -1,4 +1,5 @@
 import itertools
+import math
 import random
 import shutil
 import string
@@ -255,6 +256,9 @@ class Test:
             status=ui.Status.from_bool(st == 0), short_msg="OK" if st == 0 else "FAILED"
         )
 
+    def has_expected(self) -> bool:
+        return self._expected_path.exists()
+
 
 class TestGroup:
     def __init__(self, name: str, tests: list[Test]) -> None:
@@ -265,7 +269,7 @@ class TestGroup:
         copied = 0
         for test in self._tests:
             if test.expected_path.exists():
-                # Sort testcases withing a subtask randomly
+                # Sort testcases within a subtask randomly
                 if random_sort:
                     choices = string.ascii_lowercase
                     rnd_str = "".join(random.choice(choices) for _ in range(3))
@@ -349,6 +353,12 @@ class RuntimeStats:
     def unit() -> "RuntimeStats":
         return RuntimeStats(max=float("-inf"), min=float("inf"))
 
+    def set_limit(self) -> float | None:
+        return math.ceil(self.max * 20) / 10 if self.max else None
+
+    def print_limit_calculation(self) -> str:
+        return f"math.ceil({self.max:.3f} * 20) / 10"
+
     def __add__(self, other: "RuntimeStats") -> "RuntimeStats":
         return RuntimeStats(max=max(self.max, other.max), min=min(self.min, other.min))
 
@@ -385,12 +395,11 @@ class DatasetResults:
 
         return True
 
-    def runtime_stats(self, include_sample: bool = False) -> RuntimeStats:
+    def runtime_stats(self, include_sample: bool = False) -> RuntimeStats | None:
         running_times = list(self.running_times(include_sample))
-        return RuntimeStats(
-            max=max(running_times),
-            min=min(running_times),
-        )
+        if not running_times:
+            return None
+        return RuntimeStats(max=max(running_times), min=min(running_times))
 
     def iter_all(self, include_sample: bool = False) -> Iterator[TestResult]:
         tests: Iterable[TestResult] = (t for st in self.subtasks for t in st)
@@ -475,3 +484,10 @@ class Dataset:
         for subtask in self._subtasks:
             subtask.normalize()
         self._sampledata.normalize()
+
+    def check_all_have_expected(self) -> bool:
+        for st in self._subtasks:
+            for test in st._tests:
+                if not test.has_expected():
+                    return False
+        return True

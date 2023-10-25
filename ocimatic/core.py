@@ -334,7 +334,9 @@ class Task:
 
         results = sol.run(self._dataset, self._checker, RunMode.run_solution, timeout)
         if results:
-            write_stats(results.runtime_stats())
+            stats = results.runtime_stats()
+            if stats:
+                write_stats(stats)
 
             if sol.is_partial:
                 should_pass = ", ".join(
@@ -343,23 +345,29 @@ class Task:
                 if sol.check_results(results):
                     ui.writeln()
                     ui.writeln(
-                        f"Solution passed the subtasks it was supposed to pass: [{should_pass}]",
+                        f"Solution passed the subtasks it was supposed to: should-pass=[{should_pass}]",
                         ui.OK,
                     )
                 else:
                     ui.write(
                         f"""
 The results don't match the solution's specification. The solution should pass the following
-subtasks (and fail the rest): [{should_pass}]
+list of subtasks (and fail the rest): [{should_pass}].
+
+To specify which tasks the solution should pass/fail, you must either have a `should-pass` or
+`should-fail` comment at the beginning of the file. For example, to specify that a task should
+pass subtasks 1 and 2, write the following comment at the beginning of the file:
+// @ocimatic should-pass=[st1, st2]
+If no comment is specified, ocimatic will assume that all subtasks should fail.
 """,
                         ui.ERROR,
                     )
             else:
                 ui.writeln()
                 if results.check_all_correct():
-                    ui.writeln("All test passed", ui.OK)
+                    ui.writeln("Result: All test passed", ui.OK)
                 else:
-                    ui.writeln("Some test failed", ui.ERROR)
+                    ui.writeln("Result: Some test failed", ui.ERROR)
 
     @ui.task("Checking dataset")
     def check_dataset(self) -> bool:
@@ -375,6 +383,22 @@ subtasks (and fail the rest): [{should_pass}]
             ui.show_message("Error", "At least one correct solution needed", ui.ERROR)
             return False
 
+        if not self._dataset.count():
+            ui.show_message(
+                "Error",
+                "No test cases found. Generate the dataset by running `ocimatic run-testplan && ocimatic gen-expected`.",
+                ui.ERROR,
+            )
+            return False
+
+        if not self._dataset.check_all_have_expected():
+            ui.show_message(
+                "Error",
+                "Some test cases don't have an expected output, generate them with `ocimatic gen-expected`.",
+                ui.ERROR,
+            )
+            return False
+
         # Run correct solutions
         ui.writeln()
         ui.writeln("[Running correct solutions]", ui.INFO)
@@ -384,13 +408,15 @@ subtasks (and fail the rest): [{should_pass}]
             if results is None or not results.check_all_correct():
                 failed_correct.append(sol)
                 continue
-            stats += results.runtime_stats()
+            new_stats = results.runtime_stats()
+            assert new_stats is not None
+            stats += new_stats
 
         if failed_correct:
             ui.write(
                 """
-Some correct solutions failed to run or produced wrong results. Run solutions individually with
-`ocimatic run` to get more detailed information.
+Some correct solutions failed to run or produced wrong results. Run them individually with
+`ocimatic run` to get more information.
 
 Solutions with issues:
 """,
@@ -408,10 +434,12 @@ Solutions with issues:
 
         # Run partial solutions
 
-        timeout = round(stats.max * 1.5, 1)
+        timeout = stats.set_limit()
+        assert timeout is not None
+
         ui.writeln()
         ui.writeln(
-            f"[Running partial solutions with timeout set to {timeout:.1f}s (round({stats.max:.3f} * 1.5, 1))]",
+            f"[Running partial solutions with timeout set to {timeout:.1f}s ({stats.print_limit_calculation()})]",
             ui.INFO,
         )
         if not self._partial:
@@ -431,12 +459,8 @@ Solutions with issues:
             ui.write(
                 """
 Some partial solutions had issues when running or didn't pass/fail the subtasks they were supposed to.
-Run them individually with `ocimatic run` to get more detailed information. To specify which tasks the
-solution should pass/fail, you must either have a `should-pass` or `should-fail` comment at the
-beginning of the file. For example, to specify that a task should pass subtasks 1 and 2, write the
-following comment at the beginning of the file:
-// @ocimatic should-pass=[st1, st2]
-If no comment is specified, ocimatic will assume that all subtasks should fail.
+Run them individually with `ocimatic run` to get more information. Remember to set an appropiate timeout
+passing the the `--timeout` option.
 
 Solutions with issues:
 """,
@@ -563,6 +587,8 @@ class Statement:
 
 
 def write_stats(stats: RuntimeStats) -> None:
+    if stats.max is None or stats.max is None:
+        return None
     ui.writeln("Running time", ui.INFO)
     ui.writeln(f"  Max: {stats.max:.3f}s", ui.INFO)
     ui.writeln(f"  Min: {stats.min:.3f}s", ui.INFO)
