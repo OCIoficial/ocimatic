@@ -6,9 +6,8 @@ import tempfile
 import time as pytime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from io import FileIO
 from pathlib import Path
-from typing import IO, Any, List, Optional, TextIO, overload
+from typing import List, Optional, TextIO, overload
 
 SIGNALS = {
     1: 'SIGHUP',

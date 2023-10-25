@@ -143,11 +143,11 @@ class Copy(Command):
         return str(self._file.relative_to(ocimatic.config['contest_root']))
 
     @ui.work('Copy', '{0}')
-    def run(self, dst: Path) -> WorkResult:
+    def run(self, dst_dir: Path) -> WorkResult:
         if not self._file.exists():
             return WorkResult.fail(short_msg='No such file')
         try:
-            shutil.copy(self._file, self.dst_file(dst))
+            shutil.copy(self._file, self.dst_file(dst_dir))
             return WorkResult.success(short_msg='OK')
         except Exception:  # pylint: disable=broad-except
             return WorkResult.fail(short_msg='Error when copying file')

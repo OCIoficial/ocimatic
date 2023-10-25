@@ -93,7 +93,7 @@ class CLI:
         action: Callable[[core.Task], None]
         if args.command == "check-dataset":
             set_verbosity(args, 0)
-            failed: List[core.Task] = []
+            failed = []
             for task in tasks:
                 if not task.check_dataset():
                     failed.append(task)

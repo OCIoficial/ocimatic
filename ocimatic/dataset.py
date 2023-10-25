@@ -336,8 +336,6 @@ class DatasetResults:
     def check_passes_correct_subtasks(self, should_pass: Set[int]) -> bool:
         """Check that the results passes all subtasks specified in `should_pass` and fails the rest.
         If `None` all subtasks must fail. Subtask number are specified counting form 1."""
-        if should_pass is None:
-            should_pass = set()
         for (st, tests) in enumerate(self.subtasks):
             in_should_pass = (st + 1) in should_pass
             if in_should_pass and not all(t.is_correct() for t in tests):
@@ -356,7 +354,7 @@ class DatasetResults:
 
     def iter_all(self, include_sample: bool = False) -> Iterator[TestResult]:
         tests: Iterable[TestResult] = (t for st in self.subtasks for t in st)
-        if include_sample and self.sample is not None:
+        if include_sample:
             tests = itertools.chain(tests, self.sample)
         yield from tests
 

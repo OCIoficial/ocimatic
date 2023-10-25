@@ -202,7 +202,7 @@ def parse_comments(file: Path, comment_start: str) -> Iterator[OcimaticComment]:
             ui.fatal_error(f"Invalid comment `{m.group(0)}` in {path}")
 
 
-def comment_iter(file: Path, comment_start: str) -> Iterator[re.Match]:
+def comment_iter(file: Path, comment_start: str) -> Iterator[re.Match[str]]:
     pattern = re.compile(rf"\s*{comment_start}\s*@ocimatic(.*)")
     for line in open(file):
         m = pattern.match(line)
