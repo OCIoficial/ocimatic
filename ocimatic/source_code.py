@@ -1,9 +1,10 @@
 import re
 import subprocess
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Set
+from typing import Optional
 
 import ocimatic
 from ocimatic import ui
@@ -18,7 +19,7 @@ class BuildError:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ShouldFail:
     REGEX = re.compile(r"\s+should-fail\s*=\s*\[(\s*st\d+\s*(,\s*st\d+\s*)*(,\s*)?)\]")
-    subtasks: Set[int]
+    subtasks: set[int]
 
     @staticmethod
     def parse(comment: str) -> Optional["ShouldFail"]:
@@ -34,7 +35,7 @@ class ShouldFail:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ShouldPass:
     REGEX = re.compile(r"\s+should-pass\s*=\s*\[(\s*st\d+\s*(,\s*st\d+\s*)*(,\s*)?)\]")
-    subtasks: Set[int]
+    subtasks: set[int]
 
     @staticmethod
     def parse(comment: str) -> Optional["ShouldPass"]:
@@ -51,7 +52,7 @@ OcimaticComment = ShouldFail | ShouldPass
 
 
 class SourceCode(ABC):
-    def __init__(self, file: Path):
+    def __init__(self, file: Path) -> None:
         relative_path = file.relative_to(ocimatic.config["contest_root"])
         self._file = file
         self.name = str(relative_path)
@@ -65,7 +66,7 @@ class SourceCode(ABC):
         return self._file
 
     @staticmethod
-    def should_build(sources: List[Path], out: Path) -> bool:
+    def should_build(sources: list[Path], out: Path) -> bool:
         mtime = max(
             (s.stat().st_mtime for s in sources if s.exists()), default=float("inf")
         )
@@ -86,17 +87,17 @@ class CppSource(SourceCode):
     def __init__(
         self,
         file: Path,
-        extra_files: List[Path] = [],
-        include: Optional[Path] = None,
-        out: Optional[Path] = None,
-    ):
+        extra_files: list[Path] = [],
+        include: Path | None = None,
+        out: Path | None = None,
+    ) -> None:
         super().__init__(file)
         self._source = file
         self._extra_files = extra_files
         self._include = include
         self._out = out or Path(file.parent, ".build", f"{file.stem}-cpp")
 
-    def build_cmd(self) -> List[str]:
+    def build_cmd(self) -> list[str]:
         cmd = ["g++", "-std=c++17", "-O2", "-o", str(self._out)]
         if self._include:
             cmd.extend(["-I", str(self._include)])
@@ -119,8 +120,8 @@ class CppSource(SourceCode):
         return Binary(self._out)
 
     @property
-    def files(self) -> List[Path]:
-        return [self._file] + self._extra_files
+    def files(self) -> list[Path]:
+        return [self._file, *self._extra_files]
 
     @classmethod
     def line_comment_start(cls) -> str:
@@ -128,11 +129,11 @@ class CppSource(SourceCode):
 
 
 class RustSource(SourceCode):
-    def __init__(self, file: Path, out: Optional[Path] = None):
+    def __init__(self, file: Path, out: Path | None = None) -> None:
         super().__init__(file)
         self._out = out or Path(file.parent, ".build", f"{file.stem}-rs")
 
-    def build_cmd(self) -> List[str]:
+    def build_cmd(self) -> list[str]:
         cmd = ["rustc", "--edition=2021", "-O", "-o", str(self._out), str(self._file)]
         return cmd
 
@@ -157,13 +158,13 @@ class RustSource(SourceCode):
 
 
 class JavaSource(SourceCode):
-    def __init__(self, classname: str, source: Path, out: Optional[Path] = None):
+    def __init__(self, classname: str, source: Path, out: Path | None = None) -> None:
         super().__init__(source)
         self._classname = classname
         self._source = source
         self._out = out or Path(source.parent, ".build", f"{source.stem}-java")
 
-    def build_cmd(self) -> List[str]:
+    def build_cmd(self) -> list[str]:
         return ["javac", "-d", str(self._out), str(self._source)]
 
     def build(self, force: bool = False) -> JavaClasses | BuildError:
@@ -187,7 +188,7 @@ class JavaSource(SourceCode):
 
 
 class PythonSource(SourceCode):
-    def __init__(self, file: Path):
+    def __init__(self, file: Path) -> None:
         super().__init__(file)
 
     def build(self, force: bool = False) -> Python3:
@@ -220,13 +221,13 @@ def comment_iter(file: Path, comment_start: str) -> Iterator[re.Match[str]]:
 
 
 class LatexSource:
-    def __init__(self, source: Path):
+    def __init__(self, source: Path) -> None:
         self._source = source
 
     def iter_lines(self) -> Iterable[str]:
         yield from self._source.open()
 
-    def compile(self) -> Optional[Path]:
+    def compile(self) -> Path | None:
         name = self._source.name
         parent = self._source.parent
         cmd = f"cd {parent} && pdflatex --shell-escape -interaciton=batchmode {name}"
@@ -243,7 +244,7 @@ class LatexSource:
         return self._source.with_suffix(".pdf")
 
     @property
-    def pdf(self) -> Optional[Path]:
+    def pdf(self) -> Path | None:
         pdf = self._source.with_suffix(".pdf")
         return pdf if pdf.exists() else None
 

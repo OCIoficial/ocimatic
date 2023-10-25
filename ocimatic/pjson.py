@@ -1,6 +1,7 @@
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, List, Tuple
+from typing import Any
 
 
 def load(file_path: Path) -> Any:
@@ -8,7 +9,7 @@ def load(file_path: Path) -> Any:
 
 
 class PJSONFile:
-    def __init__(self, file_path: Path):
+    def __init__(self, file_path: Path) -> None:
         self._file_path = file_path
 
     def _load_json(self) -> Any:
@@ -27,7 +28,7 @@ class PJSONFile:
             val = val[key]
         return val
 
-    def set_path(self, path: List[str], val: Any) -> Any:
+    def set_path(self, path: list[str], val: Any) -> Any:
         if path:
             root = self._load_json()
             obj = root
@@ -41,7 +42,7 @@ class PJSONFile:
     def load(self) -> Any:
         return self.to_pjson(self._load_json(), [])
 
-    def to_pjson(self, val: Any, path: List[str]) -> Any:
+    def to_pjson(self, val: Any, path: list[str]) -> Any:
         if isinstance(val, list):
             return PJSONArray(self, path)
         if isinstance(val, dict):
@@ -50,7 +51,7 @@ class PJSONFile:
 
 
 class PJSONBase:
-    def __init__(self, json_file: PJSONFile, path: List[str]):
+    def __init__(self, json_file: PJSONFile, path: list[str]) -> None:
         self._json_file = json_file
         self._path = path
 
@@ -61,7 +62,7 @@ class PJSONBase:
         self._json_file.set_path(self._path, val)
 
     def __getitem__(self, key: str) -> Any:
-        return self._json_file.to_pjson(self._get_self_path()[key], self._path + [key])
+        return self._json_file.to_pjson(self._get_self_path()[key], [*self._path, key])
 
     def __setitem__(self, key: str, val: Any) -> Any:
         obj = self._get_self_path()
@@ -74,10 +75,8 @@ class PJSONBase:
 
 
 class PJSONMap(PJSONBase):
-    def __iter__(self) -> Iterable[Tuple[str, Any]]:
-        obj = self._get_self_path()
-        for key, val in obj:
-            yield (key, val)
+    def __iter__(self) -> Iterable[tuple[str, Any]]:
+        yield from self._get_self_path()
 
     def setdefault(self, key: str, default: Any = None) -> Any:
         obj = self._get_self_path()
@@ -102,6 +101,4 @@ class PJSONArray(PJSONBase):
         return len(self._get_self_path())
 
     def __iter__(self) -> Iterable[Any]:
-        arr = self._get_self_path()
-        for val in arr:
-            yield val
+        yield from self._get_self_path()

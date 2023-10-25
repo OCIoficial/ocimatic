@@ -1,17 +1,13 @@
 import re
 import sys
+from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
-    Callable,
     Concatenate,
-    Generator,
-    Iterator,
-    List,
     Literal,
     NoReturn,
-    Optional,
     ParamSpec,
     Protocol,
     TextIO,
@@ -54,7 +50,7 @@ def decolorize(text: str) -> str:
 
 
 IO = TextIO
-IO_STREAMS: List[Optional[IO]] = [sys.stdout]
+IO_STREAMS: list[IO | None] = [sys.stdout]
 
 
 class Status(Enum):
@@ -115,7 +111,7 @@ class Result:
 
 
 @contextmanager
-def capture_io(stream: Optional[IO]) -> Iterator[None]:
+def capture_io(stream: IO | None) -> Iterator[None]:
     IO_STREAMS.append(stream)
     yield
     IO_STREAMS.pop()
@@ -138,15 +134,15 @@ def writeln(text: str = "", color: str = RESET) -> None:
 
 
 def task_header(name: str, msg: str) -> None:
-    """Print header for task"""
+    """Print header for task."""
     write("\n\n")
-    write(colorize("[%s] %s" % (name, msg), BOLD + YELLOW))
+    write(colorize(f"[{name}] {msg}", BOLD + YELLOW))
     writeln()
     flush()
 
 
 def workgroup_header(msg: str, length: int = 35) -> None:
-    """Header for a generic group of works"""
+    """Print header for a generic group of works."""
     writeln()
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
     write(colorize("[%s]" % (msg), INFO))
@@ -158,7 +154,7 @@ def workgroup_header(msg: str, length: int = 35) -> None:
 
 
 def contest_group_header(msg: str, length: int = 35) -> None:
-    """Header for a group of works involving a contest"""
+    """Print header for a group of works involving a contest."""
     write("\n\n")
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
     write(colorize("[%s]" % (msg), INFO + YELLOW))
@@ -190,7 +186,7 @@ def solution_group(
 
 
 def solution_group_header(msg: str, length: int = 40) -> None:
-    """Header for a group of works involving a solution"""
+    """Print header for a solution group."""
     writeln()
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
     write(colorize("[%s]" % (msg), INFO + BLUE) + " ")

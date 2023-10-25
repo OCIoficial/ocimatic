@@ -5,7 +5,7 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, TypedDict
+from typing import Optional, TypedDict
 
 import pypdf
 
@@ -22,11 +22,13 @@ class ContestConfig(TypedDict, total=False):
     phase: str
 
 
-def change_directory() -> Tuple[Path, Optional[Path]]:
-    """Changes directory to the contest root and returns the absolute path of the
-    last directory before reaching the root, this correspond to the directory
-    of the problem in which ocimatic was called. If the function reach system
-    root the program exists with an error.
+def find_contest_root() -> tuple[Path, Path | None]:
+    """Find the root contest's directory.
+
+    Returns the absolute path to the roof of the contest and the last directory
+    before reaching the root, this correspond to the directory of the task in
+    which ocimatic was called. If the function reach system root the program exists
+    with an error.
     """
     last_dir = None
     curr_dir = Path.cwd()
@@ -40,12 +42,13 @@ def change_directory() -> Tuple[Path, Optional[Path]]:
 
 
 class Contest:
-    """This class represents a contest. A contest is formed by a list of
-    tasks and a titlepage. A contest is associated to a directory in the
-    filesystem.
+    """Represent a contest.
+
+    A contest is formed by a list of tasks and a titlepage. A contest is associated
+    to a directory in the filesystem.
     """
 
-    def __init__(self, directory: Path):
+    def __init__(self, directory: Path) -> None:
         self._directory = directory
         self._config = pjson.load(Path(directory, ".ocimatic_contest"))
 
@@ -73,7 +76,7 @@ class Contest:
 
     @staticmethod
     def create_layout(dest: Path, config: ContestConfig) -> None:
-        """Copy contest skeleton to `dest` and save configuration"""
+        """Copy contest skeleton to `dest` and save configuration."""
         ocimatic_dir = Path(__file__).parent
         contest_skel = Path(ocimatic_dir, "resources", "contest-skel")
         shutil.copytree(
@@ -88,14 +91,12 @@ class Contest:
         self._config.setdefault("tasks", []).append(name)
 
     @property
-    def tasks(self) -> List["Task"]:
+    def tasks(self) -> list["Task"]:
         return self._tasks
 
     @ui.contest_group("Generating problemset")
     def build_problemset(self) -> None:
-        """Build titlepage and statement of all tasks. Then merge
-        all pdfs into a single pdf.
-        """
+        """Build titlepage and statement of all tasks. Then merge all pdfs into a single pdf."""
         self.build_problemset_twoside()
         self.build_problemset_oneside()
 
@@ -121,7 +122,7 @@ class Contest:
 
     @ui.contest_group("Building package")
     def package(self) -> None:
-        """Package statements and datasets of all tasks into a single zip file"""
+        """Package statements and datasets of all tasks into a single zip file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             for task in self._tasks:
                 task.copy_to(Path(tmpdir))
@@ -139,7 +140,7 @@ class Contest:
 
     @ui.work("LATEX", "titlepage.tex")
     def compile_titlepage(self) -> ui.WorkResult:
-        """Compile title page latex"""
+        """Compile title page latex."""
         success = self._titlepage.compile() is not None
         return ui.WorkResult(
             status=ui.Status.from_bool(success), short_msg="OK" if success else "FAILED"
@@ -147,7 +148,7 @@ class Contest:
 
     @ui.work("MERGE", "{1}")
     def merge_pdfs(self, filename: str) -> ui.WorkResult:
-        """Merge titlepage and statements pdfs into a single file"""
+        """Merge titlepage and statements pdfs into a single file."""
         try:
             merger = pypdf.PdfMerger()
             for task in self._tasks:
@@ -164,21 +165,22 @@ class Contest:
 
     @property
     def name(self) -> str:
-        """Name of the contest"""
+        """Name of the contest."""
         return self._directory.name
 
     def __str__(self) -> str:
         return self.name
 
     def find_task(self, name: str) -> Optional["Task"]:
-        """find task with given name."""
+        """Find task with the given name."""
         return next((p for p in self._tasks if p.name == name), None)
 
 
 class Task:
-    """This class represents a task. A task consists of a statement,
-    a list of correct and partial solutions and a dataset. A task is
-    associated to a directory in the filesystem.
+    """Represent a task.
+
+    A task consists of a statement, a list of correct and partial solutions
+    and a dataset. A task is associated to a directory in the filesystem.
     """
 
     @staticmethod
@@ -187,7 +189,7 @@ class Task:
         skel = Path(ocimatic_dir, "resources", "task-skel")
         shutil.copytree(skel, task_path, symlinks=True)
 
-    def __init__(self, directory: Path, num: int):
+    def __init__(self, directory: Path, num: int) -> None:
         self._directory = directory
 
         self._managers_dir = Path(directory, "managers")
@@ -235,7 +237,7 @@ class Task:
             shutil.copy2(Path(self._directory, "statement", "statement.pdf"), statement)
 
     @ui.task("Generating dataset input files")
-    def run_testplan(self, subtask: Optional[int]) -> None:
+    def run_testplan(self, subtask: int | None) -> None:
         if self._config.get("static_dataset", False):
             ui.fatal_error("Task has a static dataset.")
         testplan = Testplan(
@@ -245,12 +247,13 @@ class Task:
         )
         testplan.run(subtask)
 
-    def load_solution_from_path(self, path: Path) -> Optional[Solution]:
-        """Search for a solution matching a path. The behavior depends on whether the path
-        is absolute or relative. If absolute, it will match a solution for the
-        corresponding path. If it is relative, it will try to match the path
-        relative to the following locations, in order, until it finds a match or it fails to
-        find one:
+    def load_solution_from_path(self, path: Path) -> Solution | None:
+        """Search for a solution matching a path.
+
+        The behavior depends on whether the path is absolute or relative. If absolute,
+        it will match a solution for the corresponding path. If it is relative, it will
+        try to match the path relative to the following locations, in order, until it
+        finds a match or it fails to find one:
         1. <task>/solutions/correct
         2. <task>/solutions/partial
         3. <task>/solutions/
@@ -275,7 +278,7 @@ class Task:
         return None
 
     @ui.task("Validating dataset input files")
-    def validate_input(self, subtask: Optional[int]) -> None:
+    def validate_input(self, subtask: int | None) -> None:
         testplan = Testplan(
             Path(self._directory, "attic"),
             self._directory,
@@ -286,12 +289,12 @@ class Task:
 
     @ui.task("Compressing dataset")
     def compress_dataset(self, random_sort: bool) -> None:
-        """Compress dataset into a single file"""
+        """Compress dataset into a single file."""
         self._dataset.compress(random_sort=random_sort)
 
     @property
     def name(self) -> str:
-        """Name of the task"""
+        """Name of the task."""
         return self._directory.name
 
     def __str__(self) -> str:
@@ -360,9 +363,11 @@ subtasks (and fail the rest): [{should_pass}]
 
     @ui.task("Checking dataset")
     def check_dataset(self) -> bool:
-        """Check input/output correctness by running all correct solutions againt all test
-        cases and sample input. Use the result of correct solutions to set a timeout and then run
-        partial solutions with that timeout and ensure they fail the subtasks they are suppose to fail.
+        """Check input/output correctness.
+
+        First run all correct solutions againt all test cases and sample input. Then use the running
+        time of correct solutions to set a timeout. Finally, use the timeout to run partial solutions
+        and ensure they fail the subtasks they are suppose to fail.
         """
         stats = RuntimeStats.unit()
         correct = list(self._correct)
@@ -452,11 +457,12 @@ Solutions with issues:
         sol.build()
 
     @ui.task("Generating expected output")
-    def gen_expected(
-        self, sample: bool = False, solution: Optional[Path] = None
-    ) -> None:
-        """Generate expected outputs files for the dataset by running one of the
-        correct solutions.
+    def gen_expected(self, sample: bool = False, solution: Path | None = None) -> None:
+        """Generate expected outputs files for the dataset by running a correct solution.
+
+        If `sample` is True, also generate expected output for sample input. If `solution` is
+        not `None` use it to generate the expected output, otherwise use any correct one
+        prioritizing C++ solutions.
         """
         if self._config.get("static_dataset", False):
             ui.show_message("Skipping", "Task has a static dataset.", ui.WARNING)
@@ -468,7 +474,7 @@ Solutions with issues:
         if solution:
             generator = self.load_solution_from_path(solution)
         else:
-            keys: Dict[type, int] = {CppSource: 0, RustSource: 1, JavaSource: 0}
+            keys: dict[type, int] = {CppSource: 0, RustSource: 1, JavaSource: 0}
             sols = sorted(
                 self._correct, key=lambda sol: keys.get(type(sol.source), len(keys))
             )
@@ -480,7 +486,7 @@ Solutions with issues:
 
     @ui.task("Building statement")
     def build_statement(self, blank_page: bool = False) -> None:
-        """Generate pdf for the statement"""
+        """Generate pdf for the statement."""
         self._statement.build(blank_page=blank_page)
 
 
@@ -488,8 +494,8 @@ class Statement:
     """Represents a statement. A statement is composed by a latex source and a pdf file."""
 
     def __init__(
-        self, directory: Path, num: Optional[int] = None, codename: Optional[str] = None
-    ):
+        self, directory: Path, num: int | None = None, codename: str | None = None
+    ) -> None:
         assert Path(directory, "statement.tex").exists()
         self._source = LatexSource(Path(directory, "statement.tex"))
         self._directory = directory
@@ -497,7 +503,7 @@ class Statement:
         self._codename = codename
 
     @property
-    def pdf(self) -> Optional[Path]:
+    def pdf(self) -> Path | None:
         """Return path to pdf if exists."""
         return self._source.pdf
 
@@ -506,7 +512,7 @@ class Statement:
 
     @ui.work("LATEX")
     def build(self, blank_page: bool) -> ui.Result:
-        """Compile latex statement"""
+        """Compile latex statement."""
         if self._num is not None:
             os.environ["OCIMATIC_PROBLEM_NUMBER"] = chr(ord("A") + self._num)
         if self._codename:
@@ -521,8 +527,8 @@ class Statement:
         else:
             return ui.Result.fail("FAILED")
 
-    def io_samples(self) -> List[Test]:
-        """Find sample input data in the satement"""
+    def io_samples(self) -> list[Test]:
+        """Find sample input data in the satement."""
         samples = set()
         for line in self._source.iter_lines():
             m = re.match(r"[^%]*\\sampleIO(?:\*)?(\[[^\]]*\]){0,2}{([^}]+)}", line)
@@ -533,8 +539,8 @@ class Statement:
             for s in samples
         ]
 
-    def scores(self) -> List[int]:
-        """Finds the scores for the subtasks"""
+    def scores(self) -> list[int]:
+        """Find the scores for the subtasks."""
         scores = []
         for line in self._source.iter_lines():
             m = re.match(r"[^%]*\\subtask{([^}]+)}", line)
@@ -554,4 +560,5 @@ class Statement:
 def write_stats(stats: RuntimeStats) -> None:
     ui.writeln("Running time", ui.INFO)
     ui.writeln(f"  Max: {stats.max:.3f}s", ui.INFO)
+    ui.writeln(f"  Min: {stats.min:.3f}s", ui.INFO)
     ui.writeln(f"  Min: {stats.min:.3f}s", ui.INFO)

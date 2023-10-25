@@ -1,6 +1,7 @@
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, List, Optional, Text, cast
+from typing import cast
 
 from ansi2html import Ansi2HTMLConverter
 from flask import Flask, Response, render_template, request
@@ -22,7 +23,7 @@ def ansi2html(ansi: str) -> str:
 
 UPLOAD_FOLDER = Path("/tmp", "ocimatic", "server")
 
-contest: Optional[core.Contest] = None
+contest: core.Contest | None = None
 app = Flask(__name__)
 app.secret_key = 'M\xf2\xba\xc0\xe3\xe55\xa0"\xff\x96\xba\xb8Jn\xc6#S\xa0t\xda\xb5[\r'
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -41,7 +42,7 @@ def save_file(uploaded_file: FileStorage) -> Path:
     return filepath
 
 
-def upload_solution() -> Optional[Path]:
+def upload_solution() -> Path | None:
     solution_text = request.form.get("solutionText")
     if solution_text:
         ext = request.form.get("lang")
@@ -58,7 +59,7 @@ def upload_solution() -> Optional[Path]:
 
 
 @app.route("/", methods=["POST", "GET"])
-def server() -> Text:
+def server() -> str:
     assert contest
     return render_template("index.html", tasks=contest.tasks)
 
@@ -89,7 +90,7 @@ def submit() -> Response | str:
         return "Invalid solution"
 
     ocimatic_path = Path(Path(__file__).parents[1], "bin", "ocimatic").resolve()
-    cmd: List[Path | str] = [
+    cmd: list[Path | str] = [
         "python",
         ocimatic_path,
         "run",
@@ -109,7 +110,7 @@ def submit() -> Response | str:
 
 def run(port: int = 9999) -> None:
     global contest  # pylint: disable=global-statement
-    contest_dir = core.change_directory()[0]
+    contest_dir = core.find_contest_root()[0]
     contest = core.Contest(contest_dir)
     ocimatic.config["verbosity"] = 2
     app.run(port=port, debug=True)

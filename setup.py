@@ -1,6 +1,5 @@
 import fnmatch
 import os
-from typing import List
 
 from setuptools import setup
 
@@ -9,15 +8,15 @@ from ocimatic import __version__
 pkg_dir = os.path.dirname(os.path.realpath(__file__))
 
 
-def recursive_glob(treeroot: str, pattern: str) -> List[str]:
-    results: List[str] = []
+def recursive_glob(treeroot: str, pattern: str) -> list[str]:
+    results: list[str] = []
     for base, dirs, files in os.walk(treeroot):
         goodfiles = fnmatch.filter(files, pattern)
         results.extend(os.path.join(base, f) for f in goodfiles)
     return results
 
 
-def get_resources(package: str) -> List[str]:
+def get_resources(package: str) -> list[str]:
     curr_path = os.getcwd()
     os.chdir(package)
     resources = recursive_glob("resources", "*") + recursive_glob("templates", "*")
@@ -25,7 +24,7 @@ def get_resources(package: str) -> List[str]:
     return resources
 
 
-def get_requires(filepath: str) -> List[str]:
+def get_requires(filepath: str) -> list[str]:
     if os.path.isfile(filepath):
         with open(filepath) as f:
             return f.read().splitlines()

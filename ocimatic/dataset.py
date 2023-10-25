@@ -5,10 +5,10 @@ import string
 import subprocess
 import tempfile
 import zipfile
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Set
 from zipfile import ZipFile
 
 import ocimatic
@@ -32,9 +32,11 @@ class RunMode(Enum):
 class TestResult:
     @dataclass
     class CheckerRunned:
-        """The solution runned without runtime errors and the checker was succesfully runned on the output.
-        This could mean a correct answer, a wrong answer or partial score if the checker returns something
-        greater than 0.0 but less than 1.0."""
+        """The solution run without runtime errors and the checker was succesfully run on the output.
+
+        This could mean a correct answer, a wrong answer, or partial score if the checker returns
+        something greater than 0.0 but less than 1.0.
+        """
 
         checker_result: CheckerSuccess
         run_result: RunSuccess
@@ -101,8 +103,10 @@ class TestResult:
 
     @dataclass
     class NoExpectedOutput:
-        """The test didn't have a corresponding expectd output. This means `ocimatic gen-expected`
-        hasn't been run."""
+        """The test didn't have a corresponding expectd output.
+
+        This means `ocimatic gen-expected` hasn't been run.
+        """
 
         def into_work_result(self, mode: RunMode) -> WorkResult:
             del mode
@@ -119,10 +123,12 @@ class TestResult:
         )
 
     def is_proper_fail(self) -> bool:
-        """Check whether the test was a "proper" failure, i.e., it had an expected output and the
-        checker run succesfully, but the solution itself proproduced a wrong answer, runtime error,
-        or time limit exceeded"""
+        """Check whether the test was a "proper" failure.
 
+        A proper failure means the solution itself was wrong (incorrect output, runtime error, or
+        time limit exceeded), instead of a failure due to a missing has expected output or an error
+        when running the checker.
+        """
         match self.kind:
             case TestResult.RuntimeError(_) | TestResult.TimeLimitExceeded(_):
                 return True
@@ -143,9 +149,13 @@ class TestResult:
 
 
 class Test:
-    """A single test file. Expected output file may not exist"""
+    """A single test file.
 
-    def __init__(self, in_path: Path, expected_path: Path):
+    A test is composed of an input and an expected output. The input file must be present in the
+    file system, but the expected output may be missing.
+    """
+
+    def __init__(self, in_path: Path, expected_path: Path) -> None:
         assert in_path.exists()
         self._in_path = in_path
         self._expected_path = expected_path
@@ -171,7 +181,7 @@ class Test:
 
     @ui.work("Gen")
     def gen_expected(self, runnable: Runnable) -> WorkResult:
-        """Run binary with this test as input to generate expected output file"""
+        """Run binary with this test as input to generate expected output file."""
         result = runnable.run(in_path=self.in_path, out_path=self.expected_path)
         match result:
             case RunSuccess(_):
@@ -183,7 +193,7 @@ class Test:
     def run(
         self, runnable: Runnable, checker: Checker, mode: RunMode, timeout: float | None
     ) -> TestResult:
-        """Run runnable redirecting this test as its standard input and check output correctness"""
+        """Run runnable redirecting this test as its standard input and check output correctness."""
         kind = self.run_inner(runnable, checker, timeout)
         return TestResult(mode=mode, kind=kind)
 
@@ -247,7 +257,7 @@ class Test:
 
 
 class TestGroup:
-    def __init__(self, name: str, tests: List["Test"]):
+    def __init__(self, name: str, tests: list[Test]) -> None:
         self._name = name
         self._tests = tests
 
@@ -259,15 +269,11 @@ class TestGroup:
                 if random_sort:
                     choices = string.ascii_lowercase
                     rnd_str = "".join(random.choice(choices) for _ in range(3))
-                    in_name = "%s-%s-%s" % (self._name, rnd_str, test.in_path.name)
-                    sol_name = "%s-%s-%s" % (
-                        self._name,
-                        rnd_str,
-                        test.expected_path.name,
-                    )
+                    in_name = f"{self._name}-{rnd_str}-{test.in_path.name}"
+                    sol_name = f"{self._name}-{rnd_str}-{test.expected_path.name}"
                 else:
-                    in_name = "%s-%s" % (self._name, test.in_path.name)
-                    sol_name = "%s-%s" % (self._name, test.expected_path.name)
+                    in_name = f"{self._name}-{test.in_path.name}"
+                    sol_name = f"{self._name}-{test.expected_path.name}"
                 zip.write(test.in_path, in_name)
                 zip.write(test.expected_path, sol_name)
                 copied += 1
@@ -289,7 +295,7 @@ class TestGroup:
     @ui.workgroup()
     def run(
         self, runnable: Runnable, checker: Checker, mode: RunMode, timeout: float | None
-    ) -> List[TestResult]:
+    ) -> list[TestResult]:
         results = []
         for test in self._tests:
             results.append(test.run(runnable, checker, mode, timeout))
@@ -305,14 +311,14 @@ class TestGroup:
 
 
 class Subtask(TestGroup):
-    def __init__(self, directory: Path):
+    def __init__(self, directory: Path) -> None:
         super().__init__(
             directory.name,
             [Test(f, f.with_suffix(SOL)) for f in directory.glob(f"*{IN}")],
         )
 
     @ui.workgroup("{0}")
-    def validate(self, validator: Optional[Path]) -> None:
+    def validate(self, validator: Path | None) -> None:
         if validator is None:
             ui.show_message("Info", "No validator specified", ui.INFO)
             return
@@ -352,11 +358,11 @@ class RuntimeStats:
 
 @dataclass
 class DatasetResults:
-    subtasks: List[List[TestResult]]
-    sample: List[TestResult]
+    subtasks: list[list[TestResult]]
+    sample: list[TestResult]
 
     def check_all_correct(self) -> bool:
-        """Returns whether all test cases have a correct answer"""
+        """Return whether all test cases have a correct answer."""
         for test in self.iter_all(include_sample=True):
             if not isinstance(test.kind, TestResult.CheckerRunned):
                 return False
@@ -364,9 +370,12 @@ class DatasetResults:
                 return False
         return True
 
-    def check_passes_correct_subtasks(self, should_pass: Set[int]) -> bool:
-        """Check that the results passes all subtasks specified in `should_pass` and fails the rest.
-        If `None` all subtasks must fail. Subtask number are specified counting form 1."""
+    def check_passes_correct_subtasks(self, should_pass: set[int]) -> bool:
+        """Check all subtasks specified in `should_pass` are correct and the rest fail.
+
+        If `should_pass` is `None` all subtasks must fail. Subtask number are specified counting
+        form 1.
+        """
         for st, tests in enumerate(self.subtasks):
             in_should_pass = (st + 1) in should_pass
             if in_should_pass and not all(t.is_correct() for t in tests):
@@ -390,16 +399,16 @@ class DatasetResults:
         yield from tests
 
     def running_times(self, include_sample: bool = False) -> Iterator[float]:
-        """Returns running times of all successful runs"""
+        """Return running times of all successful runs."""
         for test in self.iter_all(include_sample):
             if isinstance(test.kind, TestResult.CheckerRunned):
                 yield test.kind.running_time()
 
 
 class Dataset:
-    """Test data"""
+    """A collection of test cases."""
 
-    def __init__(self, directory: Path, sampledata: List["Test"]):
+    def __init__(self, directory: Path, sampledata: list[Test]) -> None:
         self._directory = directory
         if directory.exists():
             self._subtasks = [
@@ -426,7 +435,7 @@ class Dataset:
         sample = self._sampledata.run(runnable, checker, mode, timeout)
         return DatasetResults(subtasks, sample)
 
-    def validate(self, validators: List[Optional[Path]], stn: Optional[int]) -> None:
+    def validate(self, validators: list[Path | None], stn: int | None) -> None:
         assert len(validators) == len(self._subtasks)
         for i, (subtask, validator) in enumerate(zip(self._subtasks, validators), 1):
             if stn is None or stn == i:
@@ -444,8 +453,8 @@ class Dataset:
     @ui.work("ZIP")
     def compress(self, random_sort: bool = False) -> ui.Result:
         """Compress all test cases in the dataset into a single zip file.
-        The basename of the corresponding subtask subdirectory is prepended
-        to each file.
+
+        The basename of the corresponding subtask subdirectory is prepended to each file.
         """
         path = Path(self._directory, "data.zip")
 
@@ -459,7 +468,7 @@ class Dataset:
                 return ui.Result.fail("EMPTY DATASET")
         return ui.Result.success("OK")
 
-    def count(self) -> List[int]:
+    def count(self) -> list[int]:
         return [st.count() for st in self._subtasks]
 
     def normalize(self) -> None:

@@ -1,6 +1,6 @@
 import argparse
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List, Optional
 
 import ocimatic
 from ocimatic import core, server, ui
@@ -38,10 +38,10 @@ def new_contest(args: argparse.Namespace) -> None:
 
 class CLI:
     contest: core.Contest
-    last_dir: Optional[Path]
+    last_dir: Path | None
 
     def __init__(self) -> None:
-        (contest_dir, last_dir) = core.change_directory()
+        (contest_dir, last_dir) = core.find_contest_root()
         self.contest = core.Contest(contest_dir)
         self.last_dir = last_dir
 
@@ -157,11 +157,11 @@ class CLI:
         for task in tasks:
             action(task)
 
-    def _select_tasks(self, args: argparse.Namespace) -> List[core.Task]:
+    def _select_tasks(self, args: argparse.Namespace) -> list[core.Task]:
         contest = self.contest
         if args.tasks:
             names = args.tasks.split(",")
-            tasks: List[core.Task] = []
+            tasks: list[core.Task] = []
             for name in names:
                 task = contest.find_task(name)
                 if task:
@@ -178,8 +178,7 @@ class CLI:
 
 
 def set_verbosity(args: argparse.Namespace, value: int) -> None:
-    """If `-v` was passed any number of times set that as the verbosity, otherwise use `value`
-    as the verbosity"""
+    """If `-v` was passed any number of times set that as the verbosity, otherwise use `value` as the verbosity."""
     if args.verbosity > 0:
         ocimatic.config["verbosity"] = args.verbosity
     else:

@@ -3,8 +3,9 @@ import re
 import shlex
 import shutil
 from abc import ABC, abstractmethod
+from collections import Counter
 from pathlib import Path
-from typing import Counter, Dict, List, NoReturn, Optional
+from typing import NoReturn
 
 import ocimatic
 from ocimatic import ui
@@ -22,7 +23,7 @@ class Testplan:
         task_directory: Path,
         dataset_directory: Path,
         filename: str = "testplan.txt",
-    ):
+    ) -> None:
         self._directory = directory
         self._testplan_path = Path(directory, filename)
         if not self._testplan_path.exists():
@@ -32,10 +33,10 @@ class Testplan:
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
 
-    def validators(self) -> List[Optional[Path]]:
+    def validators(self) -> list[Path | None]:
         return [subtask.validator for subtask in self._parse_file()]
 
-    def run(self, stn: Optional[int]) -> None:
+    def run(self, stn: int | None) -> None:
         subtasks = self._parse_file()
         cwd = Path.cwd()
         # Run generators with attic/ as the cwd
@@ -52,8 +53,8 @@ class Testplan:
 
         os.chdir(cwd)
 
-    def _parse_file(self) -> List["Subtask"]:
-        subtasks: Dict[int, "Subtask"] = {}
+    def _parse_file(self) -> list["Subtask"]:
+        subtasks: dict[int, "Subtask"] = {}
         st = 0
         tests_in_group: Counter[str] = Counter()
         for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
@@ -105,7 +106,7 @@ class Testplan:
         return [st for (_, st) in sorted(subtasks.items())]
 
     def _parse_command(
-        self, group: str, idx: int, cmd: str, args: List[str], lineno: int
+        self, group: str, idx: int, cmd: str, args: list[str], lineno: int
     ) -> "Command":
         if cmd == "copy":
             if len(args) > 2:
@@ -124,9 +125,9 @@ class Testplan:
 
 
 class Subtask:
-    def __init__(self, dataset_dir: Path, stn: int, validator: Optional[Path]):
+    def __init__(self, dataset_dir: Path, stn: int, validator: Path | None) -> None:
         self._dir = Path(dataset_dir, f"st{stn}")
-        self.commands: List["Command"] = []
+        self.commands: list["Command"] = []
         self.validator = validator
 
     def __str__(self) -> str:
@@ -141,7 +142,7 @@ class Subtask:
 
 
 class Command(ABC):
-    def __init__(self, group: str, idx: int):
+    def __init__(self, group: str, idx: int) -> None:
         self._group = group
         self._idx = idx
 
@@ -156,7 +157,7 @@ class Command(ABC):
 
 
 class Copy(Command):
-    def __init__(self, group: str, idx: int, file: Path):
+    def __init__(self, group: str, idx: int, file: Path) -> None:
         super().__init__(group, idx)
         self._file = file
 
@@ -175,7 +176,7 @@ class Copy(Command):
 
 
 class Echo(Command):
-    def __init__(self, group: str, idx: int, args: List[str]):
+    def __init__(self, group: str, idx: int, args: list[str]) -> None:
         super().__init__(group, idx)
         self._args = args
 
@@ -190,9 +191,11 @@ class Echo(Command):
 
 
 class Script(Command):
-    VALID_EXTENSIONS: List[str] = ["py", "cpp"]
+    VALID_EXTENSIONS: list[str] = ["py", "cpp"]
 
-    def __init__(self, group: str, idx: int, script: SourceCode, args: List[str]):
+    def __init__(
+        self, group: str, idx: int, script: SourceCode, args: list[str]
+    ) -> None:
         super().__init__(group, idx)
         self._args = args
         self._script = script
@@ -229,6 +232,6 @@ def _invalid_command(cmd: str, lineno: int) -> NoReturn:
     )
 
 
-def _parse_args(args: str) -> List[str]:
+def _parse_args(args: str) -> list[str]:
     args = args.strip()
     return [a.encode().decode("unicode_escape") for a in shlex.split(args)]

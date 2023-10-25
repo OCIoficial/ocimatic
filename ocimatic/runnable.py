@@ -7,7 +7,7 @@ import time as pytime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, TextIO, overload
+from typing import TextIO, overload
 
 SIGNALS = {
     1: "SIGHUP",
@@ -67,7 +67,7 @@ RunResult = RunSuccess | RunTLE | RunError
 
 class Runnable(ABC):
     @abstractmethod
-    def cmd(self) -> List[str]:
+    def cmd(self) -> list[str]:
         raise NotImplementedError(
             "Class %s doesn't implement cmd()" % (self.__class__.__name__)
         )
@@ -75,38 +75,37 @@ class Runnable(ABC):
     @overload
     def run(
         self,
-        in_path: Optional[Path] = None,
+        in_path: Path | None = None,
         out_path: Path | None = None,
-        args: List[str] = [],
+        args: list[str] = [],
     ) -> RunSuccess | RunError:
         ...
 
     @overload
     def run(
         self,
-        in_path: Optional[Path] = None,
+        in_path: Path | None = None,
         out_path: Path | None = None,
-        args: List[str] = [],
-        timeout: Optional[float] = None,
+        args: list[str] = [],
+        timeout: float | None = None,
     ) -> RunResult:
         ...
 
     def run(
         self,
-        in_path: Optional[Path] = None,
+        in_path: Path | None = None,
         out_path: Path | None = None,
-        args: List[str] = [],
-        timeout: Optional[float] = None,
+        args: list[str] = [],
+        timeout: float | None = None,
     ) -> RunResult:
         """Run binary redirecting standard input and output.
 
-        Args:
-            in_path: Path to redirect stdin from. If None
-                input is redirected from /dev/null.
-            out_path: File to redirec stdout to. If None
-                output is redirected to /dev/null.
-            args: Additional parameters
-            timeout: Timeout for the process
+        Arguments:
+        ---------
+            in_path: Path to redirect stdin from. If None input is redirected from /dev/null.
+            out_path: File to redirec stdout to. If None output is redirected to a temporary file.
+            args: Arguments to pass to the runnable.
+            timeout: Timeout for the process. If None, there's no timeout.
         """
         assert in_path is None or in_path.exists()
         with contextlib.ExitStack() as stack:
@@ -155,10 +154,10 @@ class Runnable(ABC):
 
 
 class Binary(Runnable):
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path) -> None:
         self._path = path
 
-    def cmd(self) -> List[str]:
+    def cmd(self) -> list[str]:
         return [str(self._path)]
 
     def is_callable(self) -> bool:
@@ -166,17 +165,17 @@ class Binary(Runnable):
 
 
 class JavaClasses(Runnable):
-    def __init__(self, classname: str, classes: Path):
+    def __init__(self, classname: str, classes: Path) -> None:
         self._classname = classname
         self._classes = classes
 
-    def cmd(self) -> List[str]:
+    def cmd(self) -> list[str]:
         return ["java", "-cp", str(self._classes), self._classname]
 
 
 class Python3(Runnable):
-    def __init__(self, script: Path):
+    def __init__(self, script: Path) -> None:
         self._script = script
 
-    def cmd(self) -> List[str]:
+    def cmd(self) -> list[str]:
         return ["python3", str(self._script)]

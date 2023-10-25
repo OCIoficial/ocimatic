@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Optional
 
 from ocimatic import ui
 from ocimatic.checkers import Checker
@@ -21,15 +21,15 @@ from ocimatic.source_code import (
 
 @dataclass
 class SolutionComment:
-    should_fail: Set[int]
+    should_fail: set[int]
 
 
 class SolutionSpec:
-    """Specification of which"""
+    """Specification of which subtasks should pass or fail."""
 
     subtasks_spec: ShouldFail | ShouldPass | None
 
-    def __init__(self, name: str, comments: List[OcimaticComment]) -> None:
+    def __init__(self, name: str, comments: list[OcimaticComment]) -> None:
         match len(comments):
             case 0:
                 self.subtasks_spec = None
@@ -40,7 +40,7 @@ class SolutionSpec:
                     f"Only on of should-pass or should-fail should be specified: {name}"
                 )
 
-    def should_pass(self, results: DatasetResults) -> Set[int]:
+    def should_pass(self, results: DatasetResults) -> set[int]:
         """Return the set of subtasks the solution should pass based on the spec. It must fail the complement."""
         all_subtasks = set(st + 1 for st in range(len(results.subtasks)))
         match self.subtasks_spec:
@@ -53,12 +53,12 @@ class SolutionSpec:
 
 
 class Solution:
-    def __init__(self, source: SourceCode):
+    def __init__(self, source: SourceCode) -> None:
         self._source = source
         self._spec = SolutionSpec(source.name, source.comments)
         self.is_partial = source.file.parent.name == "partial"
 
-    def should_pass(self, results: DatasetResults) -> Set[int]:
+    def should_pass(self, results: DatasetResults) -> set[int]:
         return self._spec.should_pass(results)
 
     def check_results(self, results: DatasetResults) -> bool:
@@ -70,7 +70,7 @@ class Solution:
     @staticmethod
     def load_solutions_in_dir(
         codename: str, dir: Path, managers_dir: Path
-    ) -> List["Solution"]:
+    ) -> list["Solution"]:
         """Search for solutions in a directory."""
         assert dir.is_dir()
         return [
@@ -109,7 +109,7 @@ class Solution:
     @ui.solution_group()
     def run(
         self, dataset: Dataset, checker: Checker, mode: RunMode, timeout: float | None
-    ) -> ui.SolutionGroup[Optional[DatasetResults]]:
+    ) -> ui.SolutionGroup[DatasetResults | None]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
@@ -123,8 +123,7 @@ class Solution:
     def gen_expected(
         self, dataset: Dataset, sample: bool = False
     ) -> ui.SolutionGroup[None]:
-        """Generate expected output files for all test cases in the given dataset
-        running this solution."""
+        """Generate expected output files for all test cases in the given dataset running this solution."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
             yield ui.Result.fail(short_msg="Failed", long_msg=build_result.msg)

@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from ocimatic.runnable import RunSuccess
 from ocimatic.source_code import BuildError, CppSource, RustSource, SourceCode
@@ -10,7 +9,7 @@ from ocimatic.source_code import BuildError, CppSource, RustSource, SourceCode
 @dataclass
 class CheckerSuccess:
     outcome: float
-    msg: Optional[str] = None
+    msg: str | None = None
 
 
 @dataclass
@@ -22,7 +21,7 @@ CheckerResult = CheckerSuccess | CheckerError
 
 
 class Checker(ABC):
-    """Check solutions"""
+    """Abstract class for a checker."""
 
     @abstractmethod
     def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
@@ -43,15 +42,12 @@ class Checker(ABC):
 
 
 class DiffChecker(Checker):
-    """White diff checker"""
+    """White diff checker."""
 
     def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
-        """Performs a white diff between expected output and output files.
+        """Perform a white diff between expected output and output files.
+
         Parameters correspond to convention for checker in cms.
-        Args:
-            in_path (FilePath)
-            expected_path (FilePath)
-            out_path (FilePath)
         """
         assert in_path.exists()
         assert expected_path.exists()
@@ -69,22 +65,14 @@ class DiffChecker(Checker):
 
 
 class CustomChecker(Checker):
-    def __init__(self, code: SourceCode):
-        """
-        Args:
-            source (FilePath)
-        """
+    def __init__(self, code: SourceCode) -> None:
         self._code = code
 
     def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
-        """Run checker to evaluate outcome. Parameters correspond to convention
-        for checker in cms.
-        Args:
-            in_path (FilePath)
-            expected_path (FilePath)
-            out_path (FilePath)
-        """
+        """Run custom checker to evaluate outcome.
 
+        Parameters correspond to convention for checker in cms.
+        """
         assert in_path.exists()
         assert expected_path.exists()
         assert out_path.exists()
