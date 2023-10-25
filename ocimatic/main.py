@@ -93,22 +93,24 @@ class CLI:
         action: Callable[[core.Task], None]
         if args.command == "check-dataset":
             set_verbosity(args, 0)
-            failed = []
+            failed: List[core.Task] = []
             for task in tasks:
                 if not task.check_dataset():
                     failed.append(task)
-            if len(tasks) > 1 and failed:
-                ui.write(
-                    """
-
-------------------------------------------------
-Some tasks have issues that need to be resolved.
-
-Tasks with issues:
-""", ui.ERROR)
-                for task in failed:
-                    ui.writeln(f" * {task.name}", ui.ERROR)
-                ui.writeln("------------------------------------------------", ui.ERROR)
+            if len(tasks) > 1:
+                ui.writeln()
+                if failed:
+                    ui.writeln("------------------------------------------------", ui.ERROR)
+                    ui.writeln("Some tasks have issues that need to be resolved.", ui.ERROR)
+                    ui.writeln()
+                    ui.writeln("Tasks with issues:", ui.ERROR)
+                    for task in failed:
+                        ui.writeln(f" * {task.name}", ui.ERROR)
+                    ui.writeln("------------------------------------------------", ui.ERROR)
+                else:
+                    ui.writeln("-------------------", ui.OK)
+                    ui.writeln("| No issues found |", ui.OK)
+                    ui.writeln("-------------------", ui.OK)
             return
         elif args.command == "gen-expected":
             set_verbosity(args, 0 if len(tasks) > 1 else 2)
