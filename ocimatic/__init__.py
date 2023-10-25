@@ -13,15 +13,9 @@ from typing import TypedDict
 
 
 class Config(TypedDict):
-    timeout: float
     last_blank_page: bool
     verbosity: int
     contest_root: Path
 
 
-config: Config = {
-    'timeout': 3.0,
-    'last_blank_page': True,
-    'verbosity': 1,
-    'contest_root': Path('/')
-}
+config: Config = {'last_blank_page': True, 'verbosity': 1, 'contest_root': Path('/')}

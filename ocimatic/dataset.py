@@ -161,19 +161,21 @@ class Test:
                 return WorkResult.fail(short_msg=msg, long_msg=stderr)
 
     @ui.work('Run')
-    def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> TestResult:
+    def run(self, runnable: Runnable, checker: Checker, mode: RunMode,
+            timeout: float | None) -> TestResult:
         """Run runnable redirect this test as standard input and check output correctness"""
-        kind = self.run_inner(runnable, checker)
+        kind = self.run_inner(runnable, checker, timeout)
         return TestResult(mode=mode, kind=kind)
 
-    def run_inner(self, runnable: Runnable, checker: Checker) -> TestResult.Kind:
+    def run_inner(self, runnable: Runnable, checker: Checker,
+                  timeout: float | None) -> TestResult.Kind:
         """Run runnable redirect this test as standard input and check output correctness"""
         if not self.expected_path.exists():
             return TestResult.NoExpectedOutput()
 
         out_path = Path(tempfile.mkstemp()[1])
 
-        run_result = runnable.run(self.in_path, out_path, timeout=ocimatic.config['timeout'])
+        run_result = runnable.run(self.in_path, out_path, timeout=timeout)
 
         # Runtime Error
         if isinstance(run_result, RunError):
@@ -257,10 +259,11 @@ class TestGroup:
         return len(self._tests)
 
     @ui.workgroup()
-    def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> List[TestResult]:
+    def run(self, runnable: Runnable, checker: Checker, mode: RunMode,
+            timeout: float | None) -> List[TestResult]:
         results = []
         for test in self._tests:
-            results.append(test.run(runnable, checker, mode))
+            results.append(test.run(runnable, checker, mode, timeout))
         return results
 
     @ui.workgroup()
@@ -380,13 +383,14 @@ class Dataset:
         if sample:
             self._sampledata.gen_expected(runnable)
 
-    def run(self, runnable: Runnable, checker: Checker, mode: RunMode) -> DatasetResults:
+    def run(self, runnable: Runnable, checker: Checker, mode: RunMode,
+            timeout: float | None) -> DatasetResults:
         subtasks = []
         for subtask in self._subtasks:
-            result = subtask.run(runnable, checker, mode)
+            result = subtask.run(runnable, checker, mode, timeout)
             subtasks.append(result)
 
-        sample = self._sampledata.run(runnable, checker, mode)
+        sample = self._sampledata.run(runnable, checker, mode, timeout)
         return DatasetResults(subtasks, sample)
 
     def validate(self, validators: List[Optional[Path]], stn: Optional[int]) -> None:

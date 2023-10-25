@@ -87,8 +87,8 @@ class Solution:
         return Solution(source)
 
     @ui.solution_group()
-    def run(self, dataset: Dataset, checker: Checker,
-            mode: RunMode) -> ui.SolutionGroup[Optional[DatasetResults]]:
+    def run(self, dataset: Dataset, checker: Checker, mode: RunMode,
+            timeout: float | None) -> ui.SolutionGroup[Optional[DatasetResults]]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
@@ -96,7 +96,7 @@ class Solution:
             return None
         else:
             yield ui.Result.success(short_msg="OK")
-            return dataset.run(build_result, checker, mode)
+            return dataset.run(build_result, checker, mode, timeout)
 
     @ui.solution_group()
     def gen_expected(self, dataset: Dataset, sample: bool = False) -> ui.SolutionGroup[None]:

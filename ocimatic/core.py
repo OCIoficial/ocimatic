@@ -305,13 +305,13 @@ class Task:
         self._dataset.normalize()
 
     @ui.task('Running solution')
-    def run_solution(self, solution: Path) -> None:
+    def run_solution(self, solution: Path, timeout: float | None) -> None:
         """Run all solutions reporting outcome and running time."""
         sol = self.load_solution_from_path(solution)
         if not sol:
             return ui.show_message('Error', 'Solution not found', ui.ERROR)
 
-        results = sol.run(self._dataset, self._checker, RunMode.run_solution)
+        results = sol.run(self._dataset, self._checker, RunMode.run_solution, timeout)
         if results:
             write_stats(results.runtime_stats())
 
@@ -341,7 +341,7 @@ subtasks (and fail the rest): [{should_pass}]
         ui.writeln(f'Running correct solutions', ui.INFO)
         failed_correct = []
         for sol in correct:
-            results = sol.run(self._dataset, self._checker, RunMode.check_correct)
+            results = sol.run(self._dataset, self._checker, RunMode.check_correct, None)
             if results is None or not results.check_all_correct():
                 failed_correct.append(sol)
                 continue
@@ -368,22 +368,23 @@ subtasks (and fail the rest): [{should_pass}]
         ui.writeln(
             f'Running partial solutions with timeout set to {timeout:.1f}s (round({stats.max:.3f} * 1.5, 1))',
             ui.INFO)
-        ocimatic.config['timeout'] = timeout
         failed_partial = []
         for sol in self._partial:
-            results = sol.run(self._dataset, self._checker, RunMode.check_partial)
+            results = sol.run(self._dataset, self._checker, RunMode.check_partial, timeout)
             if (results is None or not sol.check_results(results)):
                 failed_partial.append(sol)
 
         if failed_partial:
-            ui.writeln(
+            ui.write(
                 """
 The following partial solutions had problems when running or didn't pass/fail the subtasks they were supposed to.
 Run solutions individually with `ocimatic run` for more detailed information. To specify which tasks the solution
 should pass/fail, you must either have a `should-pass` or `should-fail` comment at the beginning of the file. For
 example, to specify that a task should pass subtasks 1 and 2, write the following comment at the top of the solution:
 // @ocimatic should-pass=[st1, st2]
-If no comment is specified, ocimatic will assume that all subtasks should fail.""", ui.ERROR)
+If no comment is specified, ocimatic will assume that all subtasks should fail.
+Solutions:
+""", ui.ERROR)
             for sol in failed_partial:
                 ui.writeln(' * ' + str(sol), ui.ERROR)
             return

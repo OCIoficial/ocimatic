@@ -64,8 +64,7 @@ class CLI:
         set_verbosity(args, 2)
         action: Callable[[core.Task], None]
         if args.command == "run":
-            set_timeout(args)
-            action = lambda task: task.run_solution(args.solution)
+            action = lambda task: task.run_solution(args.solution, args.timeout)
         elif args.command == "build":
             action = lambda task: task.build_solution(args.solution)
         else:
@@ -92,7 +91,6 @@ class CLI:
 
         action: Callable[[core.Task], None]
         if args.command == "check":
-            set_timeout(args)
             set_verbosity(args, 0)
             action = lambda task: task.check_dataset()
         elif args.command == "gen-expected":
@@ -153,11 +151,6 @@ def set_verbosity(args: argparse.Namespace, value: int) -> None:
         ocimatic.config['verbosity'] = value
 
 
-def set_timeout(args: argparse.Namespace) -> None:
-    if args.timeout:
-        ocimatic.config['timeout'] = args.timeout
-
-
 def add_contest_commands(subcommands: argparse._SubParsersAction) -> None:
     # init
     init = subcommands.add_parser("init", help="Initializes a contest in a new directory.")
@@ -180,12 +173,11 @@ def add_multitask_commands(subcommands: argparse._SubParsersAction) -> None:
     multitask_parser.add_argument('--tasks', help="A comma separated list of tasks.")
 
     # check
-    check_parser = subcommands.add_parser(
+    subcommands.add_parser(
         "check",
         help="""Check input/output correcteness by running all correct solutions against all
         test cases and sample inputs""",
         parents=[multitask_parser])
-    check_parser.add_argument("--timeout", type=float)
 
     # expected
     gen_expected_parser = subcommands.add_parser('gen-expected',
