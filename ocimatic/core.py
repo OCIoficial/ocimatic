@@ -317,7 +317,7 @@ class Task:
                 if sol.check_results(results):
                     ui.writeln()
                     ui.writeln(
-                        "Solution passed the subtasks it was supposed to pass: [{should_pass}]",
+                        f"Solution passed the subtasks it was supposed to pass: [{should_pass}]",
                         ui.OK)
                 else:
                     ui.write(
@@ -412,8 +412,9 @@ Solutions with issues:
     def build_solution(self, solution: Path) -> None:
         """Force compilation of solutions."""
         sol = self.load_solution_from_path(solution)
-        if sol:
-            sol.build()
+        if not sol:
+            return ui.show_message('Error', 'Solution not found', ui.ERROR)
+        sol.build()
 
     @ui.task('Generating expected output')
     def gen_expected(self, sample: bool = False, solution: Optional[Path] = None) -> None:
