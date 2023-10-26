@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from argparse import ArgumentParser, _SubParsersAction
+from argparse import _SubParsersAction  # pyright: ignore[reportPrivateUsage]
+from argparse import ArgumentParser
 from collections.abc import Callable
 from pathlib import Path
 
@@ -364,7 +365,4 @@ def main() -> None:
     elif args.command in MULTI_TASK_COMMANDS:
         cli.run_multi_task_command(args)
     else:
-        parser.print_help()
-        parser.print_help()
-        parser.print_help()
         parser.print_help()
