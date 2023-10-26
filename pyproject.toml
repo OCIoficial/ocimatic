@@ -37,6 +37,7 @@ select = [
     "FLY",
     "PERF",
     "RUF",
+    "FA",
 ]
 
 

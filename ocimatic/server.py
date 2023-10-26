@@ -13,12 +13,9 @@ from ocimatic import core
 
 
 def ansi2html(ansi: str) -> str:
-    return cast(
-        str,
-        Ansi2HTMLConverter(scheme="mint-terminal", inline=True).convert(
-            ansi,
-            full=False,
-        ),
+    return Ansi2HTMLConverter(scheme="mint-terminal", inline=True).convert(
+        ansi,
+        full=False,
     )
 
 

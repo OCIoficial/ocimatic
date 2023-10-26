@@ -63,6 +63,8 @@ class CLI:
             action = lambda contest: contest.build_problemset()
         elif args.command == "package":
             action = lambda contest: contest.package()
+        else:
+            ui.fatal_error(f"invalid contest-task command: `{args.command}`")
         action(self.contest)
 
     def run_single_task_command(self, args: argparse.Namespace) -> None:
@@ -99,7 +101,7 @@ class CLI:
         action: Callable[[core.Task], None]
         if args.command == "check-dataset":
             set_verbosity(args, 0)
-            failed = []
+            failed: list[core.Task] = []
             for task in tasks:
                 success = task.check_dataset()
                 if not success:
@@ -359,4 +361,5 @@ def main() -> None:
     elif args.command in MULTI_TASK_COMMANDS:
         cli.run_multi_task_command(args)
     else:
+        parser.print_help()
         parser.print_help()

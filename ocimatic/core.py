@@ -154,8 +154,13 @@ class Contest:
     def merge_pdfs(self, filename: str) -> ui.WorkResult:
         """Merge titlepage and statements pdfs into a single file."""
         try:
-            merger = pypdf.PdfMerger()
+            merger = pypdf.PdfWriter()
             for task in self._tasks:
+                if not task.statement.pdf:
+                    return ui.WorkResult.fail(
+                        short_msg="FAILED",
+                        long_msg="No statement",
+                    )
                 merger.append(task.statement.pdf)
             titlepage = Path(self._directory, "titlepage.pdf")
             if titlepage.exists():
@@ -423,17 +428,17 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
         # Run correct solutions
         ui.writeln()
         ui.writeln("[Running correct solutions]", ui.INFO)
-        failed_correct = []
+        failed: list[Solution] = []
         for sol in self._correct:
             results = sol.run(self._dataset, self._checker, RunMode.check_correct, None)
             if results is None or not results.check_all_correct():
-                failed_correct.append(sol)
+                failed.append(sol)
                 continue
             new_stats = results.runtime_stats()
             assert new_stats is not None
             stats += new_stats
 
-        if failed_correct:
+        if failed:
             ui.write(
                 """
 Some correct solutions failed to run or produced wrong results. Run them individually with
@@ -444,7 +449,7 @@ Solutions with issues:
                 ui.ERROR,
             )
 
-            for sol in failed_correct:
+            for sol in failed:
                 ui.writeln(" * " + str(sol), ui.ERROR)
             return None
 
@@ -471,7 +476,7 @@ Solutions with issues:
             ui.writeln("No partial solutions", ui.WARNING)
             return True
 
-        failed_partial = []
+        failed: list[Solution] = []
         for sol in self._partial:
             results = sol.run(
                 self._dataset,
@@ -480,9 +485,9 @@ Solutions with issues:
                 timeout,
             )
             if results is None or not sol.check_results(results):
-                failed_partial.append(sol)
+                failed.append(sol)
 
-        if failed_partial:
+        if failed:
             ui.write(
                 """
 Some partial solutions had issues when running or didn't pass/fail the subtasks they were supposed to.
@@ -493,7 +498,7 @@ Solutions with issues:
 """,
                 ui.ERROR,
             )
-            for sol in failed_partial:
+            for sol in failed:
                 ui.writeln(" * " + str(sol), ui.ERROR)
             return False
 
@@ -597,7 +602,7 @@ class Statement:
 
     def io_samples(self) -> list[Test]:
         """Find sample input data in the satement."""
-        samples = set()
+        samples: set[str] = set()
         for line in self._source.iter_lines():
             m = re.match(r"[^%]*\\sampleIO(?:\*)?(\[[^\]]*\]){0,2}{([^}]+)}", line)
             if m:
@@ -609,7 +614,7 @@ class Statement:
 
     def scores(self) -> list[int]:
         """Find the scores for the subtasks."""
-        scores = []
+        scores: list[int] = []
         for line in self._source.iter_lines():
             m = re.match(r"[^%]*\\subtask{([^}]+)}", line)
             if m:
@@ -626,8 +631,6 @@ class Statement:
 
 
 def write_stats(stats: RuntimeStats) -> None:
-    if stats.max is None or stats.max is None:
-        return None
     ui.writeln("Running time", ui.INFO)
     ui.writeln(f"  Max: {stats.max:.3f}s", ui.INFO)
     ui.writeln(f"  Min: {stats.min:.3f}s", ui.INFO)

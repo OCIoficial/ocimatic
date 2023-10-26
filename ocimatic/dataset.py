@@ -280,6 +280,8 @@ class Test:
 
 
 class TestGroup:
+    """A collection of test cases."""
+
     def __init__(self, name: str, tests: list[Test]) -> None:
         self._name = name
         self._tests = tests
@@ -323,7 +325,7 @@ class TestGroup:
         mode: RunMode,
         timeout: float | None,
     ) -> list[TestResult]:
-        results = []
+        results: list[TestResult] = []
         for test in self._tests:
             result = test.run(runnable, checker, mode, timeout)
             results.append(result)
@@ -334,11 +336,16 @@ class TestGroup:
         for test in self._tests:
             test.gen_expected(runnable)
 
+    def tests(self) -> Iterable[Test]:
+        return self._tests
+
     def __str__(self) -> str:
         return self._name
 
 
 class Subtask(TestGroup):
+    """Subclass of `TestGroup` to represet a subtask."""
+
     def __init__(self, directory: Path) -> None:
         super().__init__(
             directory.name,
@@ -466,11 +473,7 @@ class Dataset:
         mode: RunMode,
         timeout: float | None,
     ) -> DatasetResults:
-        subtasks = []
-        for subtask in self._subtasks:
-            result = subtask.run(runnable, checker, mode, timeout)
-            subtasks.append(result)
-
+        subtasks = [st.run(runnable, checker, mode, timeout) for st in self._subtasks]
         sample = self._sampledata.run(runnable, checker, mode, timeout)
         return DatasetResults(subtasks, sample)
 
@@ -517,7 +520,7 @@ class Dataset:
 
     def check_all_have_expected(self) -> bool:
         for st in self._subtasks:
-            for test in st._tests:
+            for test in st.tests():
                 if not test.has_expected():
                     return False
         return True
