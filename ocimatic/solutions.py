@@ -1,4 +1,3 @@
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -37,12 +36,12 @@ class SolutionSpec:
                 self.subtasks_spec = comments[0]
             case _:
                 ui.fatal_error(
-                    f"Only on of should-pass or should-fail should be specified: {name}"
+                    f"Only on of should-pass or should-fail should be specified: {name}",
                 )
 
     def should_pass(self, results: DatasetResults) -> set[int]:
         """Return the set of subtasks the solution should pass based on the spec. It must fail the complement."""
-        all_subtasks = set(st + 1 for st in range(len(results.subtasks)))
+        all_subtasks = {st + 1 for st in range(len(results.subtasks))}
         match self.subtasks_spec:
             case ShouldFail(subtasks=subtasks):
                 return all_subtasks.difference(subtasks)
@@ -64,25 +63,29 @@ class Solution:
     def check_results(self, results: DatasetResults) -> bool:
         assert self.is_partial
         return results.check_passes_correct_subtasks(
-            should_pass=self.should_pass(results)
+            should_pass=self.should_pass(results),
         )
 
     @staticmethod
     def load_solutions_in_dir(
-        codename: str, dir: Path, managers_dir: Path
+        codename: str,
+        directory: Path,
+        managers_dir: Path,
     ) -> list["Solution"]:
         """Search for solutions in a directory."""
-        assert dir.is_dir()
+        assert directory.is_dir()
         return [
             solution
-            for file_path in dir.iterdir()
+            for file_path in directory.iterdir()
             for solution in [Solution.load(codename, file_path, managers_dir)]
             if solution
         ]
 
     @staticmethod
     def load(
-        codename: str, source_path: Path, managers_dir: Path
+        codename: str,
+        source_path: Path,
+        managers_dir: Path,
     ) -> Optional["Solution"]:
         if not source_path.is_file():
             return None
@@ -108,7 +111,11 @@ class Solution:
 
     @ui.solution_group()
     def run(
-        self, dataset: Dataset, checker: Checker, mode: RunMode, timeout: float | None
+        self,
+        dataset: Dataset,
+        checker: Checker,
+        mode: RunMode,
+        timeout: float | None,
     ) -> ui.SolutionGroup[DatasetResults | None]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
@@ -121,7 +128,10 @@ class Solution:
 
     @ui.solution_group()
     def gen_expected(
-        self, dataset: Dataset, sample: bool = False
+        self,
+        dataset: Dataset,
+        *,
+        sample: bool = False,
     ) -> ui.SolutionGroup[None]:
         """Generate expected output files for all test cases in the given dataset running this solution."""
         build_result = self._source.build()
@@ -134,7 +144,7 @@ class Solution:
     @ui.work("Build")
     def build(self) -> ui.WorkResult:
         """Build solution."""
-        result = self._source.build(True)
+        result = self._source.build(force=True)
         if isinstance(result, BuildError):
             return ui.WorkResult.fail(short_msg="Failed", long_msg=result.msg)
         else:
@@ -150,20 +160,4 @@ class Solution:
     @property
     def source(self) -> SourceCode:
         return self._source
-
-    def extract_comment(self) -> SolutionComment | None:
-        comment_str = self._source.line_comment_start()
-        comment_pattern = rf"\s*{comment_str}\s*@ocimatic\s+should-fail\s*=\s*\[(st\d+\s*(,\s*st\d+)*(\s*,)?\s*)\]"
-
-        first_line = next(open(self._source.file))
-        if not first_line:
-            return None
-
-        m = re.match(comment_pattern, first_line)
-        if not m:
-            return None
-
-        should_fail = set(
-            int(st.strip().removeprefix("st")) for st in m.group(1).split(",")
-        )
-        return SolutionComment(should_fail=should_fail)
+        return self._source

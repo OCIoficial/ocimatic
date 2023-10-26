@@ -59,7 +59,7 @@ class Status(Enum):
     info = "info"
 
     @staticmethod
-    def from_bool(b: bool) -> "Status":
+    def from_bool(b: bool) -> "Status":  # noqa: FBT001
         return Status.success if b else Status.fail
 
 
@@ -106,7 +106,9 @@ class Result:
 
     def into_work_result(self) -> WorkResult:
         return WorkResult(
-            status=self.status, short_msg=self.short_msg, long_msg=self.long_msg
+            status=self.status,
+            short_msg=self.short_msg,
+            long_msg=self.long_msg,
         )
 
 
@@ -166,7 +168,7 @@ SolutionGroup = Generator[Result, None, _T]
 
 
 def solution_group(
-    formatter: str = "{}"
+    formatter: str = "{}",
 ) -> Callable[[Callable[_P, SolutionGroup[_T]]], Callable[_P, _T]]:
     def decorator(func: Callable[_P, SolutionGroup[_T]]) -> Callable[_P, _T]:
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
@@ -202,10 +204,11 @@ _TIntoWorkResult = TypeVar("_TIntoWorkResult", bound=IntoWorkResult)
 
 
 def work(
-    action: str, formatter: str = "{}"
+    action: str,
+    formatter: str = "{}",
 ) -> Callable[[Callable[_P, _TIntoWorkResult]], Callable[_P, _TIntoWorkResult]]:
     def decorator(
-        func: Callable[_P, _TIntoWorkResult]
+        func: Callable[_P, _TIntoWorkResult],
     ) -> Callable[_P, _TIntoWorkResult]:
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _TIntoWorkResult:
             start_work(action, formatter.format(*args, **kwargs))
@@ -263,7 +266,7 @@ def show_message(label: str, msg: str, color: str = INFO) -> None:
 
 
 def contest_group(
-    formatter: str = "{}"
+    formatter: str = "{}",
 ) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
     def decorator(func: Callable[_P, _T]) -> Callable[_P, _T]:
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
@@ -287,10 +290,10 @@ def workgroup(formatter: str = "{}") -> Callable[[Callable[_P, _T]], Callable[_P
 
 
 def task(
-    action: str
+    action: str,
 ) -> Callable[[Callable[Concatenate[_S, _P], _T]], Callable[Concatenate[_S, _P], _T]]:
     def decorator(
-        func: Callable[Concatenate[_S, _P], _T]
+        func: Callable[Concatenate[_S, _P], _T],
     ) -> Callable[Concatenate[_S, _P], _T]:
         def wrapper(self: _S, *args: _P.args, **kwargs: _P.kwargs) -> _T:
             task_header(str(self), action)

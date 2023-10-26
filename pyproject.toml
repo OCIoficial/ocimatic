@@ -16,5 +16,29 @@ ignore = [
     "ANN101",
     "ANN401",
     "ANN102",
+    "PYI034",
 ]
-select = ["F", "E", "W", "UP", "N", "D", "ANN"]
+select = [
+    "F",
+    "E",
+    "W",
+    "UP",
+    "N",
+    "D",
+    "ANN",
+    "FBT",
+    "B",
+    "COM",
+    "C4",
+    "ISC",
+    "PYI",
+    "SIM",
+    "PTH",
+    "FLY",
+    "PERF",
+    "RUF",
+]
+
+
+[tool.ruff.lint.per-file-ignores]
+"setup.py" = ["PTH"]

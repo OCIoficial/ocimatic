@@ -11,6 +11,7 @@ pkg_dir = os.path.dirname(os.path.realpath(__file__))
 def recursive_glob(treeroot: str, pattern: str) -> list[str]:
     results: list[str] = []
     for base, dirs, files in os.walk(treeroot):
+        del dirs
         goodfiles = fnmatch.filter(files, pattern)
         results.extend(os.path.join(base, f) for f in goodfiles)
     return results
@@ -37,7 +38,7 @@ setup(
     author="Nico Lehmann",
     description="Automatize task creation for OCI",
     url="https://github.com/OCIoficial/ocimatic",
-    long_description=(open("LICENSE.rst").read()),
+    long_description=(open("LICENSE.rst").read()),  # noqa: SIM115
     license="Beer-Ware",
     packages=["ocimatic"],
     entry_points={

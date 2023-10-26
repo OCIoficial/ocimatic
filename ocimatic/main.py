@@ -86,7 +86,7 @@ class CLI:
             task = self.contest.find_task(self.last_dir.name)
         if not task:
             ui.fatal_error(
-                "You have to be inside a task or provide the `--task` argument to run this command."
+                "You have to be inside a task or provide the `--task` argument to run this command.",
             )
         return task
 
@@ -101,23 +101,27 @@ class CLI:
             set_verbosity(args, 0)
             failed = []
             for task in tasks:
-                if not task.check_dataset():
+                success = task.check_dataset()
+                if not success:
                     failed.append(task)
             if len(tasks) > 1:
                 ui.writeln()
                 if failed:
                     ui.writeln(
-                        "------------------------------------------------", ui.ERROR
+                        "------------------------------------------------",
+                        ui.ERROR,
                     )
                     ui.writeln(
-                        "Some tasks have issues that need to be resolved.", ui.ERROR
+                        "Some tasks have issues that need to be resolved.",
+                        ui.ERROR,
                     )
                     ui.writeln()
                     ui.writeln("Tasks with issues:", ui.ERROR)
                     for task in failed:
                         ui.writeln(f" * {task.name}", ui.ERROR)
                     ui.writeln(
-                        "------------------------------------------------", ui.ERROR
+                        "------------------------------------------------",
+                        ui.ERROR,
                     )
                 else:
                     ui.writeln("--------------------", ui.OK)
@@ -128,17 +132,18 @@ class CLI:
             set_verbosity(args, 0 if len(tasks) > 1 else 2)
             if args.solution and len(tasks) > 1:
                 ui.fatal_error(
-                    "A solution can only be specified when there's a single target task"
+                    "A solution can only be specified when there's a single target task",
                 )
             action = lambda task: task.gen_expected(
-                sample=args.sample, solution=args.solution
+                sample=args.sample,
+                solution=args.solution,
             )
         elif args.command == "pdf":
             set_verbosity(args, 2)
             action = lambda task: task.build_statement()
         elif args.command == "compress":
             set_verbosity(args, 2)
-            action = lambda task: task.compress_dataset(args.random_sort)
+            action = lambda task: task.compress_dataset(random_sort=args.random_sort)
         elif args.command == "normalize":
             set_verbosity(args, 2)
             action = lambda task: task.normalize()
@@ -188,7 +193,8 @@ def set_verbosity(args: argparse.Namespace, value: int) -> None:
 def add_contest_commands(subcommands: argparse._SubParsersAction) -> None:
     # init
     init = subcommands.add_parser(
-        "init", help="Initializes a contest in a new directory."
+        "init",
+        help="Initializes a contest in a new directory.",
     )
     init.add_argument("path", help="Path to directory.")
     init.add_argument("--phase")
@@ -245,7 +251,9 @@ def add_multitask_commands(subcommands: argparse._SubParsersAction) -> None:
 
     # pdf
     subcommands.add_parser(
-        "pdf", help="Compile the statement's pdf", parents=[multitask_parser]
+        "pdf",
+        help="Compile the statement's pdf",
+        parents=[multitask_parser],
     )
 
     # compress
@@ -264,19 +272,25 @@ def add_multitask_commands(subcommands: argparse._SubParsersAction) -> None:
 
     # testplan
     run_testplan_parser = subcommands.add_parser(
-        "run-testplan", help="Run testplan.", parents=[multitask_parser]
+        "run-testplan",
+        help="Run testplan.",
+        parents=[multitask_parser],
     )
     run_testplan_parser.add_argument("--subtask", "-st", type=int)
 
     # validate-input
     validate_parser = subcommands.add_parser(
-        "validate-input", help="Run input validators.", parents=[multitask_parser]
+        "validate-input",
+        help="Run input validators.",
+        parents=[multitask_parser],
     )
     validate_parser.add_argument("--subtask", "-st", type=int)
 
     # score
     subcommands.add_parser(
-        "score", help="Print the score parameters for cms.", parents=[multitask_parser]
+        "score",
+        help="Print the score parameters for cms.",
+        parents=[multitask_parser],
     )
 
     subcommands.add_parser(

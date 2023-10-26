@@ -4,6 +4,7 @@ import shlex
 import shutil
 from abc import ABC, abstractmethod
 from collections import Counter
+from collections.abc import Sequence
 from pathlib import Path
 from typing import NoReturn
 
@@ -28,7 +29,7 @@ class Testplan:
         self._testplan_path = Path(directory, filename)
         if not self._testplan_path.exists():
             ui.fatal_error(
-                'No such file plan for creating dataset: "%s"' % self._testplan_path
+                'No such file plan for creating dataset: "%s"' % self._testplan_path,
             )
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
@@ -48,7 +49,9 @@ class Testplan:
 
         if sum(len(st.commands) for st in subtasks) == 0:
             ui.show_message(
-                "Warning", "no commands were executed for the plan.", ui.WARNING
+                "Warning",
+                "no commands were executed for the plan.",
+                ui.WARNING,
             )
 
         os.chdir(cwd)
@@ -60,7 +63,7 @@ class Testplan:
         for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
             line = line.strip()
             subtask_header = re.compile(
-                r"\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*"
+                r"\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*",
             )
             cmd_line = re.compile(r"\s*([^;\s]+)\s*;\s*(\S+)(:?\s+(.*))?")
             comment = re.compile(r"\s*#.*")
@@ -79,16 +82,14 @@ class Testplan:
                     )
                     if st + 1 != found_st:
                         ui.fatal_error(
-                            "line %d: found subtask %d, but subtask %d was expected"
-                            % (lineno, found_st, st + 1)
+                            f"line {lineno}: found subtask {found_st}, but subtask {st + 1} was expected",
                         )
                     st += 1
                     subtasks[st] = Subtask(self._dataset_dir, st, validator)
                 elif cmd_match:
                     if st == 0:
                         ui.fatal_error(
-                            "line %d: found command before declaring a subtask."
-                            % lineno
+                            f"line {lineno}: found command before declaring a subtask.",
                         )
                     group = cmd_match.group(1)
                     cmd = cmd_match.group(2)
@@ -96,22 +97,31 @@ class Testplan:
 
                     tests_in_group[group] += 1
                     command = self._parse_command(
-                        group, tests_in_group[group], cmd, args, lineno
+                        group,
+                        tests_in_group[group],
+                        cmd,
+                        args,
+                        lineno,
                     )
                     subtasks[st].commands.append(command)
                 else:
                     ui.fatal_error(
-                        "line %d: error while parsing line `%s`\n" % (lineno, line)
+                        f"line {lineno}: error while parsing line `{line}`\n",
                     )
         return [st for (_, st) in sorted(subtasks.items())]
 
     def _parse_command(
-        self, group: str, idx: int, cmd: str, args: list[str], lineno: int
+        self,
+        group: str,
+        idx: int,
+        cmd: str,
+        args: list[str],
+        lineno: int,
     ) -> "Command":
         if cmd == "copy":
             if len(args) > 2:
                 ui.fatal_error(
-                    f"line {lineno}: command `copy` expects exactly one argument."
+                    f"line {lineno}: command `copy` expects exactly one argument.",
                 )
             return Copy(group, idx, Path(self._task_directory, args[0]))
         elif cmd == "echo":
@@ -146,13 +156,13 @@ class Command(ABC):
         self._group = group
         self._idx = idx
 
-    def dst_file(self, dir: Path) -> Path:
-        return Path(dir, f"{self._group}-{self._idx}.in")
+    def dst_file(self, directory: Path) -> Path:
+        return Path(directory, f"{self._group}-{self._idx}.in")
 
     @abstractmethod
     def run(self, dst_dir: Path) -> WorkResult:
         raise NotImplementedError(
-            "Class %s doesn't implement run()" % (self.__class__.__name__)
+            f"Class {self.__class__.__name__} doesn't implement run()",
         )
 
 
@@ -191,10 +201,14 @@ class Echo(Command):
 
 
 class Script(Command):
-    VALID_EXTENSIONS: list[str] = ["py", "cpp"]
+    VALID_EXTENSIONS: Sequence[str] = ["py", "cpp"]
 
     def __init__(
-        self, group: str, idx: int, script: SourceCode, args: list[str]
+        self,
+        group: str,
+        idx: int,
+        script: SourceCode,
+        args: list[str],
     ) -> None:
         super().__init__(group, idx)
         self._args = args
@@ -210,10 +224,12 @@ class Script(Command):
         build_result = self._script.build()
         if isinstance(build_result, BuildError):
             return WorkResult.fail(
-                short_msg="Failed to build generator", long_msg=build_result.msg
+                short_msg="Failed to build generator",
+                long_msg=build_result.msg,
             )
         result = build_result.run(
-            out_path=self.dst_file(dst_dir), args=[self._seed_arg(dst_dir), *self._args]
+            out_path=self.dst_file(dst_dir),
+            args=[self._seed_arg(dst_dir), *self._args],
         )
         match result:
             case RunSuccess(_):
@@ -221,14 +237,14 @@ class Script(Command):
             case RunError(msg, stderr):
                 return WorkResult.fail(short_msg=msg, long_msg=stderr)
 
-    def _seed_arg(self, dir: Path) -> str:
-        return f"{dir.name}-{self._group}-{self._idx}"
+    def _seed_arg(self, directory: Path) -> str:
+        return f"{directory.name}-{self._group}-{self._idx}"
 
 
 def _invalid_command(cmd: str, lineno: int) -> NoReturn:
     ui.fatal_error(
         f"line {lineno}: invalid command `{cmd}`\n"
-        f"The command should be either `copy`, `echo` or a generator with one of the following extensions `{Script.VALID_EXTENSIONS}`"
+        f"The command should be either `copy`, `echo` or a generator with one of the following extensions `{Script.VALID_EXTENSIONS}`",
     )
 
 

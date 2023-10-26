@@ -80,7 +80,10 @@ class Contest:
         ocimatic_dir = Path(__file__).parent
         contest_skel = Path(ocimatic_dir, "resources", "contest-skel")
         shutil.copytree(
-            contest_skel, dest, ignore=shutil.ignore_patterns("auto"), symlinks=True
+            contest_skel,
+            dest,
+            ignore=shutil.ignore_patterns("auto"),
+            symlinks=True,
         )
         with Path(dest, ".ocimatic_contest").open("w") as config_file:
             json.dump(config, config_file, indent=4)
@@ -143,7 +146,8 @@ class Contest:
         """Compile title page latex."""
         success = self._titlepage.compile() is not None
         return ui.WorkResult(
-            status=ui.Status.from_bool(success), short_msg="OK" if success else "FAILED"
+            status=ui.Status.from_bool(success),
+            short_msg="OK" if success else "FAILED",
         )
 
     @ui.work("MERGE", "{1}")
@@ -198,21 +202,28 @@ class Task:
 
         correct_dir = Path(directory, "solutions", "correct")
         self._correct = Solution.load_solutions_in_dir(
-            self.codename, correct_dir, self._managers_dir
+            self.codename,
+            correct_dir,
+            self._managers_dir,
         )
         partial_dir = Path(directory, "solutions", "partial")
         self._partial = Solution.load_solutions_in_dir(
-            self.codename, partial_dir, self._managers_dir
+            self.codename,
+            partial_dir,
+            self._managers_dir,
         )
 
         self._checker = Checker.find_in_directory(self._managers_dir)
 
         self._statement = Statement(
-            Path(directory, "statement"), num=num, codename=self.codename
+            Path(directory, "statement"),
+            num=num,
+            codename=self.codename,
         )
 
         self._dataset = Dataset(
-            Path(directory, "dataset"), self._statement.io_samples()
+            Path(directory, "dataset"),
+            self._statement.io_samples(),
         )
 
     @property
@@ -224,7 +235,7 @@ class Task:
         new_dir = Path(directory, self.codename)
         new_dir.mkdir()
 
-        result = self._dataset.compress(False)
+        result = self._dataset.compress(random_sort=False)
         if result.status is ui.Status.success:
             dataset = Path(self._directory, "dataset", "data.zip")
             dataset_dst = Path(new_dir, "data.zip")
@@ -288,7 +299,7 @@ class Task:
         # testplan.validate_input(subtask)
 
     @ui.task("Compressing dataset")
-    def compress_dataset(self, random_sort: bool) -> None:
+    def compress_dataset(self, *, random_sort: bool) -> None:
         """Compress dataset into a single file."""
         self._dataset.compress(random_sort=random_sort)
 
@@ -312,14 +323,17 @@ class Task:
             ui.show_message(
                 "Warning",
                 "The number of subtasks in the statement doesn't match with the number of "
-                + "subtasks in the testplan.",
+                "subtasks in the testplan.",
                 ui.WARNING,
             )
             return
 
         if len(counts) == len(scores) == 1:
             ui.show_message("Sum", str(scores[0] / counts[0]))
-        ui.show_message("GroupMin", str([[m, t] for (m, t) in zip(scores, counts)]))
+        ui.show_message(
+            "GroupMin",
+            str([[m, t] for (m, t) in zip(scores, counts, strict=True)]),
+        )
 
     @ui.task("Normalizing")
     def normalize(self) -> None:
@@ -377,12 +391,6 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
         time of correct solutions to set a timeout. Finally, use the timeout to run partial solutions
         and ensure they fail the subtasks they are suppose to fail.
         """
-        stats = RuntimeStats.unit()
-
-        if not self._correct:
-            ui.show_message("Error", "At least one correct solution needed", ui.ERROR)
-            return False
-
         if not self._dataset.count():
             ui.show_message(
                 "Error",
@@ -398,6 +406,19 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
                 ui.ERROR,
             )
             return False
+
+        stats = self._check_dataset_run_correct_solutions()
+        if not stats:
+            return False
+
+        return self._check_dataset_run_partial_solutions(stats)
+
+    def _check_dataset_run_correct_solutions(self) -> RuntimeStats | None:
+        stats = RuntimeStats.unit()
+
+        if not self._correct:
+            ui.show_message("Error", "At least one correct solution needed", ui.ERROR)
+            return None
 
         # Run correct solutions
         ui.writeln()
@@ -425,16 +446,19 @@ Solutions with issues:
 
             for sol in failed_correct:
                 ui.writeln(" * " + str(sol), ui.ERROR)
-            return False
+            return None
 
         ui.writeln()
         write_stats(stats)
         ui.writeln()
         ui.writeln("All correct solutions produced correct results", ui.OK)
+        return stats
 
-        # Run partial solutions
-
+    def _check_dataset_run_partial_solutions(self, stats: RuntimeStats) -> bool:
         timeout = stats.set_limit()
+
+        # we already checked the dataset is present and all tests had expected output so
+        # the timeout must alwas be not None
         assert timeout is not None
 
         ui.writeln()
@@ -450,7 +474,10 @@ Solutions with issues:
         failed_partial = []
         for sol in self._partial:
             results = sol.run(
-                self._dataset, self._checker, RunMode.check_partial, timeout
+                self._dataset,
+                self._checker,
+                RunMode.check_partial,
+                timeout,
             )
             if results is None or not sol.check_results(results):
                 failed_partial.append(sol)
@@ -486,7 +513,12 @@ Solutions with issues:
         sol.build()
 
     @ui.task("Generating expected output")
-    def gen_expected(self, sample: bool = False, solution: Path | None = None) -> None:
+    def gen_expected(
+        self,
+        *,
+        sample: bool = False,
+        solution: Path | None = None,
+    ) -> None:
         """Generate expected outputs files for the dataset by running a correct solution.
 
         If `sample` is True, also generate expected output for sample input. If `solution` is
@@ -505,7 +537,11 @@ Solutions with issues:
         else:
             keys: dict[type, int] = {CppSource: 0, RustSource: 1, JavaSource: 0}
             sols = sorted(
-                self._correct, key=lambda sol: keys.get(type(sol.source), len(keys))
+                self._correct,
+                key=lambda sol: keys.get(
+                    type(sol.source),
+                    len(keys),
+                ),
             )
             generator = sols[0] if sols else None
 
@@ -514,7 +550,7 @@ Solutions with issues:
         generator.gen_expected(self._dataset, sample=sample)
 
     @ui.task("Building statement")
-    def build_statement(self, blank_page: bool = False) -> None:
+    def build_statement(self, *, blank_page: bool = False) -> None:
         """Generate pdf for the statement."""
         self._statement.build(blank_page=blank_page)
 
@@ -523,7 +559,10 @@ class Statement:
     """Represents a statement. A statement is composed by a latex source and a pdf file."""
 
     def __init__(
-        self, directory: Path, num: int | None = None, codename: str | None = None
+        self,
+        directory: Path,
+        num: int | None = None,
+        codename: str | None = None,
     ) -> None:
         assert Path(directory, "statement.tex").exists()
         self._source = LatexSource(Path(directory, "statement.tex"))
@@ -540,7 +579,7 @@ class Statement:
         return str(self._source)
 
     @ui.work("LATEX")
-    def build(self, blank_page: bool) -> ui.Result:
+    def build(self, *, blank_page: bool) -> ui.Result:
         """Compile latex statement."""
         if self._num is not None:
             os.environ["OCIMATIC_PROBLEM_NUMBER"] = chr(ord("A") + self._num)

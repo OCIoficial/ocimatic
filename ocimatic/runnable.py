@@ -69,33 +69,36 @@ class Runnable(ABC):
     @abstractmethod
     def cmd(self) -> list[str]:
         raise NotImplementedError(
-            "Class %s doesn't implement cmd()" % (self.__class__.__name__)
+            f"Class {self.__class__.__name__} doesn't implement cmd()",
         )
 
     @overload
     def run(
         self,
+        *,
         in_path: Path | None = None,
         out_path: Path | None = None,
-        args: list[str] = [],
+        args: list[str] | None = None,
     ) -> RunSuccess | RunError:
         ...
 
     @overload
     def run(
         self,
+        *,
         in_path: Path | None = None,
         out_path: Path | None = None,
-        args: list[str] = [],
+        args: list[str] | None = None,
         timeout: float | None = None,
     ) -> RunResult:
         ...
 
     def run(
         self,
+        *,
         in_path: Path | None = None,
         out_path: Path | None = None,
-        args: list[str] = [],
+        args: list[str] | None = None,
         timeout: float | None = None,
     ) -> RunResult:
         """Run binary redirecting standard input and output.
@@ -120,7 +123,7 @@ class Runnable(ABC):
                 stdout = stack.enter_context(out_path.open("w+"))
 
             cmd = self.cmd()
-            cmd.extend(args)
+            cmd.extend(args or [])
 
             start = pytime.monotonic()
             try:
@@ -150,7 +153,7 @@ class Runnable(ABC):
 
             stdout.seek(0)
             return RunSuccess(time=time, stdout=stdout.read(), stderr=complete.stderr)
-        assert False
+        raise AssertionError()
 
 
 class Binary(Runnable):

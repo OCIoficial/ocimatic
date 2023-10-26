@@ -26,9 +26,7 @@ class ShouldFail:
         m = ShouldFail.REGEX.match(comment)
         if not m:
             return None
-        subtasks = set(
-            int(st.strip().removeprefix("st")) for st in m.group(1).split(",")
-        )
+        subtasks = {int(st.strip().removeprefix("st")) for st in m.group(1).split(",")}
         return ShouldFail(subtasks=subtasks)
 
 
@@ -42,9 +40,7 @@ class ShouldPass:
         m = ShouldPass.REGEX.match(comment)
         if not m:
             return None
-        subtasks = set(
-            int(st.strip().removeprefix("st")) for st in m.group(1).split(",")
-        )
+        subtasks = {int(st.strip().removeprefix("st")) for st in m.group(1).split(",")}
         return ShouldPass(subtasks=subtasks)
 
 
@@ -68,13 +64,14 @@ class SourceCode(ABC):
     @staticmethod
     def should_build(sources: list[Path], out: Path) -> bool:
         mtime = max(
-            (s.stat().st_mtime for s in sources if s.exists()), default=float("inf")
+            (s.stat().st_mtime for s in sources if s.exists()),
+            default=float("inf"),
         )
         btime = out.stat().st_mtime if out.exists() else float("-inf")
         return btime < mtime
 
     @abstractmethod
-    def build(self, force: bool = False) -> Runnable | BuildError:
+    def build(self, *, force: bool = False) -> Runnable | BuildError:
         ...
 
     @classmethod
@@ -87,13 +84,13 @@ class CppSource(SourceCode):
     def __init__(
         self,
         file: Path,
-        extra_files: list[Path] = [],
+        extra_files: list[Path] | None = None,
         include: Path | None = None,
         out: Path | None = None,
     ) -> None:
         super().__init__(file)
         self._source = file
-        self._extra_files = extra_files
+        self._extra_files = extra_files or []
         self._include = include
         self._out = out or Path(file.parent, ".build", f"{file.stem}-cpp")
 
@@ -104,7 +101,7 @@ class CppSource(SourceCode):
         cmd.extend(str(s) for s in self.files)
         return cmd
 
-    def build(self, force: bool = False) -> Binary | BuildError:
+    def build(self, *, force: bool = False) -> Binary | BuildError:
         self._out.parent.mkdir(parents=True, exist_ok=True)
         if force or CppSource.should_build(self.files, self._out):
             cmd = self.build_cmd()
@@ -137,7 +134,7 @@ class RustSource(SourceCode):
         cmd = ["rustc", "--edition=2021", "-O", "-o", str(self._out), str(self._file)]
         return cmd
 
-    def build(self, force: bool = False) -> Binary | BuildError:
+    def build(self, *, force: bool = False) -> Binary | BuildError:
         self._out.parent.mkdir(parents=True, exist_ok=True)
         if force or RustSource.should_build([self._file], self._out):
             cmd = self.build_cmd()
@@ -167,7 +164,7 @@ class JavaSource(SourceCode):
     def build_cmd(self) -> list[str]:
         return ["javac", "-d", str(self._out), str(self._source)]
 
-    def build(self, force: bool = False) -> JavaClasses | BuildError:
+    def build(self, *, force: bool = False) -> JavaClasses | BuildError:
         if force or JavaSource.should_build([self._source], self._out):
             self._out.mkdir(parents=True, exist_ok=True)
             cmd = self.build_cmd()
@@ -191,7 +188,7 @@ class PythonSource(SourceCode):
     def __init__(self, file: Path) -> None:
         super().__init__(file)
 
-    def build(self, force: bool = False) -> Python3:
+    def build(self, *, force: bool = False) -> Python3:
         del force
         return Python3(self._file)
 
@@ -212,12 +209,13 @@ def parse_comments(file: Path, comment_start: str) -> Iterator[OcimaticComment]:
             ui.fatal_error(f"Invalid comment `{m.group(0)}` in {path}")
 
 
-def comment_iter(file: Path, comment_start: str) -> Iterator[re.Match[str]]:
+def comment_iter(file_path: Path, comment_start: str) -> Iterator[re.Match[str]]:
     pattern = re.compile(rf"\s*{comment_start}\s*@ocimatic(.*)")
-    for line in open(file):
-        m = pattern.match(line)
-        if m:
-            yield m
+    with file_path.open() as file:
+        for line in file:
+            m = pattern.match(line)
+            if m:
+                yield m
 
 
 class LatexSource:

@@ -24,9 +24,15 @@ class Checker(ABC):
     """Abstract class for a checker."""
 
     @abstractmethod
-    def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
+    def run(
+        self,
+        *,
+        in_path: Path,
+        expected_path: Path,
+        out_path: Path,
+    ) -> CheckerResult:
         raise NotImplementedError(
-            "Class %s doesn't implement run()" % (self.__class__.__name__)
+            f"Class {self.__class__.__name__} doesn't implement run()",
         )
 
     @staticmethod
@@ -34,7 +40,7 @@ class Checker(ABC):
         for f in dir.iterdir():
             if f.name == "checker.cpp":
                 return CustomChecker(
-                    CppSource(f, include=dir, out=Path(dir, "checker"))
+                    CppSource(f, include=dir, out=Path(dir, "checker")),
                 )
             elif f.name == "checker.rs":
                 return CustomChecker(RustSource(f, out=Path(dir, "checker")))
@@ -44,7 +50,13 @@ class Checker(ABC):
 class DiffChecker(Checker):
     """White diff checker."""
 
-    def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
+    def run(
+        self,
+        *,
+        in_path: Path,
+        expected_path: Path,
+        out_path: Path,
+    ) -> CheckerResult:
         """Perform a white diff between expected output and output files.
 
         Parameters correspond to convention for checker in cms.
@@ -53,22 +65,29 @@ class DiffChecker(Checker):
         assert expected_path.exists()
         assert out_path.exists()
 
-        expected = open(expected_path).readlines()
-        out = open(out_path).readlines()
-        if len(expected) != len(out):
-            return CheckerSuccess(outcome=0.0)
-
-        for a, b in zip(expected, out):
-            if a != b:
+        with out_path.open() as expected_file, expected_path.open() as output_file:
+            expected = expected_file.readlines()
+            out = output_file.readlines()
+            if len(expected) != len(out):
                 return CheckerSuccess(outcome=0.0)
-        return CheckerSuccess(outcome=1.0)
+
+            for a, b in zip(expected, out, strict=True):
+                if a != b:
+                    return CheckerSuccess(outcome=0.0)
+            return CheckerSuccess(outcome=1.0)
 
 
 class CustomChecker(Checker):
     def __init__(self, code: SourceCode) -> None:
         self._code = code
 
-    def run(self, in_path: Path, expected_path: Path, out_path: Path) -> CheckerResult:
+    def run(
+        self,
+        *,
+        in_path: Path,
+        expected_path: Path,
+        out_path: Path,
+    ) -> CheckerResult:
         """Run custom checker to evaluate outcome.
 
         Parameters correspond to convention for checker in cms.
@@ -79,9 +98,8 @@ class CustomChecker(Checker):
         build_result = self._code.build()
         if isinstance(build_result, BuildError):
             return CheckerError(msg="Failed to build checker")
-        result = build_result.run(
-            args=[str(in_path), str(expected_path), str(out_path)]
-        )
+        args = [str(in_path), str(expected_path), str(out_path)]
+        result = build_result.run(args=args)
         if isinstance(result, RunSuccess):
             try:
                 stderr = result.stderr.strip()

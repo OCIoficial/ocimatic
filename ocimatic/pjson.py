@@ -1,5 +1,5 @@
 import json
-from collections.abc import Iterable
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -75,7 +75,7 @@ class PJSONBase:
 
 
 class PJSONMap(PJSONBase):
-    def __iter__(self) -> Iterable[tuple[str, Any]]:
+    def __iter__(self) -> Iterator[tuple[str, Any]]:
         yield from self._get_self_path()
 
     def setdefault(self, key: str, default: Any = None) -> Any:
@@ -100,5 +100,5 @@ class PJSONArray(PJSONBase):
     def __len__(self) -> int:
         return len(self._get_self_path())
 
-    def __iter__(self) -> Iterable[Any]:
+    def __iter__(self) -> Iterator[Any]:
         yield from self._get_self_path()

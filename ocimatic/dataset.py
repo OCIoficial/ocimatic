@@ -60,7 +60,8 @@ class TestResult:
                 return WorkResult.info(short_msg=msg)
             else:
                 return WorkResult(
-                    status=ui.Status.from_bool(self.is_correct()), short_msg=msg
+                    status=ui.Status.from_bool(self.is_correct()),
+                    short_msg=msg,
                 )
 
     @dataclass
@@ -84,11 +85,13 @@ class TestResult:
         def into_work_result(self, mode: RunMode) -> WorkResult:
             if mode is RunMode.check_partial:
                 return WorkResult.info(
-                    short_msg=self.run_result.msg, long_msg=self.run_result.stderr
+                    short_msg=self.run_result.msg,
+                    long_msg=self.run_result.stderr,
                 )
             else:
                 return WorkResult.fail(
-                    short_msg=self.run_result.msg, long_msg=self.run_result.stderr
+                    short_msg=self.run_result.msg,
+                    long_msg=self.run_result.stderr,
                 )
 
     @dataclass
@@ -112,7 +115,8 @@ class TestResult:
         def into_work_result(self, mode: RunMode) -> WorkResult:
             del mode
             return WorkResult(
-                status=ui.Status.fail, short_msg="No expected output file"
+                status=ui.Status.fail,
+                short_msg="No expected output file",
             )
 
     def into_work_result(self) -> WorkResult:
@@ -167,7 +171,8 @@ class Test:
     def mtime(self) -> float:
         if self._expected_path.exists():
             return max(
-                self._in_path.stat().st_mtime, self._expected_path.stat().st_mtime
+                self._in_path.stat().st_mtime,
+                self._expected_path.stat().st_mtime,
             )
         return self._in_path.stat().st_mtime
 
@@ -192,14 +197,21 @@ class Test:
 
     @ui.work("Run")
     def run(
-        self, runnable: Runnable, checker: Checker, mode: RunMode, timeout: float | None
+        self,
+        runnable: Runnable,
+        checker: Checker,
+        mode: RunMode,
+        timeout: float | None,
     ) -> TestResult:
         """Run runnable redirecting this test as its standard input and check output correctness."""
         kind = self.run_inner(runnable, checker, timeout)
         return TestResult(mode=mode, kind=kind)
 
     def run_inner(
-        self, runnable: Runnable, checker: Checker, timeout: float | None
+        self,
+        runnable: Runnable,
+        checker: Checker,
+        timeout: float | None,
     ) -> TestResult.Kind:
         if not self.expected_path.exists():
             return TestResult.NoExpectedOutput()
@@ -211,7 +223,9 @@ class Test:
             out_path = Path(tmpdir, "out")
 
             run_result = runnable.run(
-                in_path=self.in_path, out_path=out_path, timeout=timeout
+                in_path=self.in_path,
+                out_path=out_path,
+                timeout=timeout,
             )
 
             if isinstance(run_result, RunError):
@@ -220,7 +234,11 @@ class Test:
             if isinstance(run_result, RunTLE):
                 return TestResult.TimeLimitExceeded(run_result)
 
-            checker_result = checker.run(self.in_path, self.expected_path, out_path)
+            checker_result = checker.run(
+                in_path=self.in_path,
+                expected_path=self.expected_path,
+                out_path=out_path,
+            )
 
             # Checker failed
             if isinstance(checker_result, CheckerError):
@@ -253,7 +271,8 @@ class Test:
             st += subprocess.call(tounix_expected, stdout=null, stderr=null, shell=True)
             st += subprocess.call(sed_expected, stdout=null, stderr=null, shell=True)
         return WorkResult(
-            status=ui.Status.from_bool(st == 0), short_msg="OK" if st == 0 else "FAILED"
+            status=ui.Status.from_bool(st == 0),
+            short_msg="OK" if st == 0 else "FAILED",
         )
 
     def has_expected(self) -> bool:
@@ -265,7 +284,7 @@ class TestGroup:
         self._name = name
         self._tests = tests
 
-    def write_to_zip(self, zip: ZipFile, random_sort: bool = False) -> int:
+    def write_to_zip(self, zip_file: ZipFile, *, random_sort: bool = False) -> int:
         copied = 0
         for test in self._tests:
             if test.expected_path.exists():
@@ -278,8 +297,8 @@ class TestGroup:
                 else:
                     in_name = f"{self._name}-{test.in_path.name}"
                     sol_name = f"{self._name}-{test.expected_path.name}"
-                zip.write(test.in_path, in_name)
-                zip.write(test.expected_path, sol_name)
+                zip_file.write(test.in_path, in_name)
+                zip_file.write(test.expected_path, sol_name)
                 copied += 1
         return copied
 
@@ -298,11 +317,16 @@ class TestGroup:
 
     @ui.workgroup()
     def run(
-        self, runnable: Runnable, checker: Checker, mode: RunMode, timeout: float | None
+        self,
+        runnable: Runnable,
+        checker: Checker,
+        mode: RunMode,
+        timeout: float | None,
     ) -> list[TestResult]:
         results = []
         for test in self._tests:
-            results.append(test.run(runnable, checker, mode, timeout))
+            result = test.run(runnable, checker, mode, timeout)
+            results.append(result)
         return results
 
     @ui.workgroup()
@@ -337,7 +361,9 @@ class Subtask(TestGroup):
         build = source.build()
         if isinstance(build, BuildError):
             ui.show_message(
-                "Warning", f"Failed to build validator\n{build.msg}", ui.WARNING
+                "Warning",
+                f"Failed to build validator\n{build.msg}",
+                ui.WARNING,
             )
             return
         for test in self._tests:
@@ -395,21 +421,21 @@ class DatasetResults:
 
         return True
 
-    def runtime_stats(self, include_sample: bool = False) -> RuntimeStats | None:
-        running_times = list(self.running_times(include_sample))
+    def runtime_stats(self, *, include_sample: bool = False) -> RuntimeStats | None:
+        running_times = list(self.running_times(include_sample=include_sample))
         if not running_times:
             return None
         return RuntimeStats(max=max(running_times), min=min(running_times))
 
-    def iter_all(self, include_sample: bool = False) -> Iterator[TestResult]:
+    def iter_all(self, *, include_sample: bool = False) -> Iterator[TestResult]:
         tests: Iterable[TestResult] = (t for st in self.subtasks for t in st)
         if include_sample:
             tests = itertools.chain(tests, self.sample)
         yield from tests
 
-    def running_times(self, include_sample: bool = False) -> Iterator[float]:
+    def running_times(self, *, include_sample: bool = False) -> Iterator[float]:
         """Return running times of all successful runs."""
-        for test in self.iter_all(include_sample):
+        for test in self.iter_all(include_sample=include_sample):
             if isinstance(test.kind, TestResult.CheckerRunned):
                 yield test.kind.running_time()
 
@@ -427,14 +453,18 @@ class Dataset:
             self._subtasks = []
         self._sampledata = TestGroup("sample", sampledata)
 
-    def gen_expected(self, runnable: Runnable, sample: bool = False) -> None:
+    def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> None:
         for subtask in self._subtasks:
             subtask.gen_expected(runnable)
         if sample:
             self._sampledata.gen_expected(runnable)
 
     def run(
-        self, runnable: Runnable, checker: Checker, mode: RunMode, timeout: float | None
+        self,
+        runnable: Runnable,
+        checker: Checker,
+        mode: RunMode,
+        timeout: float | None,
     ) -> DatasetResults:
         subtasks = []
         for subtask in self._subtasks:
@@ -445,8 +475,8 @@ class Dataset:
         return DatasetResults(subtasks, sample)
 
     def validate(self, validators: list[Path | None], stn: int | None) -> None:
-        assert len(validators) == len(self._subtasks)
-        for i, (subtask, validator) in enumerate(zip(self._subtasks, validators), 1):
+        zipped = zip(self._subtasks, validators, strict=True)
+        for i, (subtask, validator) in enumerate(zipped, 1):
             if stn is None or stn == i:
                 subtask.validate(validator)
 
@@ -460,7 +490,7 @@ class Dataset:
         return mtime
 
     @ui.work("ZIP")
-    def compress(self, random_sort: bool = False) -> ui.Result:
+    def compress(self, *, random_sort: bool = False) -> ui.Result:
         """Compress all test cases in the dataset into a single zip file.
 
         The basename of the corresponding subtask subdirectory is prepended to each file.
@@ -470,7 +500,7 @@ class Dataset:
         with ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zip:
             compressed = 0
             for subtask in self._subtasks:
-                compressed += subtask.write_to_zip(zip, random_sort)
+                compressed += subtask.write_to_zip(zip, random_sort=random_sort)
 
             if compressed == 0:
                 path.unlink()

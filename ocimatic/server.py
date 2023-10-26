@@ -16,7 +16,8 @@ def ansi2html(ansi: str) -> str:
     return cast(
         str,
         Ansi2HTMLConverter(scheme="mint-terminal", inline=True).convert(
-            ansi, full=False
+            ansi,
+            full=False,
         ),
     )
 
