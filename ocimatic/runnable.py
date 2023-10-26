@@ -1,6 +1,5 @@
 import contextlib
 import os
-import shutil
 import subprocess
 import tempfile
 import time as pytime
@@ -162,9 +161,6 @@ class Binary(Runnable):
 
     def cmd(self) -> list[str]:
         return [str(self._path)]
-
-    def is_callable(self) -> bool:
-        return shutil.which(self._path) is not None
 
 
 class JavaClasses(Runnable):

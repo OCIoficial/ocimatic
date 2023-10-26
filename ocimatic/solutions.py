@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -16,11 +15,6 @@ from ocimatic.source_code import (
     ShouldPass,
     SourceCode,
 )
-
-
-@dataclass
-class SolutionComment:
-    should_fail: set[int]
 
 
 class SolutionSpec:
@@ -159,5 +153,4 @@ class Solution:
 
     @property
     def source(self) -> SourceCode:
-        return self._source
         return self._source

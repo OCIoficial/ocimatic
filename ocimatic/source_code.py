@@ -48,11 +48,13 @@ OcimaticComment = ShouldFail | ShouldPass
 
 
 class SourceCode(ABC):
+    LINE_COMMENT_START: str
+
     def __init__(self, file: Path) -> None:
         relative_path = file.relative_to(ocimatic.config["contest_root"])
         self._file = file
         self.name = str(relative_path)
-        self.comments = list(parse_comments(file, self.__class__.line_comment_start()))
+        self.comments = list(parse_comments(file, self.__class__.LINE_COMMENT_START))
 
     def __str__(self) -> str:
         return self.name
@@ -74,13 +76,10 @@ class SourceCode(ABC):
     def build(self, *, force: bool = False) -> Runnable | BuildError:
         ...
 
-    @classmethod
-    @abstractmethod
-    def line_comment_start(cls) -> str:
-        ...
-
 
 class CppSource(SourceCode):
+    LINE_COMMENT_START = "//"
+
     def __init__(
         self,
         file: Path,
@@ -120,12 +119,10 @@ class CppSource(SourceCode):
     def files(self) -> list[Path]:
         return [self._file, *self._extra_files]
 
-    @classmethod
-    def line_comment_start(cls) -> str:
-        return "//"
-
 
 class RustSource(SourceCode):
+    LINE_COMMENT_START = "//"
+
     def __init__(self, file: Path, out: Path | None = None) -> None:
         super().__init__(file)
         self._out = out or Path(file.parent, ".build", f"{file.stem}-rs")
@@ -149,12 +146,10 @@ class RustSource(SourceCode):
                 return BuildError(msg=complete.stderr)
         return Binary(self._out)
 
-    @classmethod
-    def line_comment_start(cls) -> str:
-        return "//"
-
 
 class JavaSource(SourceCode):
+    LINE_COMMENT_START = "//"
+
     def __init__(self, classname: str, source: Path, out: Path | None = None) -> None:
         super().__init__(source)
         self._classname = classname
@@ -179,22 +174,16 @@ class JavaSource(SourceCode):
                 return BuildError(msg=complete.stderr)
         return JavaClasses(self._classname, self._out)
 
-    @classmethod
-    def line_comment_start(cls) -> str:
-        return "//"
-
 
 class PythonSource(SourceCode):
+    LINE_COMMENT_START = "#"
+
     def __init__(self, file: Path) -> None:
         super().__init__(file)
 
     def build(self, *, force: bool = False) -> Python3:
         del force
         return Python3(self._file)
-
-    @classmethod
-    def line_comment_start(cls) -> str:
-        return "#"
 
 
 def parse_comments(file: Path, comment_start: str) -> Iterator[OcimaticComment]:
