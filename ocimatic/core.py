@@ -1,11 +1,13 @@
 # coding=UTF-8
+from __future__ import annotations
+
 import json
 import os
 import re
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 import pypdf
 
@@ -94,7 +96,7 @@ class Contest:
         self._config.setdefault("tasks", []).append(name)
 
     @property
-    def tasks(self) -> list["Task"]:
+    def tasks(self) -> list[Task]:
         return self._tasks
 
     @ui.contest_group("Generating problemset")
@@ -180,7 +182,7 @@ class Contest:
     def __str__(self) -> str:
         return self.name
 
-    def find_task(self, name: str) -> Optional["Task"]:
+    def find_task(self, name: str) -> Task | None:
         """Find task with the given name."""
         return next((p for p in self._tasks if p.name == name), None)
 
@@ -317,7 +319,7 @@ class Task:
         return self.name
 
     @property
-    def statement(self) -> "Statement":
+    def statement(self) -> Statement:
         return self._statement
 
     @ui.task("Score Params")

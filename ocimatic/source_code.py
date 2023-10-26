@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 import re
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import ocimatic
 from ocimatic import ui
@@ -22,7 +23,7 @@ class ShouldFail:
     subtasks: set[int]
 
     @staticmethod
-    def parse(comment: str) -> Optional["ShouldFail"]:
+    def parse(comment: str) -> ShouldFail | None:
         m = ShouldFail.REGEX.match(comment)
         if not m:
             return None
@@ -36,7 +37,7 @@ class ShouldPass:
     subtasks: set[int]
 
     @staticmethod
-    def parse(comment: str) -> Optional["ShouldPass"]:
+    def parse(comment: str) -> ShouldPass | None:
         m = ShouldPass.REGEX.match(comment)
         if not m:
             return None
@@ -236,4 +237,5 @@ class LatexSource:
         return pdf if pdf.exists() else None
 
     def __str__(self) -> str:
+        return str(self._source.relative_to(ocimatic.config["contest_root"]))
         return str(self._source.relative_to(ocimatic.config["contest_root"]))

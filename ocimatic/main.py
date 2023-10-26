@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import argparse
+from argparse import ArgumentParser, _SubParsersAction
 from collections.abc import Callable
 from pathlib import Path
 
@@ -192,7 +195,7 @@ def set_verbosity(args: argparse.Namespace, value: int) -> None:
         ocimatic.config["verbosity"] = value
 
 
-def add_contest_commands(subcommands: argparse._SubParsersAction) -> None:
+def add_contest_commands(subcommands: _SubParsersAction[ArgumentParser]) -> None:
     # init
     init = subcommands.add_parser(
         "init",
@@ -212,7 +215,7 @@ def add_contest_commands(subcommands: argparse._SubParsersAction) -> None:
     new_task_parser.add_argument("name", help="Name of the task")
 
 
-def add_multitask_commands(subcommands: argparse._SubParsersAction) -> None:
+def add_multitask_commands(subcommands: _SubParsersAction[ArgumentParser]) -> None:
     multitask_parser = argparse.ArgumentParser(add_help=False)
     multitask_parser.add_argument("--tasks", help="A comma separated list of tasks.")
 
@@ -302,7 +305,7 @@ def add_multitask_commands(subcommands: argparse._SubParsersAction) -> None:
     )
 
 
-def add_single_task_command(subcommands: argparse._SubParsersAction) -> None:
+def add_single_task_command(subcommands: _SubParsersAction[ArgumentParser]) -> None:
     parent_parser = argparse.ArgumentParser(add_help=False)
     parent_parser.add_argument(
         "--task",
@@ -322,7 +325,7 @@ def add_single_task_command(subcommands: argparse._SubParsersAction) -> None:
     subcommands.add_parser("build", help="Build a solution.", parents=[parent_parser])
 
 
-def add_server_command(subcommands: argparse._SubParsersAction) -> None:
+def add_server_command(subcommands: _SubParsersAction[ArgumentParser]) -> None:
     server_parser = subcommands.add_parser(
         "server",
         help="""Start a server which can be used to control ocimatic from a browser.
@@ -361,5 +364,7 @@ def main() -> None:
     elif args.command in MULTI_TASK_COMMANDS:
         cli.run_multi_task_command(args)
     else:
+        parser.print_help()
+        parser.print_help()
         parser.print_help()
         parser.print_help()

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import itertools
 import math
 import random
@@ -383,7 +385,7 @@ class RuntimeStats:
     min: float
 
     @staticmethod
-    def unit() -> "RuntimeStats":
+    def unit() -> RuntimeStats:
         return RuntimeStats(max=float("-inf"), min=float("inf"))
 
     def set_limit(self) -> float | None:
@@ -392,10 +394,10 @@ class RuntimeStats:
     def print_limit_calculation(self) -> str:
         return f"math.ceil({self.max:.3f} * 20) / 10"
 
-    def __add__(self, other: "RuntimeStats") -> "RuntimeStats":
+    def __add__(self, other: RuntimeStats) -> RuntimeStats:
         return RuntimeStats(max=max(self.max, other.max), min=min(self.min, other.min))
 
-    def __iadd__(self, other: "RuntimeStats") -> "RuntimeStats":
+    def __iadd__(self, other: RuntimeStats) -> RuntimeStats:
         return self + other
 
 
@@ -523,4 +525,5 @@ class Dataset:
             for test in st.tests():
                 if not test.has_expected():
                     return False
+        return True
         return True

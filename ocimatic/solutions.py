@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
 
 from ocimatic import ui
 from ocimatic.checkers import Checker
@@ -65,7 +66,7 @@ class Solution:
         codename: str,
         directory: Path,
         managers_dir: Path,
-    ) -> list["Solution"]:
+    ) -> list[Solution]:
         """Search for solutions in a directory."""
         assert directory.is_dir()
         return [
@@ -80,7 +81,7 @@ class Solution:
         codename: str,
         source_path: Path,
         managers_dir: Path,
-    ) -> Optional["Solution"]:
+    ) -> Solution | None:
         if not source_path.is_file():
             return None
 
@@ -153,4 +154,5 @@ class Solution:
 
     @property
     def source(self) -> SourceCode:
+        return self._source
         return self._source
