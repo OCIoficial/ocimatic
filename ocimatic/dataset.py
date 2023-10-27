@@ -319,7 +319,7 @@ class TestGroup:
     def count(self) -> int:
         return len(self._tests)
 
-    @ui.workgroup()
+    @ui.workgroup("{0}")
     def run(
         self,
         runnable: Runnable,
@@ -333,7 +333,7 @@ class TestGroup:
             results.append(result)
         return results
 
-    @ui.workgroup()
+    @ui.workgroup("{0}")
     def gen_expected(self, runnable: Runnable) -> None:
         for test in self._tests:
             test.gen_expected(runnable)

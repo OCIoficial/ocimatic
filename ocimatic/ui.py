@@ -18,7 +18,6 @@ from typing import (
 from colorama import Fore, Style
 
 _P = ParamSpec("_P")
-_S = TypeVar("_S")
 _T = TypeVar("_T")
 
 RESET = Style.RESET_ALL
@@ -155,24 +154,24 @@ def task_header(name: str, msg: str) -> None:
     flush()
 
 
-def workgroup_header(msg: str, length: int = 35) -> None:
+def workgroup_header(label: str, msg: str | None) -> None:
     """Print header for a generic group of works."""
     writeln()
-    msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
     color = INFO if _VERBOSITY is Verbosity.verbose else RESET
-    write(colorize("[%s]" % (msg), color))
+    write(colorize(f"[{label}]", color))
     if _VERBOSITY is Verbosity.verbose:
+        if msg:
+            write(colorize(f" {msg}", color))
         writeln()
     else:
         write(" ")
     flush()
 
 
-def contest_group_header(msg: str, length: int = 35) -> None:
+def contest_group_header(msg: str) -> None:
     """Print header for a group of works involving a contest."""
     write("\n\n")
-    msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
-    write(colorize("[%s]" % (msg), INFO + YELLOW))
+    write(colorize(msg, INFO + MAGENTA))
     writeln()
     flush()
 
@@ -200,11 +199,10 @@ def solution_group(
     return decorator
 
 
-def solution_group_header(msg: str, length: int = 40) -> None:
+def solution_group_header(msg: str) -> None:
     """Print header for a solution group."""
     writeln()
-    msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
-    write(colorize("[%s]" % (msg), INFO + BLUE) + " ")
+    write(colorize(f"[{msg}]", INFO + BLUE) + " ")
     flush()
 
 
@@ -291,10 +289,13 @@ def contest_group(
     return decorator
 
 
-def workgroup(formatter: str = "{}") -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
+def workgroup(
+    label_formatter: str,
+    msg: str | None = None,
+) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
     def decorator(func: Callable[_P, _T]) -> Callable[_P, _T]:
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
-            workgroup_header(formatter.format(*args, **kwargs))
+            workgroup_header(label_formatter.format(*args, **kwargs), msg)
             return func(*args, **kwargs)
 
         return wrapper
@@ -302,14 +303,26 @@ def workgroup(formatter: str = "{}") -> Callable[[Callable[_P, _T]], Callable[_P
     return decorator
 
 
+class HasName(Protocol):
+    @property
+    def name(self) -> str:
+        ...
+
+
+_THasName = TypeVar("_THasName", bound=HasName)
+
+
 def task(
     action: str,
-) -> Callable[[Callable[Concatenate[_S, _P], _T]], Callable[Concatenate[_S, _P], _T]]:
+) -> Callable[
+    [Callable[Concatenate[_THasName, _P], _T]],
+    Callable[Concatenate[_THasName, _P], _T],
+]:
     def decorator(
-        func: Callable[Concatenate[_S, _P], _T],
-    ) -> Callable[Concatenate[_S, _P], _T]:
-        def wrapper(self: _S, *args: _P.args, **kwargs: _P.kwargs) -> _T:
-            task_header(str(self), action)
+        func: Callable[Concatenate[_THasName, _P], _T],
+    ) -> Callable[Concatenate[_THasName, _P], _T]:
+        def wrapper(self: _THasName, *args: _P.args, **kwargs: _P.kwargs) -> _T:
+            task_header(self.name, action)
             return func(self, *args, **kwargs)
 
         return wrapper

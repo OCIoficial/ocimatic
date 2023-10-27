@@ -143,7 +143,7 @@ class Subtask:
     def __str__(self) -> str:
         return str(self._dir.name)
 
-    @ui.workgroup()
+    @ui.workgroup("{0}")
     def run(self) -> None:
         shutil.rmtree(self._dir, ignore_errors=True)
         self._dir.mkdir(parents=True, exist_ok=True)

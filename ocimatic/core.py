@@ -125,7 +125,7 @@ class Contest:
             task.statement.build(blank_page=blank_page)
         self.merge_pdfs("twoside.pdf")
 
-    @ui.contest_group("Building archive")
+    @ui.contest_group("Creating archive")
     def archive(self) -> None:
         """Package statements and datasets of all tasks into a single zip file."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -243,7 +243,7 @@ class Task:
     def codename(self) -> str:
         return self._directory.name
 
-    @ui.task("Building package")
+    @ui.workgroup("{0}", "Copy to archive")
     def copy_to(self, directory: Path) -> bool:
         new_dir = Path(directory, self.codename)
         new_dir.mkdir()

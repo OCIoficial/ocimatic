@@ -254,7 +254,7 @@ def score_params(cli: CLI) -> None:
         task.score()
 
 
-single_task = cloup.option("--task", "task_name", type=click.Path())
+single_task = cloup.option("--task", "task_name")
 
 
 @cloup.command(
