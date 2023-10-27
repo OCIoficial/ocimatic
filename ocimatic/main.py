@@ -5,7 +5,6 @@ from pathlib import Path
 import click
 import cloup
 
-import ocimatic
 from ocimatic import core, server, ui
 
 
@@ -24,9 +23,11 @@ class CLI:
         self.contest.new_task(name)
         ui.show_message("Info", f"Task [{name}] created", ui.OK)
 
-    def select_task(self) -> core.Task:
+    def select_task(self, name: str | None) -> core.Task:
         task = None
-        if self.last_dir:
+        if name is not None:
+            task = self.contest.find_task(name)
+        elif self.last_dir:
             task = self.contest.find_task(self.last_dir.name)
         if not task:
             ui.fatal_error("You have to be inside a task to run this command.")
@@ -253,7 +254,11 @@ def score_params(cli: CLI) -> None:
         task.score()
 
 
+single_task = cloup.option("--task", "task_name", type=click.Path())
+
+
 @cloup.command(
+    "run",
     short_help="Run a solution.",
     help="Run a solution against all test data and displays the output of the checker and running time.",
 )
@@ -262,22 +267,29 @@ def score_params(cli: CLI) -> None:
     help="A path to a solution. " + SOLUTION_HELP,
     type=click.Path(),
 )
+@single_task
 @cloup.option("--timeout", default=3.0)
 @cloup.pass_obj
-def run(cli: CLI, solution: str, timeout: float) -> None:
-    task = cli.select_task()
+def run_solution(
+    cli: CLI,
+    solution: str,
+    task_name: str | None,
+    timeout: float,
+) -> None:
+    task = cli.select_task(task_name)
     task.run_solution(Path(solution), timeout)
 
 
 @cloup.command(help="Build a solution.")
+@single_task
 @cloup.argument(
     "solution",
     help="A path to a solution. " + SOLUTION_HELP,
     type=click.Path(),
 )
 @cloup.pass_obj
-def build(cli: CLI, solution: str) -> None:
-    task = cli.select_task()
+def build(cli: CLI, solution: str, task_name: str | None) -> None:
+    task = cli.select_task(task_name)
     task.build_solution(Path(solution))
 
 
@@ -308,7 +320,7 @@ SECTIONS = [
     cloup.Section(
         "Single-task commands",
         [
-            run,
+            run_solution,
             build,
         ],
     ),

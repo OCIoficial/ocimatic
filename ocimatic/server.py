@@ -31,28 +31,28 @@ def upload_folder() -> Path:
     return UPLOAD_FOLDER
 
 
-def save_file(uploaded_file: FileStorage) -> Path:
-    dst_dir = upload_folder()
-    filename = secure_filename(uploaded_file.filename or "file")
-    filepath = Path(dst_dir, filename)
-    uploaded_file.save(str(Path(dst_dir, filename)))
-    return filepath
+# def save_file(uploaded_file: FileStorage) -> Path:
+#     dst_dir = upload_folder()
+#     filename = secure_filename(uploaded_file.filename or "file")
+#     filepath = Path(dst_dir, filename)
+#     uploaded_file.save(str(Path(dst_dir, filename)))
+#     return filepath
 
 
-def upload_solution() -> Path | None:
-    solution_text = request.form.get("solutionText")
-    if solution_text:
-        ext = request.form.get("lang")
-        dst_dir = upload_folder()
-        filepath = Path(dst_dir, f"solution.{ext}")
-        with filepath.open("w") as f:
-            f.write(solution_text)
-        return filepath
+# def upload_solution() -> Path | None:
+#     solution_text = request.form.get("solutionText")
+#     if solution_text:
+#         ext = request.form.get("lang")
+#         dst_dir = upload_folder()
+#         filepath = Path(dst_dir, f"solution.{ext}")
+#         with filepath.open("w") as f:
+#             f.write(solution_text)
+#         return filepath
 
-    uploaded_file = cast(FileStorage, request.files.get("solutionFile"))
-    if not uploaded_file or uploaded_file.filename == "":
-        return None
-    return save_file(uploaded_file)
+#     uploaded_file = cast(FileStorage, request.files.get("solutionFile"))
+#     if not uploaded_file or uploaded_file.filename == "":
+#         return None
+#     return save_file(uploaded_file)
 
 
 @app.route("/", methods=["POST", "GET"])
@@ -73,7 +73,6 @@ def save_solution(content: str, suffix: str) -> Path:
 def submit() -> Response | str:
     assert contest
     data = request.get_json()
-    print(data)
     filepath = save_solution(data["solution"], data["lang"])
     if not filepath:
         return "Unable to upload solution"
