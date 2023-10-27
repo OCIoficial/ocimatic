@@ -8,7 +8,6 @@ from flask import Flask, Response, render_template, request
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
-import ocimatic
 from ocimatic import core
 
 
@@ -107,8 +106,7 @@ def submit() -> Response | str:
 
 
 def run(port: int = 9999) -> None:
-    global contest  # pylint: disable=global-statement
+    global contest
     contest_dir = core.find_contest_root()[0]
     contest = core.Contest(contest_dir)
-    ocimatic.config["verbosity"] = 2
     app.run(port=port, debug=True)

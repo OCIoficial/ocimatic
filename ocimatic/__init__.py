@@ -11,8 +11,7 @@ from typing import TypedDict
 
 class Config(TypedDict):
     last_blank_page: bool
-    verbosity: int
     contest_root: Path
 
 
-config: Config = {"last_blank_page": True, "verbosity": 1, "contest_root": Path("/")}
+config: Config = {"last_blank_page": True, "contest_root": Path("/")}

@@ -84,7 +84,6 @@ def run_server(port: int) -> None:
 @cloup.command(help="Generate problemset pdf.")
 @cloup.pass_obj
 def problemset(cli: CLI) -> None:
-    ocimatic.config["verbosity"] = 2
     cli.contest.build_problemset()
 
 
@@ -94,7 +93,6 @@ def problemset(cli: CLI) -> None:
 )
 @cloup.pass_obj
 def archive(cli: CLI) -> None:
-    ocimatic.config["verbosity"] = 2
     cli.contest.archive()
 
 
@@ -109,7 +107,6 @@ def _validate_task_name(ctx: click.Context, param: click.Argument, value: str) -
 @cloup.argument("name", help="Name of the task.", callback=_validate_task_name)
 @cloup.pass_obj
 def new_task(cli: CLI, name: str) -> None:
-    ocimatic.config["verbosity"] = 2
     cli.new_task(name)
 
 
@@ -121,7 +118,7 @@ def new_task(cli: CLI, name: str) -> None:
 )
 @cloup.pass_obj
 def check_dataset(cli: CLI) -> None:
-    ocimatic.config["verbosity"] = 0
+    ui.set_verbosity(ui.Verbosity.quiet)
     tasks = cli.select_tasks()
     failed = [task for task in tasks if not task.check_dataset()]
     if len(tasks) > 1:
@@ -171,7 +168,8 @@ def check_dataset(cli: CLI) -> None:
 @cloup.pass_obj
 def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa: FBT001
     tasks = cli.select_tasks()
-    ocimatic.config["verbosity"] = 0 if len(tasks) > 1 else 2
+    if len(tasks) > 1:
+        ui.set_verbosity(ui.Verbosity.quiet)
 
     if solution is not None and len(tasks) > 1:
         ui.fatal_error(
@@ -187,7 +185,6 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa:
 @cloup.pass_obj
 def build_statement(cli: CLI) -> None:
     tasks = cli.select_tasks()
-    ocimatic.config["verbosity"] = 2
 
     for task in tasks:
         task.build_statement()
@@ -204,7 +201,6 @@ def build_statement(cli: CLI) -> None:
 @cloup.pass_obj
 def compress_dataset(cli: CLI, random_sort: bool) -> None:  # noqa: FBT001
     tasks = cli.select_tasks()
-    ocimatic.config["verbosity"] = 2
 
     for task in tasks:
         task.compress_dataset(random_sort=random_sort)
@@ -214,7 +210,6 @@ def compress_dataset(cli: CLI, random_sort: bool) -> None:  # noqa: FBT001
 @cloup.pass_obj
 def normalize(cli: CLI) -> None:
     tasks = cli.select_tasks()
-    ocimatic.config["verbosity"] = 2
 
     for task in tasks:
         task.normalize()
@@ -225,7 +220,8 @@ def normalize(cli: CLI) -> None:
 @cloup.pass_obj
 def run_testplan(cli: CLI, subtask: int | None) -> None:
     tasks = cli.select_tasks()
-    ocimatic.config["verbosity"] = 0 if len(tasks) > 1 else 2
+    if len(tasks) > 1:
+        ui.set_verbosity(ui.Verbosity.quiet)
 
     if subtask is not None and len(tasks) > 1:
         ui.fatal_error(
@@ -241,7 +237,8 @@ def run_testplan(cli: CLI, subtask: int | None) -> None:
 @cloup.pass_obj
 def validate_input(cli: CLI, subtask: int | None) -> None:
     tasks = cli.select_tasks()
-    ocimatic.config["verbosity"] = 0 if len(tasks) > 1 else 2
+    if len(tasks) > 1:
+        ui.set_verbosity(ui.Verbosity.quiet)
 
     for task in tasks:
         task.validate_input(subtask=subtask)
@@ -251,7 +248,6 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
 @cloup.pass_obj
 def score_params(cli: CLI) -> None:
     tasks = cli.select_tasks()
-    ocimatic.config["verbosity"] = 2
 
     for task in tasks:
         task.score()

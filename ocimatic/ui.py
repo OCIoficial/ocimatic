@@ -17,8 +17,6 @@ from typing import (
 
 from colorama import Fore, Style
 
-import ocimatic
-
 _P = ParamSpec("_P")
 _S = TypeVar("_S")
 _T = TypeVar("_T")
@@ -36,6 +34,19 @@ OK = BOLD + GREEN
 
 WARNING = BOLD + YELLOW
 ERROR = BOLD + RED
+
+
+class Verbosity(Enum):
+    quiet = 0
+    verbose = 2
+
+
+_VERBOSITY = Verbosity.verbose
+
+
+def set_verbosity(verbosity: Verbosity) -> None:
+    global _VERBOSITY
+    _VERBOSITY = verbosity
 
 
 def colorize(text: str, color: str) -> str:
@@ -148,9 +159,9 @@ def workgroup_header(msg: str, length: int = 35) -> None:
     """Print header for a generic group of works."""
     writeln()
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
-    color = INFO if ocimatic.config["verbosity"] > 0 else RESET
+    color = INFO if _VERBOSITY is Verbosity.verbose else RESET
     write(colorize("[%s]" % (msg), color))
-    if ocimatic.config["verbosity"] > 0:
+    if _VERBOSITY is Verbosity.verbose:
         writeln()
     else:
         write(" ")
@@ -224,7 +235,7 @@ def work(
 
 
 def start_work(action: str, msg: str, length: int = 80) -> None:
-    if ocimatic.config["verbosity"] == 0:
+    if _VERBOSITY is Verbosity.quiet:
         return
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
     msg = " * [" + action + "] " + msg + "  "
@@ -243,12 +254,12 @@ def end_work(result: WorkResult) -> None:
         case Status.fail:
             char = "x"
             color = ERROR
-    if ocimatic.config["verbosity"] > 0:
+    if _VERBOSITY is Verbosity.verbose:
         write(colorize(str(result.short_msg), color))
         writeln()
     else:
         write(colorize(char, color))
-    if result.long_msg and ocimatic.config["verbosity"] > 1:
+    if result.long_msg and _VERBOSITY is Verbosity.verbose:
         long_msg = result.long_msg.strip()
         long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))
         write(long_msg)
