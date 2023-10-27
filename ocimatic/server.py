@@ -1,12 +1,9 @@
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
-from typing import cast
 
 from ansi2html import Ansi2HTMLConverter
 from flask import Flask, Response, render_template, request
-from werkzeug.datastructures import FileStorage
-from werkzeug.utils import secure_filename
 
 from ocimatic import core
 
@@ -31,30 +28,6 @@ def upload_folder() -> Path:
     return UPLOAD_FOLDER
 
 
-# def save_file(uploaded_file: FileStorage) -> Path:
-#     dst_dir = upload_folder()
-#     filename = secure_filename(uploaded_file.filename or "file")
-#     filepath = Path(dst_dir, filename)
-#     uploaded_file.save(str(Path(dst_dir, filename)))
-#     return filepath
-
-
-# def upload_solution() -> Path | None:
-#     solution_text = request.form.get("solutionText")
-#     if solution_text:
-#         ext = request.form.get("lang")
-#         dst_dir = upload_folder()
-#         filepath = Path(dst_dir, f"solution.{ext}")
-#         with filepath.open("w") as f:
-#             f.write(solution_text)
-#         return filepath
-
-#     uploaded_file = cast(FileStorage, request.files.get("solutionFile"))
-#     if not uploaded_file or uploaded_file.filename == "":
-#         return None
-#     return save_file(uploaded_file)
-
-
 @app.route("/", methods=["POST", "GET"])
 def server() -> str:
     assert contest
@@ -62,8 +35,7 @@ def server() -> str:
 
 
 def save_solution(content: str, suffix: str) -> Path:
-    dst_dir = upload_folder()
-    filepath = Path(dst_dir, f"solution.{suffix}")
+    filepath = Path(UPLOAD_FOLDER, f"solution.{suffix}")
     with filepath.open("w") as f:
         f.write(content)
     return filepath
@@ -73,17 +45,12 @@ def save_solution(content: str, suffix: str) -> Path:
 def submit() -> Response | str:
     assert contest
     data = request.get_json()
-    filepath = save_solution(data["solution"], data["lang"])
-    if not filepath:
-        return "Unable to upload solution"
 
     task = contest.find_task(data["task"])
     if not task:
         return "Task not found"
 
-    solution = task.load_solution_from_path(filepath)
-    if not solution:
-        return "Invalid solution"
+    filepath = save_solution(data["solution"], data["lang"])
 
     ocimatic_path = Path(Path(__file__).parents[1], "bin", "ocimatic").resolve()
     cmd: list[Path | str] = [
