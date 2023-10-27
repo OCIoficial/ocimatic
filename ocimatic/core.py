@@ -125,21 +125,27 @@ class Contest:
             task.statement.build(blank_page=blank_page)
         self.merge_pdfs("twoside.pdf")
 
-    @ui.contest_group("Building package")
-    def package(self) -> None:
+    @ui.contest_group("Building archive")
+    def archive(self) -> None:
         """Package statements and datasets of all tasks into a single zip file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             for task in self._tasks:
-                task.copy_to(Path(tmpdir))
+                if not task.copy_to(Path(tmpdir)):
+                    ui.writeln()
+                    ui.show_message(
+                        "Error",
+                        f"Couldn't copy task {task.name} to archive.",
+                        ui.ERROR,
+                    )
+                    return
 
             self.build_problemset_twoside()
-            self.build_problemset_oneside()
             oneside = Path(self._directory, "oneside.pdf")
-            if oneside.exists():
-                shutil.copy2(oneside, Path(tmpdir, "oneside.pdf"))
+            shutil.copy2(oneside, Path(tmpdir, "oneside.pdf"))
+
+            self.build_problemset_oneside()
             twoside = Path(self._directory, "twoside.pdf")
-            if twoside.exists():
-                shutil.copy2(twoside, Path(tmpdir, "twoside.pdf"))
+            shutil.copy2(twoside, Path(tmpdir, "twoside.pdf"))
 
             shutil.make_archive(self.name, "zip", tmpdir)
 
@@ -238,21 +244,25 @@ class Task:
         return self._directory.name
 
     @ui.task("Building package")
-    def copy_to(self, directory: Path) -> None:
+    def copy_to(self, directory: Path) -> bool:
         new_dir = Path(directory, self.codename)
         new_dir.mkdir()
 
         result = self._dataset.compress(random_sort=False)
-        if result.status is ui.Status.success:
-            dataset = Path(self._directory, "dataset", "data.zip")
-            dataset_dst = Path(new_dir, "data.zip")
-            if dataset.exists():
-                shutil.copy2(dataset, dataset_dst)
+        if result.status is ui.Status.fail:
+            return False
+
+        dataset = Path(self._directory, "dataset", "data.zip")
+        dataset_dst = Path(new_dir, "data.zip")
+        shutil.copy2(dataset, dataset_dst)
 
         result = self.statement.build(blank_page=False)
-        if result.status is ui.Status.success:
-            statement = Path(new_dir, "statement.pdf")
-            shutil.copy2(Path(self._directory, "statement", "statement.pdf"), statement)
+        if result.status is ui.Status.fail:
+            return False
+
+        statement = Path(new_dir, "statement.pdf")
+        shutil.copy2(Path(self._directory, "statement", "statement.pdf"), statement)
+        return True
 
     @ui.task("Generating dataset input files")
     def run_testplan(self, subtask: int | None) -> None:
@@ -295,7 +305,7 @@ class Task:
                 return sol
         return None
 
-    @ui.task("Validating dataset input files")
+    @ui.task("Validating input files")
     def validate_input(self, subtask: int | None) -> None:
         testplan = Testplan(
             Path(self._directory, "attic"),
@@ -347,7 +357,7 @@ class Task:
         self._dataset.normalize()
 
     @ui.task("Running solution")
-    def run_solution(self, solution: Path, timeout: float | None) -> None:
+    def run_solution(self, solution: Path, timeout: float) -> None:
         """Run all solutions reporting outcome and running time."""
         sol = self.load_solution_from_path(solution)
         if not sol:
@@ -429,7 +439,7 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
 
         # Run correct solutions
         ui.writeln()
-        ui.writeln("[Running correct solutions]", ui.INFO)
+        ui.writeln("Running correct solutions", ui.INFO)
         failed: list[Solution] = []
         for sol in self._correct:
             results = sol.run(self._dataset, self._checker, RunMode.check_correct, None)
@@ -469,10 +479,9 @@ Solutions with issues:
         assert timeout is not None
 
         ui.writeln()
-        ui.writeln(
-            f"[Running partial solutions with timeout set to {timeout:.1f}s ({stats.print_limit_calculation()})]",
-            ui.INFO,
-        )
+        ui.writeln("Running partial solutions", ui.INFO)
+        ui.writeln()
+        ui.writeln(f"Timeout set to {timeout:.1f}s ({stats.print_limit_calculation()})")
         if not self._partial:
             ui.writeln()
             ui.writeln("No partial solutions", ui.WARNING)
@@ -507,7 +516,7 @@ Solutions with issues:
         ui.writeln()
         ui.writeln(
             "All partial solutions passed/failed the subtasks they were supposed to.",
-            color=ui.OK,
+            ui.OK,
         )
         return True
 
@@ -633,6 +642,6 @@ class Statement:
 
 
 def write_stats(stats: RuntimeStats) -> None:
-    ui.writeln("Running time", ui.INFO)
-    ui.writeln(f"  Max: {stats.max:.3f}s", ui.INFO)
-    ui.writeln(f"  Min: {stats.min:.3f}s", ui.INFO)
+    ui.writeln("Running time")
+    ui.writeln(f"  Max: {stats.max:.3f}s")
+    ui.writeln(f"  Min: {stats.min:.3f}s")

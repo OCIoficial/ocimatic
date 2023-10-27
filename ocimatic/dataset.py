@@ -500,8 +500,8 @@ class Dataset:
 
         The basename of the corresponding subtask subdirectory is prepended to each file.
         """
+        self._directory.mkdir(parents=True, exist_ok=True)
         path = Path(self._directory, "data.zip")
-
         with ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zip:
             compressed = 0
             for subtask in self._subtasks:
@@ -525,5 +525,4 @@ class Dataset:
             for test in st.tests():
                 if not test.has_expected():
                     return False
-        return True
         return True

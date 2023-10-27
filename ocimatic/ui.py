@@ -30,6 +30,7 @@ GREEN = Fore.GREEN
 YELLOW = Fore.YELLOW
 BLUE = Fore.BLUE
 MAGENTA = Fore.MAGENTA
+CYAN = Fore.CYAN
 INFO = BOLD
 OK = BOLD + GREEN
 
@@ -138,7 +139,7 @@ def writeln(text: str = "", color: str = RESET) -> None:
 def task_header(name: str, msg: str) -> None:
     """Print header for task."""
     write("\n\n")
-    write(colorize(f"[{name}] {msg}", BOLD + YELLOW))
+    write(colorize(f"[{name}] {msg}", BOLD + Fore.MAGENTA))
     writeln()
     flush()
 
@@ -147,7 +148,8 @@ def workgroup_header(msg: str, length: int = 35) -> None:
     """Print header for a generic group of works."""
     writeln()
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
-    write(colorize("[%s]" % (msg), INFO))
+    color = INFO if ocimatic.config["verbosity"] > 0 else RESET
+    write(colorize("[%s]" % (msg), color))
     if ocimatic.config["verbosity"] > 0:
         writeln()
     else:
@@ -226,7 +228,7 @@ def start_work(action: str, msg: str, length: int = 80) -> None:
         return
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
     msg = " * [" + action + "] " + msg + "  "
-    write(colorize(msg, MAGENTA))
+    write(colorize(msg, CYAN))
     flush()
 
 
