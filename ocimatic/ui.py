@@ -40,16 +40,17 @@ class Verbosity(Enum):
     verbose = 2
 
 
-_VERBOSITY = Verbosity.verbose
+_verbosity = Verbosity.verbose
 
 
 def set_verbosity(verbosity: Verbosity) -> None:
-    global _VERBOSITY
-    _VERBOSITY = verbosity
+    global _verbosity
+    _verbosity = verbosity
 
 
 def colorize(text: str, color: str) -> str:
-    return cast(str, color + text + RESET)
+    # pyright doesn't like the cast here, but it's needed by mypy
+    return cast(str, color + text + RESET)  # pyright: ignore [reportUnnecessaryCast]
 
 
 def bold(text: str) -> str:
@@ -157,9 +158,9 @@ def task_header(name: str, msg: str) -> None:
 def workgroup_header(label: str, msg: str | None) -> None:
     """Print header for a generic group of works."""
     writeln()
-    color = INFO if _VERBOSITY is Verbosity.verbose else RESET
+    color = INFO if _verbosity is Verbosity.verbose else RESET
     write(colorize(f"[{label}]", color))
-    if _VERBOSITY is Verbosity.verbose:
+    if _verbosity is Verbosity.verbose:
         if msg:
             write(colorize(f" {msg}", color))
         writeln()
@@ -233,7 +234,7 @@ def work(
 
 
 def start_work(action: str, msg: str, length: int = 80) -> None:
-    if _VERBOSITY is Verbosity.quiet:
+    if _verbosity is Verbosity.quiet:
         return
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
     msg = " * [" + action + "] " + msg + "  "
@@ -252,12 +253,12 @@ def end_work(result: WorkResult) -> None:
         case Status.fail:
             char = "x"
             color = ERROR
-    if _VERBOSITY is Verbosity.verbose:
+    if _verbosity is Verbosity.verbose:
         write(colorize(str(result.short_msg), color))
         writeln()
     else:
         write(colorize(char, color))
-    if result.long_msg and _VERBOSITY is Verbosity.verbose:
+    if result.long_msg and _verbosity is Verbosity.verbose:
         long_msg = result.long_msg.strip()
         long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))
         write(long_msg)

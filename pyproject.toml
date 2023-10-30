@@ -1,7 +1,7 @@
 [tool.pyright]
 pythonPlatform = "All"
 pythonVersion = "3.10"
-typeCheckingMode = "basic"
+typeCheckingMode = "strict"
 
 
 [tool.ruff]

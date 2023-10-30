@@ -174,7 +174,7 @@ class Contest:
             if titlepage.exists():
                 merger.append(titlepage)
 
-            merger.write(Path(self._directory, filename))
+            merger.write(Path(self._directory, filename))  # pyright: ignore [reportUnknownMemberType]
             merger.close()
             return ui.WorkResult.success(short_msg="OK")
         except Exception as exc:
