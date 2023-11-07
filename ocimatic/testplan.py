@@ -39,7 +39,7 @@ class Testplan:
     def run(self, stn: int | None) -> None:
         subtasks = self._parse_file()
         cwd = Path.cwd()
-        # Run generators with attic/ as the cwd
+        # Run generators with testplan/ as the cwd
         os.chdir(self._directory)
 
         for i, st in enumerate(subtasks, 1):

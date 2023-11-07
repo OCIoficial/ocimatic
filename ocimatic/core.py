@@ -342,7 +342,7 @@ class Task:
         if self._config.static_dataset:
             ui.fatal_error("Task has a static dataset.")
         testplan = Testplan(
-            Path(self._directory, "attic"),
+            Path(self._directory, "testplan"),
             self._directory,
             Path(self._directory, "dataset"),
         )
@@ -381,7 +381,7 @@ class Task:
     @ui.task("Validating input files")
     def validate_input(self, subtask: int | None) -> None:
         testplan = Testplan(
-            Path(self._directory, "attic"),
+            Path(self._directory, "testplan"),
             self._directory,
             Path(self._directory, "dataset"),
         )
