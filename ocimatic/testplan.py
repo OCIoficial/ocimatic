@@ -85,6 +85,7 @@ class Testplan:
                         )
                     st += 1
                     subtasks[st] = Subtask(self._dataset_dir, st, validator)
+                    tests_in_group = Counter()
                 elif cmd_match:
                     if st == 0:
                         ui.fatal_error(
