@@ -18,12 +18,12 @@
 # for tasks where the input consist of a single line to quickly generate test cases manually.
 
 # `script`: A generator script is a file in either python (extension `.py`) or c++ (extension `.cpp`).
-# The file should be placed in `attic/` next to this file. When processing the testplan ocimatic will
+# The file should be placed in `attic/` next to this file. When processing the testplan, ocimatic will
 # run the script with the provided arguments (sys.argv or **argv). The script should then write
 # to the standard output.
 # Generator scripts typically use randomness. To ensure each execution of the testplan generates the
-# same results a script should set the random seed to a fixed value. To this end, ocimatic passes an
-# additional (hidden) argument to each invocation which is guaranteed to be different each time.
+# same results, a script should set the random seed to a fixed value. To this end, ocimatic passes an
+# additional (hidden) argument to each invocation which is guaranteed to be different for each invocation.
 # The generator should use this extra argument to generate the random seed. The extra argument is
 # passed as the first argument meaning that the rest of the arguments are "shifted" in one position.
 

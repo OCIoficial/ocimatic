@@ -4,9 +4,8 @@ import shlex
 import shutil
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Sequence
 from pathlib import Path
-from typing import NoReturn
+from typing import Literal, NoReturn
 
 import ocimatic
 from ocimatic import ui
@@ -127,9 +126,9 @@ class Testplan:
         elif cmd == "echo":
             return Echo(group, idx, args)
         elif Path(cmd).suffix == ".py":
-            return Script(group, idx, PythonSource(Path(self._directory, cmd)), args)
+            return Script(group, idx, Path(self._directory, cmd), "py", args)
         elif Path(cmd).suffix == ".cpp":
-            return Script(group, idx, CppSource(Path(self._directory, cmd)), args)
+            return Script(group, idx, Path(self._directory, cmd), "cpp", args)
         else:
             _invalid_command(cmd, lineno)
 
@@ -201,27 +200,32 @@ class Echo(Command):
 
 
 class Script(Command):
-    VALID_EXTENSIONS: Sequence[str] = ["py", "cpp"]
+    VALID_EXTENSIONS = Literal["py", "cpp"]
 
     def __init__(
         self,
         group: str,
         idx: int,
-        script: SourceCode,
+        path: Path,
+        ext: VALID_EXTENSIONS,
         args: list[str],
     ) -> None:
         super().__init__(group, idx)
         self._args = args
-        self._script = script
+        self._script_path = path
+        self._ext = ext
 
     def __str__(self) -> str:
         args = " ".join(self._args)
-        script = Path(self._script.name).name
+        script = self._script_path.name
         return f"{self._group} ; {script} {args}"
 
     @ui.work("Gen", "{0}")
     def run(self, dst_dir: Path) -> WorkResult:
-        build_result = self._script.build()
+        script = self._load_script()
+        if not script:
+            return WorkResult.fail(short_msg="Script file not found")
+        build_result = script.build()
         if isinstance(build_result, BuildError):
             return WorkResult.fail(
                 short_msg="Failed to build generator",
@@ -237,14 +241,25 @@ class Script(Command):
             case RunError(msg, stderr):
                 return WorkResult.fail(short_msg=msg, long_msg=stderr)
 
+    def _load_script(self) -> SourceCode | None:
+        if not self._script_path.exists():
+            return None
+        if self._ext == "py":
+            return PythonSource(self._script_path)
+        elif self._ext == "cpp":
+            return CppSource(self._script_path)
+
     def _seed_arg(self, directory: Path) -> str:
         return f"{directory.name}-{self._group}-{self._idx}"
 
 
 def _invalid_command(cmd: str, lineno: int) -> NoReturn:
+    from typing import get_args
+
+    extensions = get_args(Script.VALID_EXTENSIONS)
     ui.fatal_error(
         f"line {lineno}: invalid command `{cmd}`\n"
-        f"The command should be either `copy`, `echo` or a generator with one of the following extensions `{Script.VALID_EXTENSIONS}`",
+        f"The command should be either `copy`, `echo` or a generator with one of the following extensions {extensions}",
     )
 
 
