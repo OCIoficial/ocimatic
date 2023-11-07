@@ -1,0 +1,3 @@
+[contest]
+# The phase is printed in the final pdf. This is typically either `Final` or `Regional`.
+phase = ""

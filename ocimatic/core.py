@@ -1,27 +1,24 @@
 # coding=UTF-8
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, cast
 
 import pypdf
+import tomlkit
 
 import ocimatic
-from ocimatic import pjson, ui
+from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
 from ocimatic.solutions import Solution
 from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
 from ocimatic.testplan import Testplan
-
-
-class ContestConfig(TypedDict, total=False):
-    phase: str
 
 
 def find_contest_root() -> tuple[Path, Path | None]:
@@ -34,13 +31,40 @@ def find_contest_root() -> tuple[Path, Path | None]:
     """
     last_dir = None
     curr_dir = Path.cwd()
-    while not Path(curr_dir, ".ocimatic_contest").exists():
+    while not Path(curr_dir, ContestConfig.FILE_NAME).exists():
         last_dir = curr_dir
         curr_dir = curr_dir.parent
         if curr_dir.samefile(last_dir):
             ui.fatal_error("ocimatic was not called inside a contest.")
     ocimatic.config["contest_root"] = curr_dir
     return (curr_dir, last_dir)
+
+
+@dataclass(kw_only=True, frozen=True)
+class ContestConfig:
+    FILE_NAME = "contest.toml"
+
+    phase: str
+
+    @staticmethod
+    def init(contest_path: Path, phase: str) -> None:
+        config_path = Path(contest_path, ContestConfig.FILE_NAME)
+        with config_path.open("r+") as f:
+            config = cast(dict[Any, Any], tomlkit.load(f))
+            config["contest"]["phase"] = phase
+
+            f.seek(0)
+            tomlkit.dump(config, f)  # pyright: ignore [reportUnknownMemberType]
+            f.truncate()
+
+    @staticmethod
+    def load(contest_path: Path) -> ContestConfig:
+        config_path = Path(contest_path, ContestConfig.FILE_NAME)
+        with config_path.open() as f:
+            config = cast(dict[Any, Any], tomlkit.load(f))
+            contest_table = config.get("contest", {})
+            phase = contest_table.get("phase", "")
+            return ContestConfig(phase=phase)
 
 
 class Contest:
@@ -52,32 +76,28 @@ class Contest:
 
     def __init__(self, directory: Path) -> None:
         self._directory = directory
-        self._config = pjson.load(Path(directory, ".ocimatic_contest"))
-
+        self._config = ContestConfig.load(directory)
         self._init_tasks()
 
-        if "phase" in self._config:
-            os.environ["OCIMATIC_PHASE"] = self._config["phase"]
+        os.environ["OCIMATIC_PHASE"] = self._config.phase
 
         self._titlepage = LatexSource(Path(directory, "titlepage.tex"))
 
     def _init_tasks(self) -> None:
-        tasks = self._config.get("tasks", [])
-        n = len(tasks)
-        order = {t: i for i, t in enumerate(tasks)}
-        dirs = sorted(
-            (order.get(dir.name, n), dir)
-            for dir in self._directory.iterdir()
-            if Path(dir, ".ocimatic_task").exists()
-        )
-        self._tasks = [Task(d, i) for (i, (_, d)) in enumerate(dirs)]
+        tasks: list[tuple[TaskConfig, Path]] = []
+        for dir in self._directory.iterdir():
+            config = TaskConfig.load(dir)
+            if config:
+                tasks.append((config, dir))
+        tasks.sort()
+        self._tasks = [Task(d, config, i) for (i, (config, d)) in enumerate(tasks)]
 
     @property
     def directory(self) -> Path:
         return self._directory
 
     @staticmethod
-    def create_layout(dest: Path, config: ContestConfig) -> None:
+    def create_layout(dest: Path, phase: str | None) -> None:
         """Copy contest skeleton to `dest` and save configuration."""
         ocimatic_dir = Path(__file__).parent
         contest_skel = Path(ocimatic_dir, "resources", "contest-skel")
@@ -87,13 +107,12 @@ class Contest:
             ignore=shutil.ignore_patterns("auto"),
             symlinks=True,
         )
-        with Path(dest, ".ocimatic_contest").open("w") as config_file:
-            json.dump(config, config_file, indent=4)
+        if phase is not None:
+            ContestConfig.init(dest, phase)
 
     def new_task(self, name: str) -> None:
         task_dir = Path(self._directory, name)
         Task.create_layout(task_dir)
-        self._config.setdefault("tasks", []).append(name)
 
     @property
     def tasks(self) -> list[Task]:
@@ -193,25 +212,81 @@ class Contest:
         return next((p for p in self._tasks if p.name == name), None)
 
 
+@dataclass(kw_only=True, frozen=True)
+class TaskConfig:
+    FILE_NAME = "task.toml"
+
+    codename: str
+    priority: int
+    static_dataset: bool
+
+    @staticmethod
+    def init(task_path: Path) -> None:
+        config_path = Path(task_path, TaskConfig.FILE_NAME)
+        with config_path.open("r+") as f:
+            config = cast(dict[Any, Any], tomlkit.load(f))
+            config["task"]["codename"] = task_path.name
+
+            f.seek(0)
+            tomlkit.dump(config, f)  # pyright: ignore [reportUnknownMemberType]
+            f.truncate()
+
+    @staticmethod
+    def load(task_path: Path) -> TaskConfig | None:
+        config_path = Path(task_path, TaskConfig.FILE_NAME)
+        if not config_path.exists():
+            return None
+
+        with config_path.open() as f:
+            config = cast(dict[Any, Any], tomlkit.load(f))
+            task_table = config.get("task", {})
+            codename = task_table.get("codename", task_path.name)
+            priority = task_table.get("priority", 0)
+
+            dataset_table = config.get("dataset", {})
+            static_dataset = dataset_table.get("static", False)
+            return TaskConfig(
+                codename=codename,
+                priority=priority,
+                static_dataset=static_dataset,
+            )
+
+    def __lt__(self, other: TaskConfig) -> bool:
+        return (self.priority, self.codename) < (other.priority, other.codename)
+
+
 class Task:
     """Represent a task.
 
-    A task consists of a statement, a list of correct and partial solutions
+    A task consists of a statement, a list of correct and partial solutions,
     and a dataset. A task is associated to a directory in the filesystem.
     """
 
     @staticmethod
     def create_layout(task_path: Path) -> None:
         ocimatic_dir = Path(__file__).parent
-        skel = Path(ocimatic_dir, "resources", "task-skel")
-        shutil.copytree(skel, task_path, symlinks=True)
 
-    def __init__(self, directory: Path, num: int) -> None:
+        # Copy task skeleton
+        task_skel = Path(ocimatic_dir, "resources", "task-skel")
+        shutil.copytree(task_skel, task_path, symlinks=True)
+
+        # Init config
+        TaskConfig.init(task_path)
+
+        # We put oci.cls and logo.eps in the statement directory to make it easier to work on the
+        # pdf without using ocimatic.
+        contest_skel = Path(ocimatic_dir, "resources", "contest-skel")
+        statement_path = Path(task_path, "statement")
+        shutil.copy(Path(contest_skel, "oci.cls"), Path(statement_path, "oci.cls"))
+        shutil.copy(Path(contest_skel, "logo.eps"), Path(statement_path, "logo.eps"))
+
+    def __init__(self, directory: Path, config: TaskConfig, num: int) -> None:
         self._directory = directory
+        self._config = config
 
         self._managers_dir = Path(directory, "managers")
 
-        self._config = pjson.load(Path(directory, ".ocimatic_task"))
+        self._checker = Checker.find_in_directory(self._managers_dir)
 
         correct_dir = Path(directory, "solutions", "correct")
         self._correct = Solution.load_solutions_in_dir(
@@ -226,8 +301,6 @@ class Task:
             self._managers_dir,
         )
 
-        self._checker = Checker.find_in_directory(self._managers_dir)
-
         self._statement = Statement(
             Path(directory, "statement"),
             num=num,
@@ -241,7 +314,7 @@ class Task:
 
     @property
     def codename(self) -> str:
-        return self._directory.name
+        return self._config.codename
 
     @ui.workgroup("{0}", "Copy to archive")
     def copy_to(self, directory: Path) -> bool:
@@ -266,7 +339,7 @@ class Task:
 
     @ui.task("Generating dataset input files")
     def run_testplan(self, subtask: int | None) -> None:
-        if self._config.get("static_dataset", False):
+        if self._config.static_dataset:
             ui.fatal_error("Task has a static dataset.")
         testplan = Testplan(
             Path(self._directory, "attic"),
@@ -541,7 +614,7 @@ Solutions with issues:
         not `None` use it to generate the expected output, otherwise use any correct one
         prioritizing C++ solutions.
         """
-        if self._config.get("static_dataset", False):
+        if self._config.static_dataset:
             ui.show_message("Skipping", "Task has a static dataset.", ui.WARNING)
             return
         if not self._correct:

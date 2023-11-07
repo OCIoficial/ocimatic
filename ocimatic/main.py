@@ -56,15 +56,11 @@ SOLUTION_HELP = (
 @cloup.argument("path", help="Path to directory.")
 @cloup.option("--phase")
 def init(path: str, phase: str | None) -> None:
-    contest_config: core.ContestConfig = {}
-    if phase:
-        contest_config["phase"] = phase
-
     try:
         contest_path = Path(Path.cwd(), path)
         if contest_path.exists():
             ui.fatal_error("Couldn't create contest. Path already exists")
-        core.Contest.create_layout(contest_path, contest_config)
+        core.Contest.create_layout(contest_path, phase)
         ui.show_message("Info", f"Contest [{path}] created", ui.OK)
     except Exception as exc:  # pylint: disable=broad-except
         ui.fatal_error("Couldn't create contest: %s." % exc)
