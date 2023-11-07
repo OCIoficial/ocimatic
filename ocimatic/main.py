@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import click
 import cloup
+from cloup.constraints import mutually_exclusive
 
 from ocimatic import core, server, ui
 
@@ -45,8 +47,8 @@ class CLI:
 
 SOLUTION_HELP = (
     "If the path is absolute, load solution directly from the path. "
-    "If the path is relative, try finding the solution relative to the following locations, "
-    "in order, until a match is found or we fail to find one: <task>/solutions/correct, "
+    "If the path is relative, try finding the solution relative to the following locations "
+    "until a match is found (or we fail to find one): <task>/solutions/correct, "
     "<task>/solutions/partial, <task>/solutions/, <task>, and <cwd>. "
     "Here <task> refers to the path of the current task and <cwd> to the current working directory."
 )
@@ -149,10 +151,11 @@ def check_dataset(cli: CLI) -> None:
     "By default it will choose any correct solution preferring solutions "
     "written in C++.",
 )
-@cloup.argument(
-    "solution",
+@cloup.option(
+    "--solution",
     required=False,
     help="A path to a solution. If specified, generate expected output running that solution. "
+    "This option can only be used when running the command on a single task. "
     + SOLUTION_HELP,
     type=click.Path(),
 )
@@ -212,7 +215,7 @@ def normalize(cli: CLI) -> None:
         task.normalize()
 
 
-@cloup.command(help="Run testplan.")
+@cloup.command(help="Run the testplan.")
 @cloup.option("--subtask", "-st", type=int, help="Only run testplan for this subtask.")
 @cloup.pass_obj
 def run_testplan(cli: CLI, subtask: int | None) -> None:
@@ -250,13 +253,17 @@ def score_params(cli: CLI) -> None:
         task.score()
 
 
-single_task = cloup.option("--task", "task_name")
+single_task = cloup.option(
+    "--task",
+    "task_name",
+    help="Force command to run on the specified task instead of the one in the current directory.",
+)
 
 
 @cloup.command(
     "run",
     short_help="Run a solution.",
-    help="Run a solution against all test data and displays the output of the checker and running time.",
+    help="Run a solution against all test data and display the output of the checker and running time.",
 )
 @cloup.argument(
     "solution",
@@ -264,16 +271,37 @@ single_task = cloup.option("--task", "task_name")
     type=click.Path(),
 )
 @single_task
+@cloup.option(
+    "--subtask",
+    "-st",
+    type=int,
+    help="Only run solution on the given subtask.",
+)
+@cloup.option(
+    "--file",
+    "-f",
+    type=click.Path(),
+    help="Run solution on the given file. Use '-' to read from stdin.",
+)
 @cloup.option("--timeout", default=3.0)
 @cloup.pass_obj
+@cloup.constraint(mutually_exclusive, ["subtask", "file"])
 def run_solution(
     cli: CLI,
     solution: str,
     task_name: str | None,
+    subtask: int | None,
+    file: str | None,
     timeout: float,
 ) -> None:
     task = cli.select_task(task_name)
-    task.run_solution(Path(solution), timeout)
+    if file is not None:
+        sol = task.load_solution_from_path(Path(solution))
+        if not sol:
+            return ui.show_message("Error", "Solution not found", ui.ERROR)
+        sol.run_on_input(sys.stdin if file == "-" else Path(file))
+    else:
+        task.run_solution(Path(solution), timeout, subtask)
 
 
 @cloup.command(help="Build a solution.")

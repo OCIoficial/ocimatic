@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TextIO
 
 from ocimatic import ui
 from ocimatic.checkers import Checker
@@ -105,12 +106,14 @@ class Solution:
         return Solution(source)
 
     @ui.solution_group()
-    def run(
+    def run_on_dataset(
         self,
         dataset: Dataset,
         checker: Checker,
         mode: RunMode,
-        timeout: float | None,
+        *,
+        timeout: float | None = None,
+        subtask: int | None = None,
     ) -> ui.SolutionGroup[DatasetResults | None]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
@@ -119,7 +122,23 @@ class Solution:
             return None
         else:
             yield ui.Result.success(short_msg="OK")
-            return dataset.run(build_result, checker, mode, timeout)
+            return dataset.run(
+                build_result,
+                checker,
+                mode,
+                timeout=timeout,
+                subtask=subtask,
+            )
+
+    @ui.solution_group()
+    def run_on_input(self, input: Path | TextIO) -> ui.SolutionGroup[None]:
+        build_result = self._source.build()
+        if isinstance(build_result, BuildError):
+            yield ui.Result.fail(short_msg="Failed", long_msg=build_result.msg)
+            return None
+        else:
+            yield ui.Result.success(short_msg="OK")
+        build_result.run_on_input(input)
 
     @ui.solution_group()
     def gen_expected(
@@ -154,5 +173,4 @@ class Solution:
 
     @property
     def source(self) -> SourceCode:
-        return self._source
         return self._source

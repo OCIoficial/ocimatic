@@ -430,13 +430,19 @@ class Task:
         self._dataset.normalize()
 
     @ui.task("Running solution")
-    def run_solution(self, solution: Path, timeout: float) -> None:
+    def run_solution(self, solution: Path, timeout: float, subtask: int | None) -> None:
         """Run all solutions reporting outcome and running time."""
         sol = self.load_solution_from_path(solution)
         if not sol:
             return ui.show_message("Error", "Solution not found", ui.ERROR)
 
-        results = sol.run(self._dataset, self._checker, RunMode.run_solution, timeout)
+        results = sol.run_on_dataset(
+            self._dataset,
+            self._checker,
+            RunMode.run_solution,
+            timeout=timeout,
+            subtask=subtask,
+        )
         if results:
             stats = results.runtime_stats()
             if stats:
@@ -515,7 +521,11 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
         ui.writeln("Running correct solutions", ui.INFO)
         failed: list[Solution] = []
         for sol in self._correct:
-            results = sol.run(self._dataset, self._checker, RunMode.check_correct, None)
+            results = sol.run_on_dataset(
+                self._dataset,
+                self._checker,
+                RunMode.check_correct,
+            )
             if results is None or not results.check_all_correct():
                 failed.append(sol)
                 continue
@@ -562,11 +572,11 @@ Solutions with issues:
 
         failed: list[Solution] = []
         for sol in self._partial:
-            results = sol.run(
+            results = sol.run_on_dataset(
                 self._dataset,
                 self._checker,
                 RunMode.check_partial,
-                timeout,
+                timeout=timeout,
             )
             if results is None or not sol.check_results(results):
                 failed.append(sol)

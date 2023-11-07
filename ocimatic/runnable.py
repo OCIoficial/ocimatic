@@ -105,7 +105,7 @@ class Runnable(ABC):
         Arguments:
         ---------
             in_path: Path to redirect stdin from. If None input is redirected from /dev/null.
-            out_path: File to redirec stdout to. If None output is redirected to a temporary file.
+            out_path: File to redirect stdout to. If None output is redirected to a temporary file.
             args: Arguments to pass to the runnable.
             timeout: Timeout for the process. If None, there's no timeout.
         """
@@ -153,6 +153,13 @@ class Runnable(ABC):
             stdout.seek(0)
             return RunSuccess(time=time, stdout=stdout.read(), stderr=complete.stderr)
         raise AssertionError()
+
+    def run_on_input(self, input: Path | TextIO) -> None:
+        with contextlib.ExitStack() as stack:
+            if isinstance(input, Path):
+                input = stack.enter_context(input.open("r"))
+            cmd = self.cmd()
+            subprocess.run(cmd, stdin=input, check=False)
 
 
 class Binary(Runnable):

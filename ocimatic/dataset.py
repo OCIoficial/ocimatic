@@ -180,7 +180,7 @@ class Test:
 
     @ui.work("Validate", "{0}")
     def validate(self, validator: Runnable) -> WorkResult:
-        result = validator.run(in_path=self._in_path, out_path=None)
+        result = validator.run(in_path=self._in_path)
         match result:
             case RunSuccess(_):
                 return WorkResult.success(short_msg="OK")
@@ -325,8 +325,13 @@ class TestGroup:
         runnable: Runnable,
         checker: Checker,
         mode: RunMode,
+        *,
         timeout: float | None,
-    ) -> list[TestResult]:
+        skip: bool = False,
+    ) -> list[TestResult] | None:
+        if skip:
+            ui.writeln(" Info: Skipping")
+            return None
         results: list[TestResult] = []
         for test in self._tests:
             result = test.run(runnable, checker, mode, timeout)
@@ -403,12 +408,12 @@ class RuntimeStats:
 
 @dataclass
 class DatasetResults:
-    subtasks: list[list[TestResult]]
-    sample: list[TestResult]
+    subtasks: list[list[TestResult] | None]
+    sample: list[TestResult] | None
 
     def check_all_correct(self) -> bool:
         """Return whether all test cases have a correct answer."""
-        for test in self.iter_all(include_sample=True):
+        for test in self._iter_all(include_sample=True):
             if not isinstance(test.kind, TestResult.CheckerRunned):
                 return False
             if not test.kind.is_correct():
@@ -416,12 +421,9 @@ class DatasetResults:
         return True
 
     def check_passes_correct_subtasks(self, should_pass: set[int]) -> bool:
-        """Check all subtasks specified in `should_pass` are correct and the rest fail.
-
-        If `should_pass` is `None` all subtasks must fail. Subtask number are specified counting
-        form 1.
-        """
+        """Check all subtasks specified in `should_pass` are correct and the rest fail."""
         for st, tests in enumerate(self.subtasks):
+            assert tests, f"Subtask {st} has no test results"
             in_should_pass = (st + 1) in should_pass
             if in_should_pass and not all(t.is_correct() for t in tests):
                 return False
@@ -431,20 +433,20 @@ class DatasetResults:
         return True
 
     def runtime_stats(self, *, include_sample: bool = False) -> RuntimeStats | None:
-        running_times = list(self.running_times(include_sample=include_sample))
+        running_times = list(self._runnint_times(include_sample=include_sample))
         if not running_times:
             return None
         return RuntimeStats(max=max(running_times), min=min(running_times))
 
-    def iter_all(self, *, include_sample: bool = False) -> Iterator[TestResult]:
-        tests: Iterable[TestResult] = (t for st in self.subtasks for t in st)
-        if include_sample:
+    def _iter_all(self, *, include_sample: bool = False) -> Iterator[TestResult]:
+        tests: Iterable[TestResult] = (t for st in self.subtasks if st for t in st)
+        if include_sample and self.sample:
             tests = itertools.chain(tests, self.sample)
         yield from tests
 
-    def running_times(self, *, include_sample: bool = False) -> Iterator[float]:
+    def _runnint_times(self, *, include_sample: bool = False) -> Iterator[float]:
         """Return running times of all successful runs."""
-        for test in self.iter_all(include_sample=include_sample):
+        for test in self._iter_all(include_sample=include_sample):
             if isinstance(test.kind, TestResult.CheckerRunned):
                 yield test.kind.running_time()
 
@@ -473,10 +475,22 @@ class Dataset:
         runnable: Runnable,
         checker: Checker,
         mode: RunMode,
-        timeout: float | None,
+        *,
+        timeout: float | None = None,
+        subtask: int | None = None,
     ) -> DatasetResults:
-        subtasks = [st.run(runnable, checker, mode, timeout) for st in self._subtasks]
-        sample = self._sampledata.run(runnable, checker, mode, timeout)
+        subtasks: list[list[TestResult] | None] = []
+        for i, st in enumerate(self._subtasks):
+            skip = subtask is not None and subtask != i + 1
+            subtasks.append(st.run(runnable, checker, mode, timeout=timeout, skip=skip))
+
+        sample = self._sampledata.run(
+            runnable,
+            checker,
+            mode,
+            timeout=timeout,
+            skip=subtask is not None,
+        )
         return DatasetResults(subtasks, sample)
 
     def validate(self, validators: list[Path | None], stn: int | None) -> None:
