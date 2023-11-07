@@ -1,0 +1,36 @@
+name: Build problemset PDF
+on:
+  # Triggers the workflow on push events but only for the main branch
+  push:
+    branches: [main]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2 # Sets the working directory
+      # This runs the following commands on an environment with texlive-full.
+      - uses: xu-cheng/texlive-action@v2
+        with:
+          scheme: full
+          run: | # We install python, git, ocimatic and generate the PDF file.
+            apk add --update --no-cache python3 && ln -sf python3 /usr/bin/python
+            apk add --update --no-cache git
+            python3 -m ensurepip
+            pip3 install --no-cache --upgrade pip setuptools
+            pip install git+https://github.com/OCIoficial/ocimatic
+            ocimatic problemset
+
+      # Move the generated pdf to a folder and deploy that folder to branch 'pdf'.
+      - run: mkdir pdf
+      - run: mv -t pdf/ oneside.pdf twoside.pdf
+      - name: Deploy to branch
+        uses: s0/git-publish-subdir-action@develop
+        env:
+          REPO: self
+          BRANCH: pdf
+          FOLDER: pdf
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
