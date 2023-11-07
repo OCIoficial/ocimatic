@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 import cloup
-from cloup.constraints import mutually_exclusive
+from cloup.constraints import AcceptAtMost, If, accept_none, mutually_exclusive
 
 from ocimatic import core, server, ui
 
@@ -48,8 +48,8 @@ class CLI:
 SOLUTION_HELP = (
     "If the path is absolute, load solution directly from the path. "
     "If the path is relative, try finding the solution relative to the following locations "
-    "until a match is found (or we fail to find one): <task>/solutions/correct, "
-    "<task>/solutions/partial, <task>/solutions/, <task>, and <cwd>. "
+    "until a match is found (or we fail to find one): '<task>/solutions/correct', "
+    "'<task>/solutions/partial', '<task>/solutions/', '<task>', and '<cwd>'. "
     "Here <task> refers to the path of the current task and <cwd> to the current working directory."
 )
 
@@ -271,29 +271,37 @@ single_task = cloup.option(
     type=click.Path(),
 )
 @single_task
-@cloup.option(
-    "--subtask",
-    "-st",
-    type=int,
-    help="Only run solution on the given subtask.",
+@mutually_exclusive(
+    cloup.option(
+        "--subtask",
+        "-st",
+        type=int,
+        help="Only run solution on the given subtask.",
+    ),
+    cloup.option(
+        "--file",
+        "-f",
+        type=click.Path(),
+        help="Run solution on the given file instead of the dataset. Use '-' to read from stdin.",
+    ),
 )
-@cloup.option(
-    "--file",
-    "-f",
-    type=click.Path(),
-    help="Run solution on the given file. Use '-' to read from stdin.",
+@cloup.option("--timeout", help="Timeout in seconds.")
+@cloup.constraint(
+    If("file", then=accept_none).rephrased(
+        error="--timeout cannot be used with --file",
+    ),
+    ["timeout"],
 )
-@cloup.option("--timeout", default=3.0)
 @cloup.pass_obj
-@cloup.constraint(mutually_exclusive, ["subtask", "file"])
 def run_solution(
     cli: CLI,
     solution: str,
     task_name: str | None,
     subtask: int | None,
     file: str | None,
-    timeout: float,
+    timeout: float | None,
 ) -> None:
+    timeout = timeout or 3.0
     task = cli.select_task(task_name)
     if file is not None:
         sol = task.load_solution_from_path(Path(solution))
