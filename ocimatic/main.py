@@ -285,7 +285,7 @@ single_task = cloup.option(
         help="Run solution on the given file instead of the dataset. Use '-' to read from stdin.",
     ),
 )
-@cloup.option("--timeout", help="Timeout in seconds.")
+@cloup.option("--timeout", help="Timeout in seconds (default: 3.0)")
 @cloup.constraint(
     If("file", then=accept_none).rephrased(
         error="--timeout cannot be used with --file",
