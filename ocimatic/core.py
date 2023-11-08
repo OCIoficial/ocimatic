@@ -628,7 +628,7 @@ Solutions with issues:
             ui.show_message("Skipping", "Task has a static dataset.", ui.WARNING)
             return
         if not self._correct:
-            ui.show_message("Skipping", "No correct solution.", ui.WARNING)
+            ui.show_message("Skipping", "No correct solution.", ui.ERROR)
             return
         generator = None
         if solution:
@@ -647,6 +647,8 @@ Solutions with issues:
         if not generator:
             ui.fatal_error("solution not found")
         generator.gen_expected(self._dataset, sample=sample)
+        if sum(self._dataset.count()) == 0:
+            ui.show_message("Warning", "Empty dataset", ui.WARNING)
 
     @ui.task("Building statement")
     def build_statement(self, *, blank_page: bool = False) -> None:

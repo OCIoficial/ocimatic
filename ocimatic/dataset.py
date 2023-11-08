@@ -484,13 +484,15 @@ class Dataset:
             skip = subtask is not None and subtask != i + 1
             subtasks.append(st.run(runnable, checker, mode, timeout=timeout, skip=skip))
 
-        sample = self._sampledata.run(
-            runnable,
-            checker,
-            mode,
-            timeout=timeout,
-            skip=subtask is not None,
-        )
+        sample = None
+        if mode is not RunMode.check_partial:
+            sample = self._sampledata.run(
+                runnable,
+                checker,
+                mode,
+                timeout=timeout,
+                skip=subtask is not None,
+            )
         return DatasetResults(subtasks, sample)
 
     def validate(self, validators: list[Path | None], stn: int | None) -> None:

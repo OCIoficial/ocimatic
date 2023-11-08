@@ -1,5 +1,6 @@
-// This script takes a minimum and maximum value and prints two random numbers
-// in that range.
+// This script generates random test cases for the sample task. It takes a
+// minimum and maximum value and prints two random numbers in that range.
+// See the comment in testplan.txt for further details.
 
 #include <cassert>
 #include <iostream>
