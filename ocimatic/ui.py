@@ -25,6 +25,19 @@ WARNING = BOLD + YELLOW
 ERROR = BOLD + RED
 
 
+def _success_char() -> str:
+    try:
+        "✓".encode(sys.stdout.encoding)
+        return "✓"
+    except UnicodeEncodeError:
+        return "+"
+
+
+_INFO_CHAR = "."
+_FAIL_CHAR = "x"
+_SUCCESS_CHAR = _success_char()
+
+
 class Verbosity(Enum):
     quiet = 0
     verbose = 2
@@ -210,13 +223,13 @@ def start_work(action: str, msg: str, length: int = 80) -> None:
 def end_work(result: WorkResult) -> None:
     match result.status:
         case Status.info:
-            char = "."
+            char = _INFO_CHAR
             color = INFO
         case Status.success:
-            char = "✓"
+            char = _SUCCESS_CHAR
             color = OK
         case Status.fail:
-            char = "x"
+            char = _FAIL_CHAR
             color = ERROR
     if _verbosity is Verbosity.verbose:
         write(colorize(str(result.short_msg), color))
