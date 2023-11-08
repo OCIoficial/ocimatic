@@ -133,7 +133,7 @@ class TestResult:
         """Check whether the test was a "proper" failure.
 
         A proper failure means the solution itself was wrong (incorrect output, runtime error, or
-        time limit exceeded), instead of a failure due to a missing has expected output or an error
+        time limit exceeded), instead of a failure due to a missing expected output or an error
         when running the checker.
         """
         match self.kind:
@@ -188,14 +188,14 @@ class Test:
                 return WorkResult.fail(short_msg=msg, long_msg=stderr)
 
     @ui.work("Gen")
-    def gen_expected(self, runnable: Runnable) -> WorkResult:
+    def gen_expected(self, runnable: Runnable) -> ui.Result:
         """Run binary with this test as input to generate expected output file."""
         result = runnable.run(in_path=self.in_path, out_path=self.expected_path)
         match result:
             case RunSuccess(_):
-                return WorkResult.success(short_msg="OK")
+                return ui.Result.success(short_msg="OK")
             case RunError(msg, stderr):
-                return WorkResult.fail(short_msg=msg, long_msg=stderr)
+                return ui.Result.fail(short_msg=msg, long_msg=stderr)
 
     @ui.work("Run")
     def run(
@@ -342,8 +342,7 @@ class TestGroup:
     def gen_expected(self, runnable: Runnable) -> ui.Status:
         status = ui.Status.success
         for test in self._tests:
-            if test.gen_expected(runnable).status != ui.Status.success:
-                status = ui.Status.fail
+            status &= test.gen_expected(runnable).status
         return status
 
     def tests(self) -> Iterable[Test]:
@@ -470,10 +469,9 @@ class Dataset:
     def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> ui.Status:
         status = ui.Status.success
         for subtask in self._subtasks:
-            if subtask.gen_expected(runnable) != ui.Status.success:
-                status = ui.Status.fail
-        if sample and self._sampledata.gen_expected(runnable) != ui.Status.fail:
-            status = ui.Status.fail
+            status &= subtask.gen_expected(runnable)
+        if sample:
+            status &= self._sampledata.gen_expected(runnable)
         return status
 
     def run(

@@ -13,7 +13,6 @@ import ocimatic
 from ocimatic import ui
 from ocimatic.runnable import RunError, RunSuccess
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
-from ocimatic.ui import Status, WorkResult
 
 
 class Testplan:
@@ -48,9 +47,7 @@ class Testplan:
         for i, st in enumerate(subtasks, 1):
             if stn is not None and stn != i:
                 continue
-
-            if st.run() != ui.Status.success:
-                status = ui.Status.fail
+            status &= st.run()
 
         if sum(len(st.commands) for st in subtasks) == 0:
             ui.show_message(
@@ -158,8 +155,7 @@ class Subtask:
 
         status = ui.Status.success
         for cmd in self.commands:
-            if cmd.run(self._dir).status is not Status.success:
-                status = ui.Status.fail
+            status &= cmd.run(self._dir).status
         return status
 
 
@@ -172,7 +168,7 @@ class Command(ABC):
         return Path(directory, f"{self._group}-{self._idx}.in")
 
     @abstractmethod
-    def run(self, dst_dir: Path) -> WorkResult:
+    def run(self, dst_dir: Path) -> ui.Result:
         raise NotImplementedError(
             f"Class {self.__class__.__name__} doesn't implement run()",
         )
@@ -187,14 +183,14 @@ class Copy(Command):
         return str(self._file.relative_to(ocimatic.config["contest_root"]))
 
     @ui.work("Copy", "{0}")
-    def run(self, dst_dir: Path) -> WorkResult:
+    def run(self, dst_dir: Path) -> ui.Result:
         if not self._file.exists():
-            return WorkResult.fail(short_msg="No such file")
+            return ui.Result.fail(short_msg="No such file")
         try:
             shutil.copy(self._file, self.dst_file(dst_dir))
-            return WorkResult.success(short_msg="OK")
+            return ui.Result.success(short_msg="OK")
         except Exception:  # pylint: disable=broad-except
-            return WorkResult.fail(short_msg="Error when copying file")
+            return ui.Result.fail(short_msg="Error when copying file")
 
 
 class Echo(Command):
@@ -206,10 +202,10 @@ class Echo(Command):
         return str(self._args)
 
     @ui.work("Echo", "{0}")
-    def run(self, dst_dir: Path) -> WorkResult:
+    def run(self, dst_dir: Path) -> ui.Result:
         with self.dst_file(dst_dir).open("w") as test_file:
             test_file.write(" ".join(self._args) + "\n")
-            return WorkResult.success(short_msg="Ok")
+            return ui.Result.success(short_msg="Ok")
 
 
 class Script(Command):
@@ -234,13 +230,13 @@ class Script(Command):
         return f"{self._group} ; {script} {args}"
 
     @ui.work("Gen", "{0}")
-    def run(self, dst_dir: Path) -> WorkResult:
+    def run(self, dst_dir: Path) -> ui.Result:
         script = self._load_script()
         if not script:
-            return WorkResult.fail(short_msg="Script file not found")
+            return ui.Result.fail(short_msg="Script file not found")
         build_result = script.build()
         if isinstance(build_result, BuildError):
-            return WorkResult.fail(
+            return ui.Result.fail(
                 short_msg="Failed to build generator",
                 long_msg=build_result.msg,
             )
@@ -250,9 +246,9 @@ class Script(Command):
         )
         match result:
             case RunSuccess(_):
-                return WorkResult.success(short_msg="OK")
+                return ui.Result.success(short_msg="OK")
             case RunError(msg, stderr):
-                return WorkResult.fail(short_msg=msg, long_msg=stderr)
+                return ui.Result.fail(short_msg=msg, long_msg=stderr)
 
     def _load_script(self) -> SourceCode | None:
         if not self._script_path.exists():

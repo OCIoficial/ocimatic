@@ -184,9 +184,7 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa:
 
     status = ui.Status.success
     for task in tasks:
-        result = task.gen_expected(sample=sample, solution=solution_path)
-        if result != ui.Status.fail:
-            status = ui.Status.fail
+        status &= task.gen_expected(sample=sample, solution=solution_path)
 
     if status != ui.Status.success:
         sys.exit(3)
@@ -240,8 +238,7 @@ def run_testplan(cli: CLI, subtask: int | None) -> None:
         )
     status = ui.Status.success
     for task in tasks:
-        if task.run_testplan(subtask=subtask) != ui.Status.success:
-            status = ui.Status.fail
+        status &= task.run_testplan(subtask=subtask)
 
     if status != ui.Status.success:
         sys.exit(2)

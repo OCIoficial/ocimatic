@@ -70,11 +70,20 @@ def decolorize(text: str) -> str:
 class Status(Enum):
     success = "sucess"
     fail = "fail"
-    # info = "info"
 
     @staticmethod
     def from_bool(b: bool) -> Status:  # noqa: FBT001
         return Status.success if b else Status.fail
+
+    def to_bool(self) -> bool:
+        match self:
+            case Status.success:
+                return True
+            case Status.fail:
+                return False
+
+    def __iand__(self, other: Status) -> Status:
+        return Status.from_bool(self.to_bool() and other.to_bool())
 
 
 class IntoWorkResult(Protocol):
@@ -117,6 +126,9 @@ class Result:
     @staticmethod
     def fail(short_msg: str, long_msg: str | None = None) -> Result:
         return Result(status=Status.fail, short_msg=short_msg, long_msg=long_msg)
+
+    def is_fail(self) -> bool:
+        return self.status == Status.fail
 
     def into_work_result(self) -> WorkResult:
         return WorkResult(
