@@ -47,7 +47,7 @@ class Testplan:
             if stn is not None and stn != i:
                 continue
 
-            if st.run() is not ui.Status.success:
+            if st.run() != ui.Status.success:
                 status = ui.Status.fail
 
         if sum(len(st.commands) for st in subtasks) == 0:

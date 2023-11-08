@@ -120,26 +120,25 @@ class Contest:
     @ui.contest_group("Generating problemset")
     def build_problemset(self) -> Literal[ui.Status.success, ui.Status.fail]:
         """Build titlepage and statement of all tasks. Then merge all pdfs into a single pdf."""
-
         status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
-        if self.build_problemset_twoside() is not ui.Status.success:
+        if self.build_problemset_twoside() != ui.Status.success:
             status = ui.Status.fail
-        if self.build_problemset_oneside() is not ui.Status.success:
+        if self.build_problemset_oneside() != ui.Status.success:
             status = ui.Status.fail
         return status
 
     @ui.workgroup("oneside")
     def build_problemset_oneside(self) -> Literal[ui.Status.success, ui.Status.fail]:
         os.environ["OCIMATIC_SIDENESS"] = "oneside"
-        if self.compile_titlepage().status is ui.Status.fail:
+        if self.compile_titlepage().status == ui.Status.fail:
             return ui.Status.fail
 
         status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
         for task in self._tasks:
-            if task.statement.build(blank_page=False) is not ui.Status.success:
+            if task.statement.build(blank_page=False).status != ui.Status.success:
                 status = ui.Status.fail
 
-        if status is ui.Status.fail:
+        if status == ui.Status.fail:
             return ui.Status.fail
 
         return self.merge_pdfs("oneside.pdf").status
@@ -147,17 +146,17 @@ class Contest:
     @ui.workgroup("twoside")
     def build_problemset_twoside(self) -> Literal[ui.Status.success, ui.Status.fail]:
         os.environ["OCIMATIC_SIDENESS"] = "twoside"
-        if self.compile_titlepage().status is ui.Status.fail:
+        if self.compile_titlepage().status == ui.Status.fail:
             return ui.Status.fail
 
         status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
         for i, task in enumerate(self._tasks):
             last = i == len(self._tasks) - 1
             blank_page = last and ocimatic.config["last_blank_page"]
-            if task.statement.build(blank_page=blank_page).status is not ui.Status.success:
+            if task.statement.build(blank_page=blank_page).status != ui.Status.success:
                 status = ui.Status.fail
 
-        if status is ui.Status.fail:
+        if status == ui.Status.fail:
             return ui.Status.fail
 
         return self.merge_pdfs("twoside.pdf").status
@@ -340,7 +339,7 @@ class Task:
         new_dir.mkdir()
 
         result = self._dataset.compress(random_sort=False)
-        if result.status is ui.Status.fail:
+        if result.status == ui.Status.fail:
             return False
 
         dataset = Path(self._directory, "dataset", "data.zip")
@@ -348,7 +347,7 @@ class Task:
         shutil.copy2(dataset, dataset_dst)
 
         result = self.statement.build(blank_page=False)
-        if result.status is ui.Status.fail:
+        if result.status == ui.Status.fail:
             return False
 
         statement = Path(new_dir, "statement.pdf")
@@ -668,7 +667,7 @@ Solutions with issues:
         if not generator:
             ui.fatal_error("solution not found")
         status = generator.gen_expected(self._dataset, sample=sample)
-        if status is not ui.Status.success:
+        if status != ui.Status.success:
             return ui.Status.fail
 
         if sum(self._dataset.count()) == 0:
