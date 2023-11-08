@@ -585,7 +585,7 @@ Solutions with issues:
                 """
 Some partial solutions had issues when running or didn't pass/fail the subtasks they were supposed to.
 Run them individually with `ocimatic run` to get more information. Remember to set an appropiate timeout
-passing the the `--timeout` option.
+setting the `--timeout` flag.
 
 Solutions with issues:
 """,
