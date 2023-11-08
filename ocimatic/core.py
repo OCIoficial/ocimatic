@@ -654,7 +654,7 @@ Solutions with issues:
         if solution:
             generator = self.load_solution_from_path(solution)
         else:
-            keys: dict[type, int] = {CppSource: 0, RustSource: 1, JavaSource: 0}
+            keys: dict[type, int] = {CppSource: 0, RustSource: 1, JavaSource: 2}
             sols = sorted(
                 self._correct,
                 key=lambda sol: keys.get(

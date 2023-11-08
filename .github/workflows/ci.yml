@@ -51,6 +51,7 @@ jobs:
           ocimatic init contest
           cd contest
           ocimatic new-task task
+          cp ../tests/sample.java task/solutions/correct/
           ocimatic run-testplan
           ocimatic gen-expected
           ocimatic check-dataset
