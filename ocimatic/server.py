@@ -35,7 +35,7 @@ def server() -> str:
 
 
 def save_solution(content: str, suffix: str) -> Path:
-    filepath = Path(UPLOAD_FOLDER, f"solution.{suffix}")
+    filepath = Path(upload_folder(), f"solution.{suffix}")
     with filepath.open("w") as f:
         f.write(content)
     return filepath
