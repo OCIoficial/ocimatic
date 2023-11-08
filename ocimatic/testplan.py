@@ -36,13 +36,13 @@ class Testplan:
     def validators(self) -> list[Path | None]:
         return [subtask.validator for subtask in self._parse_file()]
 
-    def run(self, stn: int | None) -> Literal[ui.Status.success, ui.Status.fail]:
+    def run(self, stn: int | None) -> ui.Status:
         subtasks = self._parse_file()
         cwd = Path.cwd()
         # Run generators with testplan/ as the cwd
         os.chdir(self._directory)
 
-        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
+        status = ui.Status.success
         for i, st in enumerate(subtasks, 1):
             if stn is not None and stn != i:
                 continue
@@ -150,11 +150,11 @@ class Subtask:
         return str(self._dir.name)
 
     @ui.workgroup("{0}")
-    def run(self) -> Literal[ui.Status.success, ui.Status.fail]:
+    def run(self) -> ui.Status:
         shutil.rmtree(self._dir, ignore_errors=True)
         self._dir.mkdir(parents=True, exist_ok=True)
 
-        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
+        status = ui.Status.success
         for cmd in self.commands:
             if cmd.run(self._dir).status is not Status.success:
                 status = ui.Status.fail

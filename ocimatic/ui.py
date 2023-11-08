@@ -3,7 +3,7 @@ import sys
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from enum import Enum
-from typing import Concatenate, Literal, NoReturn, ParamSpec, Protocol, TypeVar, cast
+from typing import Concatenate, NoReturn, ParamSpec, Protocol, TypeVar, cast
 
 from colorama import Fore, Style
 
@@ -68,7 +68,7 @@ def decolorize(text: str) -> str:
 class Status(Enum):
     success = "sucess"
     fail = "fail"
-    info = "info"
+    # info = "info"
 
     @staticmethod
     def from_bool(b: bool) -> "Status":  # noqa: FBT001
@@ -82,7 +82,7 @@ class IntoWorkResult(Protocol):
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class WorkResult:
-    status: Status
+    status: Status | None
     short_msg: str
     long_msg: str | None = None
 
@@ -96,7 +96,7 @@ class WorkResult:
 
     @staticmethod
     def info(short_msg: str, long_msg: str | None = None) -> "WorkResult":
-        return WorkResult(status=Status.info, short_msg=short_msg, long_msg=long_msg)
+        return WorkResult(status=None, short_msg=short_msg, long_msg=long_msg)
 
     def into_work_result(self) -> "WorkResult":
         return self
@@ -104,7 +104,7 @@ class WorkResult:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class Result:
-    status: Literal[Status.success, Status.fail]
+    status: Status
     short_msg: str
     long_msg: str | None = None
 
@@ -233,7 +233,7 @@ def start_work(action: str, msg: str, length: int = 80) -> None:
 
 def end_work(result: WorkResult) -> None:
     match result.status:
-        case Status.info:
+        case None:
             char = _INFO_CHAR
             color = INFO
         case Status.success:

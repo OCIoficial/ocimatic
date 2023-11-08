@@ -6,7 +6,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import pypdf
 import tomlkit
@@ -118,9 +118,9 @@ class Contest:
         return self._tasks
 
     @ui.contest_group("Generating problemset")
-    def build_problemset(self) -> Literal[ui.Status.success, ui.Status.fail]:
+    def build_problemset(self) -> ui.Status:
         """Build titlepage and statement of all tasks. Then merge all pdfs into a single pdf."""
-        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
+        status = ui.Status.success
         if self.build_problemset_twoside() != ui.Status.success:
             status = ui.Status.fail
         if self.build_problemset_oneside() != ui.Status.success:
@@ -128,12 +128,12 @@ class Contest:
         return status
 
     @ui.workgroup("oneside")
-    def build_problemset_oneside(self) -> Literal[ui.Status.success, ui.Status.fail]:
+    def build_problemset_oneside(self) -> ui.Status:
         os.environ["OCIMATIC_SIDENESS"] = "oneside"
         if self.compile_titlepage().status == ui.Status.fail:
             return ui.Status.fail
 
-        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
+        status = ui.Status.success
         for task in self._tasks:
             if task.statement.build(blank_page=False).status != ui.Status.success:
                 status = ui.Status.fail
@@ -144,12 +144,12 @@ class Contest:
         return self.merge_pdfs("oneside.pdf").status
 
     @ui.workgroup("twoside")
-    def build_problemset_twoside(self) -> Literal[ui.Status.success, ui.Status.fail]:
+    def build_problemset_twoside(self) -> ui.Status:
         os.environ["OCIMATIC_SIDENESS"] = "twoside"
         if self.compile_titlepage().status == ui.Status.fail:
             return ui.Status.fail
 
-        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
+        status = ui.Status.success
         for i, task in enumerate(self._tasks):
             last = i == len(self._tasks) - 1
             blank_page = last and ocimatic.config["last_blank_page"]
@@ -355,10 +355,7 @@ class Task:
         return True
 
     @ui.task("Generating dataset input files")
-    def run_testplan(
-        self,
-        subtask: int | None,
-    ) -> Literal[ui.Status.success, ui.Status.fail]:
+    def run_testplan(self, subtask: int | None) -> ui.Status:
         if self._config.static_dataset:
             ui.fatal_error("Task has a static dataset.")
         testplan = Testplan(
@@ -637,7 +634,7 @@ Solutions with issues:
         *,
         sample: bool = False,
         solution: Path | None = None,
-    ) -> Literal[ui.Status.success, ui.Status.fail]:
+    ) -> ui.Status:
         """Generate expected outputs files for the dataset by running a correct solution.
 
         If `sample` is True, also generate expected output for sample input. If `solution` is

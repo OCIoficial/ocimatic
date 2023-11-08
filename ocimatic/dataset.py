@@ -12,7 +12,6 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Literal
 from zipfile import ZipFile
 
 import ocimatic
@@ -340,11 +339,8 @@ class TestGroup:
         return results
 
     @ui.workgroup("{0}")
-    def gen_expected(
-        self,
-        runnable: Runnable,
-    ) -> Literal[ui.Status.success, ui.Status.fail]:
-        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
+    def gen_expected(self, runnable: Runnable) -> ui.Status:
+        status = ui.Status.success
         for test in self._tests:
             if test.gen_expected(runnable).status != ui.Status.success:
                 status = ui.Status.fail
@@ -471,13 +467,8 @@ class Dataset:
             self._subtasks = []
         self._sampledata = TestGroup("sample", sampledata)
 
-    def gen_expected(
-        self,
-        runnable: Runnable,
-        *,
-        sample: bool = False,
-    ) -> Literal[ui.Status.success, ui.Status.fail]:
-        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
+    def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> ui.Status:
+        status = ui.Status.success
         for subtask in self._subtasks:
             if subtask.gen_expected(runnable) != ui.Status.success:
                 status = ui.Status.fail
