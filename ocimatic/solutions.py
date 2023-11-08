@@ -32,7 +32,7 @@ class SolutionSpec:
                 self.subtasks_spec = comments[0]
             case _:
                 ui.fatal_error(
-                    f"Only on of should-pass or should-fail should be specified: {name}",
+                    f"Only one of should-pass or should-fail must be specified: {name}",
                 )
 
     def should_pass(self, results: DatasetResults) -> set[int]:

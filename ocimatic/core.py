@@ -121,16 +121,16 @@ class Contest:
     def build_problemset(self) -> ui.Status:
         """Build titlepage and statement of all tasks. Then merge all pdfs into a single pdf."""
         status = ui.Status.success
-        if self.build_problemset_twoside() != ui.Status.success:
+        if self._build_problemset_twoside() != ui.Status.success:
             status = ui.Status.fail
-        if self.build_problemset_oneside() != ui.Status.success:
+        if self._build_problemset_oneside() != ui.Status.success:
             status = ui.Status.fail
         return status
 
     @ui.workgroup("oneside")
-    def build_problemset_oneside(self) -> ui.Status:
+    def _build_problemset_oneside(self) -> ui.Status:
         os.environ["OCIMATIC_SIDENESS"] = "oneside"
-        if self.compile_titlepage().status == ui.Status.fail:
+        if self._compile_titlepage().status == ui.Status.fail:
             return ui.Status.fail
 
         status = ui.Status.success
@@ -141,12 +141,12 @@ class Contest:
         if status == ui.Status.fail:
             return ui.Status.fail
 
-        return self.merge_pdfs("oneside.pdf").status
+        return self._merge_pdfs("oneside.pdf").status
 
     @ui.workgroup("twoside")
-    def build_problemset_twoside(self) -> ui.Status:
+    def _build_problemset_twoside(self) -> ui.Status:
         os.environ["OCIMATIC_SIDENESS"] = "twoside"
-        if self.compile_titlepage().status == ui.Status.fail:
+        if self._compile_titlepage().status == ui.Status.fail:
             return ui.Status.fail
 
         status = ui.Status.success
@@ -159,7 +159,7 @@ class Contest:
         if status == ui.Status.fail:
             return ui.Status.fail
 
-        return self.merge_pdfs("twoside.pdf").status
+        return self._merge_pdfs("twoside.pdf").status
 
     @ui.contest_group("Creating archive")
     def archive(self) -> None:
@@ -175,18 +175,18 @@ class Contest:
                     )
                     return
 
-            self.build_problemset_twoside()
+            self._build_problemset_twoside()
             oneside = Path(self._directory, "oneside.pdf")
             shutil.copy2(oneside, Path(tmpdir, "oneside.pdf"))
 
-            self.build_problemset_oneside()
+            self._build_problemset_oneside()
             twoside = Path(self._directory, "twoside.pdf")
             shutil.copy2(twoside, Path(tmpdir, "twoside.pdf"))
 
             shutil.make_archive(self.name, "zip", tmpdir)
 
     @ui.work("LATEX", "titlepage.tex")
-    def compile_titlepage(self) -> ui.WorkResult:
+    def _compile_titlepage(self) -> ui.WorkResult:
         """Compile title page latex."""
         result = self._titlepage.compile()
         if isinstance(result, Path):
@@ -195,7 +195,7 @@ class Contest:
             return ui.WorkResult.fail(short_msg="FAILED", long_msg=result.msg)
 
     @ui.work("MERGE", "{1}")
-    def merge_pdfs(self, filename: str) -> ui.Result:
+    def _merge_pdfs(self, filename: str) -> ui.Result:
         """Merge titlepage and statements pdfs into a single file."""
         try:
             merger = pypdf.PdfWriter()
@@ -463,7 +463,7 @@ class Task:
         if results:
             stats = results.runtime_stats()
             if stats:
-                write_stats(stats)
+                _write_stats(stats)
 
             if sol.is_partial:
                 should_pass = ", ".join(
@@ -566,7 +566,7 @@ Solutions with issues:
             return None
 
         ui.writeln()
-        write_stats(stats)
+        _write_stats(stats)
         ui.writeln()
         ui.writeln("All correct solutions produced correct results", ui.OK)
         return stats
@@ -747,7 +747,7 @@ class Statement:
         return scores
 
 
-def write_stats(stats: RuntimeStats) -> None:
+def _write_stats(stats: RuntimeStats) -> None:
     ui.writeln("Running time")
     ui.writeln(f"  Max: {stats.max:.3f}s")
     ui.writeln(f"  Min: {stats.min:.3f}s")
