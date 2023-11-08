@@ -125,11 +125,16 @@ class Result:
 
 
 def write(text: str, color: str = RESET) -> None:
-    print(colorize(text, color), end="")
+    sys.stdout.write(colorize(text, color))
+
+
+def flush() -> None:
+    sys.stdout.flush()
 
 
 def writeln(text: str = "", color: str = RESET) -> None:
     write(text + "\n", color)
+    flush()
 
 
 def task_header(name: str, msg: str) -> None:
@@ -150,6 +155,7 @@ def workgroup_header(label: str, msg: str | None) -> None:
         writeln()
     else:
         write(" ")
+    flush()
 
 
 def contest_group_header(msg: str) -> None:
@@ -157,6 +163,7 @@ def contest_group_header(msg: str) -> None:
     write("\n\n")
     write(colorize(msg, INFO + MAGENTA))
     writeln()
+    flush()
 
 
 SolutionGroup = Generator[Result, None, _T]
@@ -186,10 +193,12 @@ def solution_group_header(msg: str) -> None:
     """Print header for a solution group."""
     writeln()
     write(colorize(f"[{msg}]", INFO + BLUE) + " ")
+    flush()
 
 
 def solution_group_footer() -> None:
     writeln()
+    flush()
 
 
 _TIntoWorkResult = TypeVar("_TIntoWorkResult", bound=IntoWorkResult)
@@ -219,6 +228,7 @@ def start_work(action: str, msg: str, length: int = 80) -> None:
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
     msg = " * [" + action + "] " + msg + "  "
     write(colorize(msg, CYAN))
+    flush()
 
 
 def end_work(result: WorkResult) -> None:
@@ -243,6 +253,7 @@ def end_work(result: WorkResult) -> None:
         write(long_msg)
         writeln()
         writeln()
+    flush()
 
 
 def fatal_error(message: str) -> NoReturn:
