@@ -53,5 +53,4 @@ jobs:
           ocimatic new-task task
           ocimatic run-testplan
           ocimatic gen-expected
-          cd task
-          ocimatic run partial/sample.cpp
+          ocimatic check-dataset
