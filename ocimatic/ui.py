@@ -26,6 +26,7 @@ ERROR = BOLD + RED
 
 
 def _success_char() -> str:
+    """In windows Windows-1252 encoding ✓ is not available, so we use + instead."""
     try:
         "✓".encode(sys.stdout.encoding)
         return "✓"
