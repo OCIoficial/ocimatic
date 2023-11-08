@@ -1,4 +1,4 @@
-# coding=UTF-8
+# -*- coding: UTF-8 -*-
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
