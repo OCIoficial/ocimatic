@@ -6,7 +6,7 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import pypdf
 import tomlkit
@@ -337,7 +337,10 @@ class Task:
         return True
 
     @ui.task("Generating dataset input files")
-    def run_testplan(self, subtask: int | None) -> None:
+    def run_testplan(
+        self,
+        subtask: int | None,
+    ) -> Literal[ui.Status.success, ui.Status.fail]:
         if self._config.static_dataset:
             ui.fatal_error("Task has a static dataset.")
         testplan = Testplan(
@@ -345,7 +348,7 @@ class Task:
             self._directory,
             Path(self._directory, "dataset"),
         )
-        testplan.run(subtask)
+        return testplan.run(subtask)
 
     def load_solution_from_path(self, path: Path) -> Solution | None:
         """Search for a solution matching a path.
@@ -616,7 +619,7 @@ Solutions with issues:
         *,
         sample: bool = False,
         solution: Path | None = None,
-    ) -> None:
+    ) -> Literal[ui.Status.success, ui.Status.fail]:
         """Generate expected outputs files for the dataset by running a correct solution.
 
         If `sample` is True, also generate expected output for sample input. If `solution` is
@@ -625,10 +628,10 @@ Solutions with issues:
         """
         if self._config.static_dataset:
             ui.show_message("Skipping", "Task has a static dataset.", ui.WARNING)
-            return
+            return ui.Status.success
         if not self._correct:
-            ui.show_message("Skipping", "No correct solution.", ui.ERROR)
-            return
+            ui.show_message("Error", "No correct solution.", ui.ERROR)
+            return ui.Status.fail
         generator = None
         if solution:
             generator = self.load_solution_from_path(solution)
@@ -645,9 +648,14 @@ Solutions with issues:
 
         if not generator:
             ui.fatal_error("solution not found")
-        generator.gen_expected(self._dataset, sample=sample)
+        status = generator.gen_expected(self._dataset, sample=sample)
+        if status is not ui.Status.success:
+            return ui.Status.fail
+
         if sum(self._dataset.count()) == 0:
             ui.show_message("Warning", "Empty dataset", ui.WARNING)
+
+        return ui.Status.fail
 
     @ui.task("Building statement")
     def build_statement(self, *, blank_page: bool = False) -> None:

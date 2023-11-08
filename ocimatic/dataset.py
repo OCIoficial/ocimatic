@@ -12,6 +12,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Literal
 from zipfile import ZipFile
 
 import ocimatic
@@ -339,9 +340,15 @@ class TestGroup:
         return results
 
     @ui.workgroup("{0}")
-    def gen_expected(self, runnable: Runnable) -> None:
+    def gen_expected(
+        self,
+        runnable: Runnable,
+    ) -> Literal[ui.Status.success, ui.Status.fail]:
+        status = ui.Status.success
         for test in self._tests:
-            test.gen_expected(runnable)
+            if test.gen_expected(runnable).status is not ui.Status.success:
+                status = ui.Status.fail
+        return status
 
     def tests(self) -> Iterable[Test]:
         return self._tests
@@ -464,11 +471,19 @@ class Dataset:
             self._subtasks = []
         self._sampledata = TestGroup("sample", sampledata)
 
-    def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> None:
+    def gen_expected(
+        self,
+        runnable: Runnable,
+        *,
+        sample: bool = False,
+    ) -> Literal[ui.Status.success, ui.Status.fail]:
+        status = ui.Status.success
         for subtask in self._subtasks:
-            subtask.gen_expected(runnable)
-        if sample:
-            self._sampledata.gen_expected(runnable)
+            if subtask.gen_expected(runnable) is not ui.Status.success:
+                status = ui.Status.fail
+        if sample and self._sampledata.gen_expected(runnable) is not ui.Status.fail:
+            status = ui.Status.fail
+        return status
 
     def run(
         self,

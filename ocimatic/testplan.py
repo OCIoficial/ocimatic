@@ -11,7 +11,7 @@ import ocimatic
 from ocimatic import ui
 from ocimatic.runnable import RunError, RunSuccess
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
-from ocimatic.ui import WorkResult
+from ocimatic.ui import Status, WorkResult
 
 
 class Testplan:
@@ -36,15 +36,19 @@ class Testplan:
     def validators(self) -> list[Path | None]:
         return [subtask.validator for subtask in self._parse_file()]
 
-    def run(self, stn: int | None) -> None:
+    def run(self, stn: int | None) -> Literal[ui.Status.success, ui.Status.fail]:
         subtasks = self._parse_file()
         cwd = Path.cwd()
         # Run generators with testplan/ as the cwd
         os.chdir(self._directory)
 
+        status = ui.Status.success
         for i, st in enumerate(subtasks, 1):
-            if stn is None or stn == i:
-                st.run()
+            if stn is not None and stn != i:
+                continue
+
+            if st.run() is not ui.Status.success:
+                status = ui.Status.fail
 
         if sum(len(st.commands) for st in subtasks) == 0:
             ui.show_message(
@@ -54,6 +58,8 @@ class Testplan:
             )
 
         os.chdir(cwd)
+
+        return status
 
     def _parse_file(self) -> list["Subtask"]:
         subtasks: dict[int, "Subtask"] = {}
@@ -144,11 +150,15 @@ class Subtask:
         return str(self._dir.name)
 
     @ui.workgroup("{0}")
-    def run(self) -> None:
+    def run(self) -> Literal[ui.Status.success, ui.Status.fail]:
         shutil.rmtree(self._dir, ignore_errors=True)
         self._dir.mkdir(parents=True, exist_ok=True)
+
+        status = ui.Status.success
         for cmd in self.commands:
-            cmd.run(self._dir)
+            if cmd.run(self._dir) is not Status.success:
+                status = ui.Status.fail
+        return status
 
 
 class Command(ABC):

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TextIO
+from typing import Literal, TextIO
 
 from ocimatic import ui
 from ocimatic.checkers import Checker
@@ -146,14 +146,15 @@ class Solution:
         dataset: Dataset,
         *,
         sample: bool = False,
-    ) -> ui.SolutionGroup[None]:
+    ) -> ui.SolutionGroup[Literal[ui.Status.success, ui.Status.fail]]:
         """Generate expected output files for all test cases in the given dataset running this solution."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
             yield ui.Result.fail(short_msg="Failed", long_msg=build_result.msg)
+            return ui.Status.fail
         else:
             yield ui.Result.success(short_msg="OK")
-            dataset.gen_expected(build_result, sample=sample)
+            return dataset.gen_expected(build_result, sample=sample)
 
     @ui.work("Build")
     def build(self) -> ui.WorkResult:

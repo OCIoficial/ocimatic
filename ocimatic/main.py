@@ -144,6 +144,9 @@ def check_dataset(cli: CLI) -> None:
             ui.writeln("| No issues found! |", ui.OK)
             ui.writeln("--------------------", ui.OK)
 
+    if len(failed) > 0:
+        sys.exit(2)
+
 
 @cloup.command(
     short_help="Generate expected output.",
@@ -177,8 +180,15 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa:
         )
 
     solution_path = Path(solution) if solution else None
+
+    status = ui.Status.success
     for task in tasks:
-        task.gen_expected(sample=sample, solution=solution_path)
+        result = task.gen_expected(sample=sample, solution=solution_path)
+        if result is not ui.Status.fail:
+            status = ui.Status.fail
+
+    if status is not ui.Status.success:
+        sys.exit(3)
 
 
 @cloup.command(help="Build statement pdf.")
@@ -227,9 +237,13 @@ def run_testplan(cli: CLI, subtask: int | None) -> None:
         ui.fatal_error(
             "A subtask can only be specified when there's a single target task.",
         )
-
+    status = ui.Status.success
     for task in tasks:
-        task.run_testplan(subtask=subtask)
+        if task.run_testplan(subtask=subtask) is not ui.Status.success:
+            status = ui.Status.fail
+
+    if status is not ui.Status.success:
+        sys.exit(2)
 
 
 @cloup.command(help="Run input validators.")
