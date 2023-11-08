@@ -118,30 +118,49 @@ class Contest:
         return self._tasks
 
     @ui.contest_group("Generating problemset")
-    def build_problemset(self) -> None:
+    def build_problemset(self) -> Literal[ui.Status.success, ui.Status.fail]:
         """Build titlepage and statement of all tasks. Then merge all pdfs into a single pdf."""
-        self.build_problemset_twoside()
-        self.build_problemset_oneside()
+
+        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
+        if self.build_problemset_twoside() is not ui.Status.success:
+            status = ui.Status.fail
+        if self.build_problemset_oneside() is not ui.Status.success:
+            status = ui.Status.fail
+        return status
 
     @ui.workgroup("oneside")
-    def build_problemset_oneside(self) -> None:
+    def build_problemset_oneside(self) -> Literal[ui.Status.success, ui.Status.fail]:
         os.environ["OCIMATIC_SIDENESS"] = "oneside"
-        self.compile_titlepage()
+        if self.compile_titlepage().status is ui.Status.fail:
+            return ui.Status.fail
 
+        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
         for task in self._tasks:
-            task.statement.build(blank_page=False)
-        self.merge_pdfs("oneside.pdf")
+            if task.statement.build(blank_page=False) is not ui.Status.success:
+                status = ui.Status.fail
+
+        if status is ui.Status.fail:
+            return ui.Status.fail
+
+        return self.merge_pdfs("oneside.pdf").status
 
     @ui.workgroup("twoside")
-    def build_problemset_twoside(self) -> None:
+    def build_problemset_twoside(self) -> Literal[ui.Status.success, ui.Status.fail]:
         os.environ["OCIMATIC_SIDENESS"] = "twoside"
-        self.compile_titlepage()
+        if self.compile_titlepage().status is ui.Status.fail:
+            return ui.Status.fail
 
+        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
         for i, task in enumerate(self._tasks):
             last = i == len(self._tasks) - 1
             blank_page = last and ocimatic.config["last_blank_page"]
-            task.statement.build(blank_page=blank_page)
-        self.merge_pdfs("twoside.pdf")
+            if task.statement.build(blank_page=blank_page).status is not ui.Status.success:
+                status = ui.Status.fail
+
+        if status is ui.Status.fail:
+            return ui.Status.fail
+
+        return self.merge_pdfs("twoside.pdf").status
 
     @ui.contest_group("Creating archive")
     def archive(self) -> None:
@@ -170,20 +189,20 @@ class Contest:
     @ui.work("LATEX", "titlepage.tex")
     def compile_titlepage(self) -> ui.WorkResult:
         """Compile title page latex."""
-        success = self._titlepage.compile() is not None
-        return ui.WorkResult(
-            status=ui.Status.from_bool(success),
-            short_msg="OK" if success else "FAILED",
-        )
+        result = self._titlepage.compile()
+        if isinstance(result, Path):
+            return ui.WorkResult.success(short_msg="OK")
+        else:
+            return ui.WorkResult.fail(short_msg="FAILED", long_msg=result.msg)
 
     @ui.work("MERGE", "{1}")
-    def merge_pdfs(self, filename: str) -> ui.WorkResult:
+    def merge_pdfs(self, filename: str) -> ui.Result:
         """Merge titlepage and statements pdfs into a single file."""
         try:
             merger = pypdf.PdfWriter()
             for task in self._tasks:
                 if not task.statement.pdf:
-                    return ui.WorkResult.fail(
+                    return ui.Result.fail(
                         short_msg="FAILED",
                         long_msg="No statement",
                     )
@@ -194,9 +213,9 @@ class Contest:
 
             merger.write(Path(self._directory, filename))  # pyright: ignore [reportUnknownMemberType]
             merger.close()
-            return ui.WorkResult.success(short_msg="OK")
+            return ui.Result.success(short_msg="OK")
         except Exception as exc:
-            return ui.WorkResult.fail(short_msg="FAILED", long_msg=str(exc))
+            return ui.Result.fail(short_msg="FAILED", long_msg=str(exc))
 
     @property
     def name(self) -> str:
@@ -696,12 +715,11 @@ class Statement:
         if blank_page:
             os.environ["OCIMATIC_BLANK_PAGE"] = "True"
 
-        success = self._source.compile() is not None
-
-        if success:
+        result = self._source.compile()
+        if isinstance(result, Path):
             return ui.Result.success("OK")
         else:
-            return ui.Result.fail("FAILED")
+            return ui.Result.fail("FAILED", long_msg=result.msg)
 
     def io_samples(self) -> list[Test]:
         """Find sample input data in the satement."""

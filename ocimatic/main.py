@@ -83,7 +83,8 @@ def run_server(port: int) -> None:
 @cloup.command(help="Generate problemset pdf.")
 @cloup.pass_obj
 def problemset(cli: CLI) -> None:
-    cli.contest.build_problemset()
+    if cli.contest.build_problemset() is not ui.Status.success:
+        sys.exit(2)
 
 
 @cloup.command(

@@ -215,20 +215,22 @@ class LatexSource:
     def iter_lines(self) -> Iterable[str]:
         yield from self._source.open()
 
-    def compile(self) -> Path | None:
+    def compile(self) -> Path | BuildError:
         name = self._source.name
         parent = self._source.parent
-        cmd = f"cd {parent} && pdflatex --shell-escape -interaciton=batchmode {name}"
+        cmd = f"pdflatex --shell-escape -interaciton=batchmode {name}"
         complete = subprocess.run(
             cmd,
+            cwd=parent,
             shell=True,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
             check=False,
         )
         if complete.returncode != 0:
-            return None
+            return BuildError(msg=complete.stderr)
         return self._source.with_suffix(".pdf")
 
     @property
