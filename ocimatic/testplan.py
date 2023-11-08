@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import re
 import shlex
@@ -61,8 +63,8 @@ class Testplan:
 
         return status
 
-    def _parse_file(self) -> list["Subtask"]:
-        subtasks: dict[int, "Subtask"] = {}
+    def _parse_file(self) -> list[Subtask]:
+        subtasks: dict[int, Subtask] = {}
         st = 0
         tests_in_group: Counter[str] = Counter()
         for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
@@ -123,7 +125,7 @@ class Testplan:
         cmd: str,
         args: list[str],
         lineno: int,
-    ) -> "Command":
+    ) -> Command:
         if cmd == "copy":
             if len(args) > 2:
                 ui.fatal_error(
@@ -143,7 +145,7 @@ class Testplan:
 class Subtask:
     def __init__(self, dataset_dir: Path, stn: int, validator: Path | None) -> None:
         self._dir = Path(dataset_dir, f"st{stn}")
-        self.commands: list["Command"] = []
+        self.commands: list[Command] = []
         self.validator = validator
 
     def __str__(self) -> str:

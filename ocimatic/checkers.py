@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,7 +38,7 @@ class Checker(ABC):
         )
 
     @staticmethod
-    def find_in_directory(dir: Path) -> "Checker":
+    def find_in_directory(dir: Path) -> Checker:
         for f in dir.iterdir():
             if f.name == "checker.cpp":
                 return CustomChecker(
