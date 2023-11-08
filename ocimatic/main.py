@@ -187,7 +187,7 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa:
         status &= task.gen_expected(sample=sample, solution=solution_path)
 
     if status != ui.Status.success:
-        sys.exit(3)
+        sys.exit(2)
 
 
 @cloup.command(help="Build statement pdf.")

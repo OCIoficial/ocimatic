@@ -663,7 +663,7 @@ Solutions with issues:
         if sum(self._dataset.count()) == 0:
             ui.show_message("Warning", "Empty dataset", ui.WARNING)
 
-        return ui.Status.fail
+        return ui.Status.success
 
     @ui.task("Building statement")
     def build_statement(self, *, blank_page: bool = False) -> None:
