@@ -344,7 +344,7 @@ class TestGroup:
         self,
         runnable: Runnable,
     ) -> Literal[ui.Status.success, ui.Status.fail]:
-        status = ui.Status.success
+        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
         for test in self._tests:
             if test.gen_expected(runnable).status is not ui.Status.success:
                 status = ui.Status.fail
@@ -477,7 +477,7 @@ class Dataset:
         *,
         sample: bool = False,
     ) -> Literal[ui.Status.success, ui.Status.fail]:
-        status = ui.Status.success
+        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
         for subtask in self._subtasks:
             if subtask.gen_expected(runnable) is not ui.Status.success:
                 status = ui.Status.fail

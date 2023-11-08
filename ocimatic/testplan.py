@@ -42,7 +42,7 @@ class Testplan:
         # Run generators with testplan/ as the cwd
         os.chdir(self._directory)
 
-        status = ui.Status.success
+        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
         for i, st in enumerate(subtasks, 1):
             if stn is not None and stn != i:
                 continue
@@ -154,9 +154,9 @@ class Subtask:
         shutil.rmtree(self._dir, ignore_errors=True)
         self._dir.mkdir(parents=True, exist_ok=True)
 
-        status = ui.Status.success
+        status: Literal[ui.Status.success, ui.Status.fail] = ui.Status.success
         for cmd in self.commands:
-            if cmd.run(self._dir) is not Status.success:
+            if cmd.run(self._dir).status is not Status.success:
                 status = ui.Status.fail
         return status
 
