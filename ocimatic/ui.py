@@ -1,19 +1,9 @@
 import re
 import sys
-from collections.abc import Callable, Generator, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from enum import Enum
-from typing import (
-    Concatenate,
-    Literal,
-    NoReturn,
-    ParamSpec,
-    Protocol,
-    TextIO,
-    TypeVar,
-    cast,
-)
+from typing import Concatenate, Literal, NoReturn, ParamSpec, Protocol, TypeVar, cast
 
 from colorama import Fore, Style
 
@@ -59,10 +49,6 @@ def bold(text: str) -> str:
 
 def decolorize(text: str) -> str:
     return re.sub(r"\033\[[0-9]+m", "", text)
-
-
-IO = TextIO
-IO_STREAMS: list[IO | None] = [sys.stdout]
 
 
 class Status(Enum):
@@ -124,23 +110,12 @@ class Result:
         )
 
 
-@contextmanager
-def capture_io(stream: IO | None) -> Iterator[None]:
-    IO_STREAMS.append(stream)
-    yield
-    IO_STREAMS.pop()
-
-
 def write(text: str, color: str = RESET) -> None:
-    stream = IO_STREAMS[-1]
-    if stream:
-        stream.write(colorize(text, color))
+    sys.stdout.write(colorize(text, color))
 
 
 def flush() -> None:
-    stream = IO_STREAMS[-1]
-    if stream:
-        stream.flush()
+    sys.stdout.flush()
 
 
 def writeln(text: str = "", color: str = RESET) -> None:
