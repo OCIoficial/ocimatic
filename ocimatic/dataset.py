@@ -14,7 +14,6 @@ from enum import Enum
 from pathlib import Path
 from zipfile import ZipFile
 
-import ocimatic
 from ocimatic import ui
 from ocimatic.checkers import Checker, CheckerError, CheckerSuccess
 from ocimatic.runnable import RunError, Runnable, RunSuccess, RunTLE
@@ -168,7 +167,7 @@ class Test:
         self._expected_path = expected_path
 
     def __str__(self) -> str:
-        return str(self._in_path.relative_to(ocimatic.config["contest_root"]))
+        return str(ui.relative_to_cwd(self._in_path))
 
     def mtime(self) -> float:
         if self._expected_path.exists():

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import os
 import re
 import sys
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Concatenate, NoReturn, ParamSpec, Protocol, TypeVar, cast
 
 from colorama import Fore, Style
+
+import ocimatic
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
@@ -332,3 +336,11 @@ def task(
         return wrapper
 
     return decorator
+
+
+def relative_to_cwd(path: Path) -> Path:
+    commonpath = Path(f"{os.path.commonpath([path, Path.cwd()])}/")
+    if commonpath.is_relative_to(ocimatic.config["contest_root"]):
+        return Path(os.path.relpath(path, Path.cwd()))
+    else:
+        return path

@@ -7,7 +7,6 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-import ocimatic
 from ocimatic import ui
 from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
 
@@ -52,7 +51,7 @@ class SourceCode(ABC):
     LINE_COMMENT_START: str
 
     def __init__(self, file: Path) -> None:
-        relative_path = relative_to_contest_root(file)
+        relative_path = ui.relative_to_cwd(file)
         self._file = file
         self.name = str(relative_path)
         self.comments = list(parse_comments(file, self.__class__.LINE_COMMENT_START))
@@ -195,7 +194,7 @@ def parse_comments(file: Path, comment_start: str) -> Iterator[OcimaticComment]:
                 yield parsed
                 break
         else:
-            path = relative_to_contest_root(file)
+            path = ui.relative_to_cwd(file)
             ui.fatal_error(f"Invalid comment `{m.group(0)}` in {path}")
 
 
@@ -239,11 +238,4 @@ class LatexSource:
         return pdf if pdf.exists() else None
 
     def __str__(self) -> str:
-        return str(relative_to_contest_root(self._source))
-
-
-def relative_to_contest_root(path: Path) -> Path:
-    try:
-        return path.relative_to(ocimatic.config["contest_root"])
-    except ValueError:
-        return path
+        return str(ui.relative_to_cwd(self._source))
