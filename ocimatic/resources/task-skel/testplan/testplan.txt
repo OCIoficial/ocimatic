@@ -1,11 +1,11 @@
-# This is a testplan for the sample task. For mor information see the README.md next to this file.
+# This is a testplan for the sample task. See the README.md next to this file for more details on
+# how to write a testplan.
 
 [Subtask 1]
-  # You can use copy to use sample test cases in the testplan
-  sample ; copy statement/sample-1.in
-  sample ; copy statement/sample-2.in
+  # You can use `copy` to use sample test cases in the testplan
+  sample ; copy statement/sample-*.in
 
-  # You can also use copy to specify manual test cases
+  # You can also use `copy` to specify manual test cases
   manual ; copy testplan/manual-1.in
 
   # Use a script to generate test case programatically
@@ -16,6 +16,6 @@
   # You can also write a script in C++
   rand ; gen_random.cpp -2000000000 2000000000
 
-  # You can use the echo command to generate manual cases
+  # You can use the `echo` command to generate manual cases
   border-case ; echo 2000000000 2000000000
   border-case ; echo -2000000000 -2000000000
