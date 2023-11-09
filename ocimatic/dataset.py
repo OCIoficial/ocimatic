@@ -498,7 +498,7 @@ class Dataset:
             )
         return DatasetResults(subtasks, sample)
 
-    def validate(self, validators: list[Path | None], stn: int | None) -> None:
+    def validate_input(self, validators: list[Path | None], stn: int | None) -> None:
         zipped = zip(self._subtasks, validators, strict=True)
         for i, (subtask, validator) in enumerate(zipped, 1):
             if stn is None or stn == i:

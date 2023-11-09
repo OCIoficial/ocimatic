@@ -117,6 +117,11 @@ class WorkResult:
         return self
 
 
+@dataclass(frozen=True, slots=True)
+class Error:
+    msg: str
+
+
 @dataclass(frozen=True, kw_only=True, slots=True)
 class Result:
     status: Status
@@ -341,6 +346,9 @@ def task(
 def relative_to_cwd(path: Path) -> Path:
     commonpath = Path(f"{os.path.commonpath([path, Path.cwd()])}/")
     if commonpath.is_relative_to(ocimatic.config["contest_root"]):
-        return Path(os.path.relpath(path, Path.cwd()))
+        relpath = os.path.relpath(path, Path.cwd())
+        if not relpath.startswith("."):
+            relpath = "./" + relpath
+        return Path(relpath)
     else:
         return path

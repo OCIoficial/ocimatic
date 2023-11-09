@@ -325,6 +325,14 @@ class Task:
             self._statement.io_samples(),
         )
 
+        self._testplan = None
+        if not self._config.static_dataset:
+            self._testplan = Testplan(
+                Path(self._directory, "testplan"),
+                self._directory,
+                Path(self._directory, "dataset"),
+            )
+
     @property
     def codename(self) -> str:
         return self._config.codename
@@ -350,14 +358,9 @@ class Task:
 
     @ui.task("Generating dataset input files")
     def run_testplan(self, subtask: int | None) -> ui.Status:
-        if self._config.static_dataset:
+        if self._testplan is None:
             ui.fatal_error("Task has a static dataset.")
-        testplan = Testplan(
-            Path(self._directory, "testplan"),
-            self._directory,
-            Path(self._directory, "dataset"),
-        )
-        return testplan.run(subtask)
+        return self._testplan.run(subtask)
 
     def load_solution_from_path(self, path: Path) -> Solution | None:
         """Search for a solution matching a path.
@@ -391,13 +394,15 @@ class Task:
 
     @ui.task("Validating input files")
     def validate_input(self, subtask: int | None) -> None:
-        testplan = Testplan(
-            Path(self._directory, "testplan"),
-            self._directory,
-            Path(self._directory, "dataset"),
-        )
-        self._dataset.validate(testplan.validators(), subtask)
-        # testplan.validate_input(subtask)
+        if self._testplan is not None:
+            validators = self._testplan.validators()
+            self._dataset.validate_input(validators, subtask)
+        else:
+            ui.show_message(
+                "Warning",
+                "Task has a static dataset and cannot read validators from testplan.",
+                ui.WARNING,
+            )
 
     @ui.task("Compressing dataset")
     def compress_dataset(self, *, random_sort: bool) -> None:
@@ -422,10 +427,10 @@ class Task:
         scores = self._statement.scores()
         if len(scores) != len(counts):
             ui.show_message(
-                "Warning",
-                "The number of subtasks in the statement doesn't match with the number of "
-                "subtasks in the testplan.",
-                ui.WARNING,
+                "Error",
+                "The number of subtasks in the statement doesn't match the number of "
+                "subtasks in the dataset.",
+                ui.ERROR,
             )
             return
 

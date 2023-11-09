@@ -4,15 +4,17 @@ import os
 import re
 import shlex
 import shutil
+import sys
 from abc import ABC, abstractmethod
 from collections import Counter
 from pathlib import Path
-from typing import Literal, NoReturn
+from typing import Literal
 
 import ocimatic
 from ocimatic import ui
 from ocimatic.runnable import RunError, RunSuccess
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
+from ocimatic.ui import Error
 
 
 class Testplan:
@@ -34,22 +36,32 @@ class Testplan:
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
 
+        subtasks = self._parse_file()
+        if isinstance(subtasks, Error):
+            ui.writeln(
+                f"Error when parsing testplan in `{ui.relative_to_cwd(self._testplan_path)}`",
+                ui.ERROR,
+            )
+            ui.writeln(subtasks.msg, ui.ERROR)
+            sys.exit(1)
+
+        self._subtasks = subtasks
+
     def validators(self) -> list[Path | None]:
-        return [subtask.validator for subtask in self._parse_file()]
+        return [subtask.validator for subtask in self._subtasks]
 
     def run(self, stn: int | None) -> ui.Status:
-        subtasks = self._parse_file()
         cwd = Path.cwd()
-        # Run generators with testplan/ as the cwd
+        # Run generators with `testplan/` as the cwd
         os.chdir(self._directory)
 
         status = ui.Status.success
-        for i, st in enumerate(subtasks, 1):
+        for i, st in enumerate(self._subtasks, 1):
             if stn is not None and stn != i:
                 continue
             status &= st.run()
 
-        if sum(len(st.commands) for st in subtasks) == 0:
+        if sum(len(st.commands) for st in self._subtasks) == 0:
             ui.show_message(
                 "Warning",
                 "no commands were executed for the plan.",
@@ -60,7 +72,7 @@ class Testplan:
 
         return status
 
-    def _parse_file(self) -> list[Subtask]:
+    def _parse_file(self) -> list[Subtask] | Error:
         subtasks: dict[int, Subtask] = {}
         st = 0
         tests_in_group: Counter[str] = Counter()
@@ -85,7 +97,7 @@ class Testplan:
                         else None
                     )
                     if st + 1 != found_st:
-                        ui.fatal_error(
+                        return Error(
                             f"line {lineno}: found subtask {found_st}, but subtask {st + 1} was expected",
                         )
                     st += 1
@@ -93,7 +105,7 @@ class Testplan:
                     tests_in_group = Counter()
                 elif cmd_match:
                     if st == 0:
-                        ui.fatal_error(
+                        return Error(
                             f"line {lineno}: found command before declaring a subtask.",
                         )
                     group = cmd_match.group(1)
@@ -108,10 +120,12 @@ class Testplan:
                         args,
                         lineno,
                     )
+                    if isinstance(command, Error):
+                        return command
                     subtasks[st].commands.append(command)
                 else:
-                    ui.fatal_error(
-                        f"line {lineno}: error while parsing line `{line}`\n",
+                    return Error(
+                        f"line {lineno}: invalid line `{line}`\n",
                     )
         return [st for (_, st) in sorted(subtasks.items())]
 
@@ -122,7 +136,7 @@ class Testplan:
         cmd: str,
         args: list[str],
         lineno: int,
-    ) -> Command:
+    ) -> Command | Error:
         if cmd == "copy":
             if len(args) > 2:
                 ui.fatal_error(
@@ -136,7 +150,7 @@ class Testplan:
         elif Path(cmd).suffix == ".cpp":
             return Script(group, idx, Path(self._directory, cmd), "cpp", args)
         else:
-            _invalid_command(cmd, lineno)
+            return _invalid_command_err(cmd, lineno)
 
 
 class Subtask:
@@ -262,11 +276,11 @@ class Script(Command):
         return f"{directory.name}-{self._group}-{self._idx}"
 
 
-def _invalid_command(cmd: str, lineno: int) -> NoReturn:
+def _invalid_command_err(cmd: str, lineno: int) -> Error:
     from typing import get_args
 
     extensions = get_args(Script.VALID_EXTENSIONS)
-    ui.fatal_error(
+    return Error(
         f"line {lineno}: invalid command `{cmd}`\n"
         f"The command should be either `copy`, `echo` or a generator with one of the following extensions {extensions}",
     )
