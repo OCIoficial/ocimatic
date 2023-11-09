@@ -75,7 +75,6 @@ class Testplan:
     def _parse_file(self) -> list[Subtask] | Error:
         subtasks: dict[int, Subtask] = {}
         st = 0
-        tests_in_group: Counter[str] = Counter()
         for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
             line = line.strip()
             subtask_header = re.compile(
@@ -102,7 +101,6 @@ class Testplan:
                         )
                     st += 1
                     subtasks[st] = Subtask(self._dataset_dir, st, validator)
-                    tests_in_group = Counter()
                 elif cmd_match:
                     if st == 0:
                         return Error(
@@ -112,10 +110,8 @@ class Testplan:
                     cmd = cmd_match.group(2)
                     args = _parse_args(cmd_match.group(3) or "")
 
-                    tests_in_group[group] += 1
                     command = self._parse_command(
                         group,
-                        tests_in_group[group],
                         cmd,
                         args,
                         lineno,
@@ -132,7 +128,6 @@ class Testplan:
     def _parse_command(
         self,
         group: str,
-        idx: int,
         cmd: str,
         args: list[str],
         lineno: int,
@@ -142,13 +137,13 @@ class Testplan:
                 ui.fatal_error(
                     f"line {lineno}: command `copy` expects exactly one argument.",
                 )
-            return Copy(group, idx, Path(self._task_directory, args[0]))
+            return Copy(group, Path(self._task_directory, args[0]))
         elif cmd == "echo":
-            return Echo(group, idx, args)
+            return Echo(group, args)
         elif Path(cmd).suffix == ".py":
-            return Script(group, idx, Path(self._directory, cmd), "py", args)
+            return Script(group, Path(self._directory, cmd), "py", args)
         elif Path(cmd).suffix == ".cpp":
-            return Script(group, idx, Path(self._directory, cmd), "cpp", args)
+            return Script(group, Path(self._directory, cmd), "cpp", args)
         else:
             return _invalid_command_err(cmd, lineno)
 
@@ -168,56 +163,58 @@ class Subtask:
         self._dir.mkdir(parents=True, exist_ok=True)
 
         status = ui.Status.success
+        tests_in_group: Counter[str] = Counter()
         for cmd in self.commands:
-            status &= cmd.run(self._dir).status
+            status &= cmd.run(self._dir, tests_in_group).status
         return status
 
 
 class Command(ABC):
-    def __init__(self, group: str, idx: int) -> None:
+    def __init__(self, group: str) -> None:
         self._group = group
-        self._idx = idx
 
-    def dst_file(self, directory: Path) -> Path:
-        return Path(directory, f"{self._group}-{self._idx}.in")
+    def dst_file(self, directory: Path, idx: int) -> Path:
+        return Path(directory, f"{self._group}-{idx}.in")
 
     @abstractmethod
-    def run(self, dst_dir: Path) -> ui.Result:
+    def run(self, dst_dir: Path, tests_in_group: Counter[str]) -> ui.Result:
         raise NotImplementedError(
             f"Class {self.__class__.__name__} doesn't implement run()",
         )
 
 
 class Copy(Command):
-    def __init__(self, group: str, idx: int, file: Path) -> None:
-        super().__init__(group, idx)
+    def __init__(self, group: str, file: Path) -> None:
+        super().__init__(group)
         self._file = file
 
     def __str__(self) -> str:
         return str(self._file.relative_to(ocimatic.config["contest_root"]))
 
     @ui.work("Copy", "{0}")
-    def run(self, dst_dir: Path) -> ui.Result:
+    def run(self, dst_dir: Path, tests_in_group: Counter[str]) -> ui.Result:
         if not self._file.exists():
             return ui.Result.fail(short_msg="No such file")
         try:
-            shutil.copy(self._file, self.dst_file(dst_dir))
+            idx = _next_idx_in_group(self._group, tests_in_group)
+            shutil.copy(self._file, self.dst_file(dst_dir, idx))
             return ui.Result.success(short_msg="OK")
         except Exception:  # pylint: disable=broad-except
             return ui.Result.fail(short_msg="Error when copying file")
 
 
 class Echo(Command):
-    def __init__(self, group: str, idx: int, args: list[str]) -> None:
-        super().__init__(group, idx)
+    def __init__(self, group: str, args: list[str]) -> None:
+        super().__init__(group)
         self._args = args
 
     def __str__(self) -> str:
         return str(self._args)
 
     @ui.work("Echo", "{0}")
-    def run(self, dst_dir: Path) -> ui.Result:
-        with self.dst_file(dst_dir).open("w") as test_file:
+    def run(self, dst_dir: Path, tests_in_group: Counter[str]) -> ui.Result:
+        idx = _next_idx_in_group(self._group, tests_in_group)
+        with self.dst_file(dst_dir, idx).open("w") as test_file:
             test_file.write(" ".join(self._args) + "\n")
             return ui.Result.success(short_msg="Ok")
 
@@ -228,12 +225,11 @@ class Script(Command):
     def __init__(
         self,
         group: str,
-        idx: int,
         path: Path,
         ext: VALID_EXTENSIONS,
         args: list[str],
     ) -> None:
-        super().__init__(group, idx)
+        super().__init__(group)
         self._args = args
         self._script_path = path
         self._ext = ext
@@ -244,7 +240,7 @@ class Script(Command):
         return f"{self._group} ; {script} {args}"
 
     @ui.work("Gen", "{0}")
-    def run(self, dst_dir: Path) -> ui.Result:
+    def run(self, dst_dir: Path, tests_in_group: Counter[str]) -> ui.Result:
         script = self._load_script()
         if not script:
             return ui.Result.fail(short_msg="Script file not found")
@@ -254,9 +250,10 @@ class Script(Command):
                 short_msg="Failed to build generator",
                 long_msg=build_result.msg,
             )
+        idx = _next_idx_in_group(self._group, tests_in_group)
         result = build_result.run(
-            out_path=self.dst_file(dst_dir),
-            args=[self._seed_arg(dst_dir), *self._args],
+            out_path=self.dst_file(dst_dir, idx),
+            args=[self._seed_arg(dst_dir, idx), *self._args],
         )
         match result:
             case RunSuccess(_):
@@ -272,8 +269,8 @@ class Script(Command):
         elif self._ext == "cpp":
             return CppSource(self._script_path)
 
-    def _seed_arg(self, directory: Path) -> str:
-        return f"{directory.name}-{self._group}-{self._idx}"
+    def _seed_arg(self, directory: Path, idx: int) -> str:
+        return f"{directory.name}-{self._group}-{idx}"
 
 
 def _invalid_command_err(cmd: str, lineno: int) -> Error:
@@ -289,3 +286,8 @@ def _invalid_command_err(cmd: str, lineno: int) -> Error:
 def _parse_args(args: str) -> list[str]:
     args = args.strip()
     return [a.encode().decode("unicode_escape") for a in shlex.split(args)]
+
+
+def _next_idx_in_group(group: str, tests_in_group: Counter[str]) -> int:
+    tests_in_group[group] += 1
+    return tests_in_group[group]

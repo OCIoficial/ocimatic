@@ -343,12 +343,12 @@ def task(
     return decorator
 
 
-def relative_to_cwd(path: Path) -> Path:
+def relative_to_cwd(path: Path) -> str:
     commonpath = Path(f"{os.path.commonpath([path, Path.cwd()])}/")
     if commonpath.is_relative_to(ocimatic.config["contest_root"]):
         relpath = os.path.relpath(path, Path.cwd())
         if not relpath.startswith("."):
             relpath = "./" + relpath
-        return Path(relpath)
+        return relpath
     else:
-        return path
+        return str(path)
