@@ -2,7 +2,8 @@
 # how to write a testplan.
 
 [Subtask 1]
-  # You can use `copy` to use sample test cases in the testplan
+  # You can use `copy` to use sample test cases in the testplan. Here we use a glob pattern
+  # to copy multiple files in a single command.
   sample ; copy statement/sample-*.in
 
   # You can also use `copy` to specify manual test cases
@@ -19,3 +20,7 @@
   # You can use the `echo` command to generate manual cases
   border-case ; echo 2000000000 2000000000
   border-case ; echo -2000000000 -2000000000
+
+  # This script doesn't generate meaningful test cases, just here to show to to output
+  # multiple test cases in a single script.
+  multi-test-script ; multi.py

@@ -344,7 +344,7 @@ def task(
 
 
 def relative_to_cwd(path: Path) -> str:
-    commonpath = Path(f"{os.path.commonpath([path, Path.cwd()])}/")
+    commonpath = Path(os.path.commonpath([path, Path.cwd()]))
     if commonpath.is_relative_to(ocimatic.config["contest_root"]):
         relpath = os.path.relpath(path, Path.cwd())
         if not relpath.startswith("."):

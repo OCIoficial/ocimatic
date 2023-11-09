@@ -143,13 +143,7 @@ class Runnable(ABC):
             ret = complete.returncode
             status = ret == 0
             if not status:
-                if ret < 0:
-                    sig = -ret
-                    msg = "Execution killed with signal %d" % sig
-                    if sig in SIGNALS:
-                        msg += ": %s" % SIGNALS[sig]
-                else:
-                    msg = "Execution ended with error (return code %d)" % ret
+                msg = ret_code_to_str(ret)
                 return RunError(msg=msg, stderr=complete.stderr)
 
             stdout.seek(0)
@@ -162,6 +156,27 @@ class Runnable(ABC):
                 input = stack.enter_context(input.open("r"))
             cmd = self.cmd()
             subprocess.run(cmd, stdin=input, check=False)
+
+    def spawn(self, args: list[str] | None = None) -> subprocess.Popen[str]:
+        cmd = self.cmd()
+        cmd.extend(args or [])
+        return subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+
+def ret_code_to_str(ret: int) -> str:
+    if ret < 0:
+        sig = -ret
+        msg = "Execution killed with signal %d" % sig
+        if sig in SIGNALS:
+            msg += ": %s" % SIGNALS[sig]
+        return msg
+    else:
+        return f"Execution ended with error (return code {ret})"
 
 
 class Binary(Runnable):

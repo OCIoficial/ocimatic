@@ -11,9 +11,12 @@ from pathlib import Path
 from typing import Literal
 
 from ocimatic import ui
-from ocimatic.runnable import RunError, RunSuccess
+from ocimatic.runnable import ret_code_to_str
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
 from ocimatic.ui import Error
+
+# https://en.wikipedia.org/wiki/C0_and_C1_control_codes#Field_separators
+FS = chr(28)
 
 
 class Testplan:
@@ -30,7 +33,7 @@ class Testplan:
         self._testplan_path = Path(directory, filename)
         if not self._testplan_path.exists():
             ui.fatal_error(
-                'No such file plan for creating dataset: "%s"' % self._testplan_path,
+                f'File not found: "{self._testplan_path}"',
             )
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
@@ -133,8 +136,8 @@ class Testplan:
     ) -> Command | Error:
         if cmd == "copy":
             if len(args) > 2:
-                ui.fatal_error(
-                    f"line {lineno}: command `copy` expects exactly one argument.",
+                return Error(
+                    f"line {lineno}: the `copy` command expects exactly one argument.",
                 )
             return Copy(group, self._task_directory, args[0])
         elif cmd == "echo":
@@ -203,7 +206,7 @@ class Copy(Command):
             for file in files:
                 idx = _next_idx_in_group(self._group, tests_in_group)
                 shutil.copy(file, self.dst_file(dst_dir, idx))
-            return ui.Result.success(short_msg="OK")
+            return _success_with_count_result(len(files))
         except Exception:  # pylint: disable=broad-except
             return ui.Result.fail(short_msg="Error when copying file")
 
@@ -224,7 +227,7 @@ class Echo(Command):
         idx = _next_idx_in_group(self._group, tests_in_group)
         with self.dst_file(dst_dir, idx).open("w") as test_file:
             test_file.write(" ".join(self._args) + "\n")
-            return ui.Result.success(short_msg="Ok")
+            return _success_with_count_result(1)
 
 
 class Script(Command):
@@ -258,16 +261,39 @@ class Script(Command):
                 short_msg="Failed to build generator",
                 long_msg=build_result.msg,
             )
+
+        count = 0
         idx = _next_idx_in_group(self._group, tests_in_group)
-        result = build_result.run(
-            out_path=self.dst_file(dst_dir, idx),
-            args=[self._seed_arg(dst_dir, idx), *self._args],
-        )
-        match result:
-            case RunSuccess(_):
-                return ui.Result.success(short_msg="OK")
-            case RunError(msg, stderr):
-                return ui.Result.fail(short_msg=msg, long_msg=stderr)
+        # We seed the script with the first `idx`, this guarantees it will be different next time.
+        process = build_result.spawn([self._seed_arg(dst_dir, idx), *self._args])
+        current_file = None
+        try:
+            assert process.stdout
+            while char := process.stdout.read(1):
+                if char == FS:
+                    if current_file:
+                        current_file.close()
+                        current_file = None
+                else:
+                    if current_file is None:
+                        count += 1
+                        current_file = self.dst_file(dst_dir, idx).open("w")
+                        idx = _next_idx_in_group(self._group, tests_in_group)
+                    current_file.write(char)
+        finally:
+            if current_file:
+                current_file.close()
+
+        if count == 0:
+            return ui.Result.fail(short_msg="generator didn't produce any output")
+
+        ret = process.wait()
+        if ret == 0:
+            return _success_with_count_result(count)
+        else:
+            msg = ret_code_to_str(ret)
+            long_msg = process.stderr.read() if process.stderr else None
+            return ui.Result.fail(short_msg=msg, long_msg=long_msg)
 
     def _load_script(self) -> SourceCode | None:
         if not self._script_path.exists():
@@ -289,6 +315,14 @@ def _invalid_command_err(cmd: str, lineno: int) -> Error:
         f"line {lineno}: invalid command `{cmd}`\n"
         f"The command should be either `copy`, `echo` or a generator with one of the following extensions {extensions}",
     )
+
+
+def _success_with_count_result(count: int) -> ui.Result:
+    assert count > 0
+    if count == 1:
+        return ui.Result.success(short_msg="generated 1 test case")
+    else:
+        return ui.Result.success(short_msg=f"generated {count} test cases")
 
 
 def _parse_args(args: str) -> list[str]:
