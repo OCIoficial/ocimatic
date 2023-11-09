@@ -348,7 +348,7 @@ def relative_to_cwd(path: Path) -> str:
     if commonpath.is_relative_to(ocimatic.config["contest_root"]):
         relpath = os.path.relpath(path, Path.cwd())
         if not relpath.startswith("."):
-            relpath = "./" + relpath
+            relpath = "." + os.path.sep + relpath
         return relpath
     else:
         return str(path)
