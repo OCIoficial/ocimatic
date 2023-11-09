@@ -10,7 +10,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Literal
 
-import ocimatic
 from ocimatic import ui
 from ocimatic.runnable import RunError, RunSuccess
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
@@ -137,7 +136,7 @@ class Testplan:
                 ui.fatal_error(
                     f"line {lineno}: command `copy` expects exactly one argument.",
                 )
-            return Copy(group, Path(self._task_directory, args[0]))
+            return Copy(group, self._task_directory, args[0])
         elif cmd == "echo":
             return Echo(group, args)
         elif Path(cmd).suffix == ".py":
@@ -184,23 +183,32 @@ class Command(ABC):
 
 
 class Copy(Command):
-    def __init__(self, group: str, file: Path) -> None:
+    magic_check = re.compile("([*?[])")
+
+    def __init__(self, group: str, dir: Path, pattern: str) -> None:
         super().__init__(group)
-        self._file = file
+        self._dir = dir
+        self._pattern = pattern
 
     def __str__(self) -> str:
-        return str(self._file.relative_to(ocimatic.config["contest_root"]))
+        return self._pattern
 
     @ui.work("Copy", "{0}")
     def run(self, dst_dir: Path, tests_in_group: Counter[str]) -> ui.Result:
-        if not self._file.exists():
-            return ui.Result.fail(short_msg="No such file")
+        files = list(self._dir.glob(self._pattern))
+        if not files:
+            msg = "No file matches the pattern" if self.has_magic() else "No such file"
+            return ui.Result.fail(short_msg=msg)
         try:
-            idx = _next_idx_in_group(self._group, tests_in_group)
-            shutil.copy(self._file, self.dst_file(dst_dir, idx))
+            for file in files:
+                idx = _next_idx_in_group(self._group, tests_in_group)
+                shutil.copy(file, self.dst_file(dst_dir, idx))
             return ui.Result.success(short_msg="OK")
         except Exception:  # pylint: disable=broad-except
             return ui.Result.fail(short_msg="Error when copying file")
+
+    def has_magic(self) -> bool:
+        return Copy.magic_check.search(self._pattern) is not None
 
 
 class Echo(Command):

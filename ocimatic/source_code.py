@@ -194,7 +194,7 @@ def parse_comments(file: Path, comment_start: str) -> Iterator[OcimaticComment]:
                 yield parsed
                 break
         else:
-            path = _relative_to_cwd(file)
+            path = ui.relative_to_cwd(file)
             ui.fatal_error(f"Invalid comment `{m.group(0)}` in {path}")
 
 
