@@ -324,9 +324,9 @@ def _invalid_command_err(cmd: str, lineno: int) -> Error:
 def _success_with_count_result(count: int) -> ui.Result:
     assert count > 0
     if count == 1:
-        return ui.Result.success(short_msg="generated 1 test case")
+        return ui.Result.success(short_msg="1 test case generated")
     else:
-        return ui.Result.success(short_msg=f"generated {count} test cases")
+        return ui.Result.success(short_msg=f"{count} test cases generated")
 
 
 def _parse_args(args: str) -> list[str]:

@@ -394,8 +394,8 @@ class Task:
         return None
 
     @ui.task("Validating input files")
-    def validate_input(self, subtask: int | None) -> None:
-        self._dataset.validate_input(subtask)
+    def validate_input(self, stn: int | None) -> ui.Status:
+        return self._dataset.validate_input(stn)
 
     @ui.task("Compressing dataset")
     def compress_dataset(self, *, random_sort: bool) -> None:
@@ -489,7 +489,7 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
                     ui.writeln("Result: Some test failed", ui.ERROR)
 
     @ui.task("Checking dataset")
-    def check_dataset(self) -> bool:
+    def check_dataset(self) -> ui.Status:
         """Check input/output correctness.
 
         First run all correct solutions againt all test cases and sample input. Then use the running
@@ -502,21 +502,37 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
                 "No test cases found. Generate the dataset by running `ocimatic run-testplan && ocimatic gen-expected`.",
                 ui.ERROR,
             )
-            return False
+            return ui.Status.fail
 
         if not self._dataset.check_all_have_expected():
             ui.show_message(
                 "Error",
-                "Some test cases don't have an expected output, generate them with `ocimatic gen-expected`.",
+                "Some test cases don't have expected output, generate them with `ocimatic gen-expected`.",
                 ui.ERROR,
             )
-            return False
+            return ui.Status.fail
+
+        # Do not early return if there are validate_input errors but still report it at the end
+        validate_input_status = self._check_dataset_validate_input()
 
         stats = self._check_dataset_run_correct_solutions()
         if not stats:
-            return False
+            return ui.Status.fail
 
-        return self._check_dataset_run_partial_solutions(stats)
+        return (
+            self._check_dataset_run_partial_solutions(stats) and validate_input_status
+        )
+
+    def _check_dataset_validate_input(self) -> ui.Status:
+        ui.writeln()
+        ui.writeln("Running validators on input files", ui.INFO)
+        status = self._dataset.validate_input(stn=None)
+        ui.writeln()
+        if status == ui.Status.fail:
+            ui.writeln()
+            ui.writeln("Some subtasks didn't pass input validation.", ui.ERROR)
+
+        return status
 
     def _check_dataset_run_correct_solutions(self) -> RuntimeStats | None:
         stats = RuntimeStats.unit()
@@ -563,7 +579,7 @@ Solutions with issues:
         ui.writeln("All correct solutions produced correct results", ui.OK)
         return stats
 
-    def _check_dataset_run_partial_solutions(self, stats: RuntimeStats) -> bool:
+    def _check_dataset_run_partial_solutions(self, stats: RuntimeStats) -> ui.Status:
         timeout = stats.set_limit()
 
         # we already checked the dataset is present and all tests had expected output so
@@ -577,7 +593,7 @@ Solutions with issues:
         if not self._partial:
             ui.writeln()
             ui.writeln("No partial solutions", ui.WARNING)
-            return True
+            return ui.Status.success
 
         failed: list[Solution] = []
         for sol in self._partial:
@@ -603,14 +619,14 @@ Solutions with issues:
             )
             for sol in failed:
                 ui.writeln(" * " + str(sol), ui.ERROR)
-            return False
+            return ui.Status.fail
 
         ui.writeln()
         ui.writeln(
             "All partial solutions passed/failed the subtasks they were supposed to.",
             ui.OK,
         )
-        return True
+        return ui.Status.success
 
     @ui.task("Building solutions")
     def build_solution(self, solution: Path) -> None:

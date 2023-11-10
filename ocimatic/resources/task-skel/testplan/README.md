@@ -44,6 +44,12 @@ sample tesptlan.txt next to this README to see how each type of command can be u
     argument is passed as the first argument meaning that the rest of the arguments are *shifted* in
     one position.
 
+## Input Validators
+
+An input validator is a script that checks whether the input of a test case satisfies the format and
+restrictions in the statement. You can specify a validator for a subtask in the subtask's header.
+See testplan.txt for an example. Validators are optional, but their use is highly encouraged.
+
 ## Multi-test Script
 
 Normally, a script generates a single test case. Then, it can be used multiple times in the testplan.

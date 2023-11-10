@@ -1,7 +1,9 @@
 # This is a testplan for the sample task. See the README.md next to this file for more details on
 # how to write a testplan.
 
-[Subtask 1]
+# We define a validator for this subtask. The path is relative to this file
+[Subtask 1 - validators/st1.cpp]
+
   # You can use `copy` to use sample test cases in the testplan. Here we use a glob pattern
   # to copy multiple files in a single command.
   sample ; copy statement/sample-*.in
@@ -13,8 +15,9 @@
   rand ; gen_random.py 10 100
 
 
+# We don't define a validator for this subtask.
 [Subtask 2]
-  # You can also write a script in C++
+  # You can also write a script in C++, useful to speed up generation.
   rand ; gen_random.cpp -2000000000 2000000000
 
   # You can use the `echo` command to generate manual cases

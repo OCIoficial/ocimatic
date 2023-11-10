@@ -179,13 +179,13 @@ class Test:
         return self._in_path.stat().st_mtime
 
     @ui.work("Validate", "{0}")
-    def validate(self, validator: Runnable) -> WorkResult:
+    def validate(self, validator: Runnable) -> ui.Result:
         result = validator.run(in_path=self._in_path)
         match result:
             case RunSuccess(_):
-                return WorkResult.success(short_msg="OK")
+                return ui.Result.success(short_msg="OK")
             case RunError(msg, stderr):
-                return WorkResult.fail(short_msg=msg, long_msg=stderr)
+                return ui.Result.fail(short_msg=msg, long_msg=stderr)
 
     @ui.work("Gen")
     def gen_expected(self, runnable: Runnable) -> ui.Result:
@@ -365,13 +365,13 @@ class Subtask(TestGroup):
         )
 
     @ui.workgroup("{0}")
-    def validate(self, validator: Path | None) -> None:
+    def validate(self, validator: Path | None) -> ui.Status:
         if validator is None:
             ui.show_message("Warning", "no validator available", ui.WARNING)
-            return
+            return ui.Status.success
         if not self._tests:
             ui.show_message("Warning", "no test cases", ui.WARNING)
-            return
+            return ui.Status.success
 
         source: SourceCode
         if validator.suffix == ".cpp":
@@ -379,18 +379,20 @@ class Subtask(TestGroup):
         elif validator.suffix == ".py":
             source = PythonSource(validator)
         else:
-            ui.show_message("Warning", "Unsupported file for validator", ui.WARNING)
-            return
+            ui.show_message("Error", "unsupported file for validator", ui.ERROR)
+            return ui.Status.fail
         build = source.build()
         if isinstance(build, BuildError):
             ui.show_message(
-                "Warning",
-                f"Failed to build validator\n{build.msg}",
-                ui.WARNING,
+                "Error",
+                f"failed to build validator\n{build.msg}",
+                ui.ERROR,
             )
-            return
+            return ui.Status.fail
+        status = ui.Status.success
         for test in self._tests:
-            test.validate(build)
+            status &= test.validate(build).status
+        return status
 
 
 @dataclass
@@ -514,19 +516,22 @@ class Dataset:
             )
         return DatasetResults(subtasks, sample)
 
-    def validate_input(self, stn: int | None) -> None:
+    def validate_input(self, stn: int | None) -> ui.Status:
         if self._testplan is not None:
             validators = self._testplan.validators()
             zipped = zip(self._subtasks, validators, strict=True)
+            status = ui.Status.success
             for i, (subtask, validator) in enumerate(zipped, 1):
                 if stn is None or stn == i:
-                    subtask.validate(validator)
+                    status &= subtask.validate(validator)
+            return status
         else:
             ui.show_message(
                 "Warning",
                 "Task has a static dataset and cannot read validators from testplan.",
                 ui.WARNING,
             )
+            return ui.Status.success
 
     def __str__(self) -> str:
         return f"{self._directory}"

@@ -120,7 +120,7 @@ def new_task(cli: CLI, name: str) -> None:
 def check_dataset(cli: CLI) -> None:
     ui.set_verbosity(ui.Verbosity.quiet)
     tasks = cli.select_tasks()
-    failed = [task for task in tasks if not task.check_dataset()]
+    failed = [task for task in tasks if task.check_dataset() == ui.Status.fail]
     if len(tasks) > 1:
         ui.writeln()
         if failed:
@@ -252,8 +252,12 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
     if len(tasks) > 1:
         ui.set_verbosity(ui.Verbosity.quiet)
 
+    status = ui.Status.success
     for task in tasks:
-        task.validate_input(subtask=subtask)
+        status &= task.validate_input(stn=subtask)
+
+    if status == ui.Status.fail:
+        sys.exit(2)
 
 
 @cloup.command(help="Print the score parameters for cms.")
