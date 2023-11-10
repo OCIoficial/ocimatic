@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TextIO
 
-from ocimatic import ui
+from ocimatic import utils
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, DatasetResults, RunMode
 from ocimatic.source_code import (
@@ -31,7 +31,7 @@ class SolutionSpec:
             case 1:
                 self.subtasks_spec = comments[0]
             case _:
-                ui.fatal_error(
+                utils.fatal_error(
                     f"Only one of should-pass or should-fail must be specified: {name}",
                 )
 
@@ -119,7 +119,7 @@ class Solution:
 
         return Solution(source)
 
-    @ui.solution_group()
+    @utils.solution_group()
     def run_on_dataset(
         self,
         dataset: Dataset,
@@ -128,14 +128,14 @@ class Solution:
         *,
         timeout: float | None = None,
         subtask: int | None = None,
-    ) -> ui.SolutionGroup[DatasetResults | None]:
+    ) -> utils.SolutionGroup[DatasetResults | None]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
-            yield ui.Result.fail(short_msg="Failed", long_msg=build_result.msg)
+            yield utils.Result.fail(short_msg="Failed", long_msg=build_result.msg)
             return None
         else:
-            yield ui.Result.success(short_msg="OK")
+            yield utils.Result.success(short_msg="OK")
             return dataset.run(
                 build_result,
                 checker,
@@ -144,40 +144,40 @@ class Solution:
                 subtask=subtask,
             )
 
-    @ui.solution_group()
-    def run_on_input(self, input: Path | TextIO) -> ui.SolutionGroup[None]:
+    @utils.solution_group()
+    def run_on_input(self, input: Path | TextIO) -> utils.SolutionGroup[None]:
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
-            yield ui.Result.fail(short_msg="Failed", long_msg=build_result.msg)
+            yield utils.Result.fail(short_msg="Failed", long_msg=build_result.msg)
             return None
         else:
-            yield ui.Result.success(short_msg="OK")
+            yield utils.Result.success(short_msg="OK")
         build_result.run_on_input(input)
 
-    @ui.solution_group()
+    @utils.solution_group()
     def gen_expected(
         self,
         dataset: Dataset,
         *,
         sample: bool = False,
-    ) -> ui.SolutionGroup[ui.Status]:
+    ) -> utils.SolutionGroup[utils.Status]:
         """Generate expected output files for all test cases in the given dataset running this solution."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
-            yield ui.Result.fail(short_msg="Failed", long_msg=build_result.msg)
-            return ui.Status.fail
+            yield utils.Result.fail(short_msg="Failed", long_msg=build_result.msg)
+            return utils.Status.fail
         else:
-            yield ui.Result.success(short_msg="OK")
+            yield utils.Result.success(short_msg="OK")
             return dataset.gen_expected(build_result, sample=sample)
 
-    @ui.work("Build")
-    def build(self) -> ui.WorkResult:
+    @utils.work("Build")
+    def build(self) -> utils.WorkResult:
         """Build solution."""
         result = self._source.build(force=True)
         if isinstance(result, BuildError):
-            return ui.WorkResult.fail(short_msg="Failed", long_msg=result.msg)
+            return utils.WorkResult.fail(short_msg="Failed", long_msg=result.msg)
         else:
-            return ui.WorkResult.success(short_msg="OK")
+            return utils.WorkResult.success(short_msg="OK")
 
     @property
     def name(self) -> str:

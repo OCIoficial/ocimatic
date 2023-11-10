@@ -15,12 +15,12 @@ from enum import Enum
 from pathlib import Path
 from zipfile import ZipFile
 
-from ocimatic import ui
+from ocimatic import utils
 from ocimatic.checkers import Checker, CheckerError, CheckerSuccess
 from ocimatic.runnable import RunError, Runnable, RunSuccess, RunTLE
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
 from ocimatic.testplan import Testplan
-from ocimatic.ui import WorkResult
+from ocimatic.utils import WorkResult
 
 IN = ".in"
 SOL = ".sol"
@@ -63,7 +63,7 @@ class TestResult:
                 return WorkResult.info(short_msg=msg)
             else:
                 return WorkResult(
-                    status=ui.Status.from_bool(self.is_correct()),
+                    status=utils.Status.from_bool(self.is_correct()),
                     short_msg=msg,
                 )
 
@@ -106,7 +106,7 @@ class TestResult:
         def into_work_result(self, mode: RunMode) -> WorkResult:
             del mode
             msg = f"Failed to run checker: `{self.checker_result.msg}`"
-            return WorkResult(status=ui.Status.fail, short_msg=msg)
+            return WorkResult(status=utils.Status.fail, short_msg=msg)
 
     @dataclass
     class NoExpectedOutput:
@@ -118,7 +118,7 @@ class TestResult:
         def into_work_result(self, mode: RunMode) -> WorkResult:
             del mode
             return WorkResult(
-                status=ui.Status.fail,
+                status=utils.Status.fail,
                 short_msg="No expected output file",
             )
 
@@ -170,7 +170,7 @@ class Test:
         self._expected_path = expected_path
 
     def __str__(self) -> str:
-        return str(ui.relative_to_cwd(self._in_path))
+        return str(utils.relative_to_cwd(self._in_path))
 
     def mtime(self) -> float:
         if self._expected_path.exists():
@@ -180,26 +180,26 @@ class Test:
             )
         return self._in_path.stat().st_mtime
 
-    @ui.work("Validate", "{0}")
-    def validate(self, validator: Runnable) -> ui.Result:
+    @utils.work("Validate", "{0}")
+    def validate(self, validator: Runnable) -> utils.Result:
         result = validator.run(in_path=self._in_path)
         match result:
             case RunSuccess(_):
-                return ui.Result.success(short_msg="OK")
+                return utils.Result.success(short_msg="OK")
             case RunError(msg, stderr):
-                return ui.Result.fail(short_msg=msg, long_msg=stderr)
+                return utils.Result.fail(short_msg=msg, long_msg=stderr)
 
-    @ui.work("Gen")
-    def gen_expected(self, runnable: Runnable) -> ui.Result:
+    @utils.work("Gen")
+    def gen_expected(self, runnable: Runnable) -> utils.Result:
         """Run binary with this test as input to generate expected output file."""
         result = runnable.run(in_path=self.in_path, out_path=self.expected_path)
         match result:
             case RunSuccess(_):
-                return ui.Result.success(short_msg="OK")
+                return utils.Result.success(short_msg="OK")
             case RunError(msg, stderr):
-                return ui.Result.fail(short_msg=msg, long_msg=stderr)
+                return utils.Result.fail(short_msg=msg, long_msg=stderr)
 
-    @ui.work("Run")
+    @utils.work("Run")
     def run(
         self,
         runnable: Runnable,
@@ -265,7 +265,7 @@ class Test:
     def expected_path(self) -> Path:
         return self._expected_path
 
-    @ui.work("Normalize")
+    @utils.work("Normalize")
     def normalize(self) -> WorkResult:
         if not shutil.which("dos2unix"):
             return WorkResult.fail(short_msg="Cannot find dos2unix")
@@ -282,7 +282,7 @@ class Test:
             st += subprocess.call(tounix_expected, stdout=null, stderr=null, shell=True)
             st += subprocess.call(sed_expected, stdout=null, stderr=null, shell=True)
         return WorkResult(
-            status=ui.Status.from_bool(st == 0),
+            status=utils.Status.from_bool(st == 0),
             short_msg="OK" if st == 0 else "FAILED",
         )
 
@@ -310,7 +310,7 @@ class TestGroup:
     def count(self) -> int:
         return len(self._tests)
 
-    @ui.workgroup("{0}")
+    @utils.workgroup("{0}")
     def run(
         self,
         runnable: Runnable,
@@ -321,20 +321,20 @@ class TestGroup:
         skip: bool = False,
     ) -> list[TestResult] | None:
         if skip:
-            ui.show_message("Info", "skipping")
+            utils.show_message("Info", "skipping")
             return None
         results: list[TestResult] = []
         for test in self._tests:
             result = test.run(runnable, checker, mode, timeout)
             results.append(result)
         if not self._tests and mode == RunMode.run_solution:
-            ui.show_message("Warning", "no test cases found", ui.WARNING)
+            utils.show_message("Warning", "no test cases found", utils.WARNING)
 
         return results
 
-    @ui.workgroup("{0}")
-    def gen_expected(self, runnable: Runnable) -> ui.Status:
-        status = ui.Status.success
+    @utils.workgroup("{0}")
+    def gen_expected(self, runnable: Runnable) -> utils.Status:
+        status = utils.Status.success
         for test in self._tests:
             status &= test.gen_expected(runnable).status
         return status
@@ -355,14 +355,14 @@ class Subtask(TestGroup):
             [Test(f, f.with_suffix(SOL)) for f in directory.glob(f"*{IN}")],
         )
 
-    @ui.workgroup("{0}")
-    def validate(self, validator: Path | None) -> ui.Status:
+    @utils.workgroup("{0}")
+    def validate(self, validator: Path | None) -> utils.Status:
         if validator is None:
-            ui.show_message("Warning", "no validator available", ui.WARNING)
-            return ui.Status.success
+            utils.show_message("Warning", "no validator available", utils.WARNING)
+            return utils.Status.success
         if not self._tests:
-            ui.show_message("Warning", "no test cases", ui.WARNING)
-            return ui.Status.success
+            utils.show_message("Warning", "no test cases", utils.WARNING)
+            return utils.Status.success
 
         source: SourceCode
         if validator.suffix == ".cpp":
@@ -370,17 +370,17 @@ class Subtask(TestGroup):
         elif validator.suffix == ".py":
             source = PythonSource(validator)
         else:
-            ui.show_message("Error", "unsupported file for validator", ui.ERROR)
-            return ui.Status.fail
+            utils.show_message("Error", "unsupported file for validator", utils.ERROR)
+            return utils.Status.fail
         build = source.build()
         if isinstance(build, BuildError):
-            ui.show_message(
+            utils.show_message(
                 "Error",
                 f"failed to build validator\n{build.msg}",
-                ui.ERROR,
+                utils.ERROR,
             )
-            return ui.Status.fail
-        status = ui.Status.success
+            return utils.Status.fail
+        status = utils.Status.success
         for test in self._tests:
             status &= test.validate(build).status
         return status
@@ -525,8 +525,8 @@ class Dataset:
             self._subtasks = []
         self._sampledata = TestGroup("sample", sampledata)
 
-    def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> ui.Status:
-        status = ui.Status.success
+    def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> utils.Status:
+        status = utils.Status.success
         for subtask in self._subtasks:
             status &= subtask.gen_expected(runnable)
         if sample:
@@ -548,8 +548,8 @@ class Dataset:
             results = st.run(runnable, checker, mode, timeout=timeout, skip=skip)
             if mode == RunMode.run_solution:
                 for t in self.included(stn):
-                    ui.write(f" @include {t}", ui.CYAN)
-                    ui.writeln("  *")
+                    utils.write(f" @include {t}", utils.CYAN)
+                    utils.writeln("  *")
             subtasks.append(
                 SubtaskResults(stn=stn, tests=results) if results else None,
             )
@@ -578,22 +578,22 @@ class Dataset:
             st = self._subtasks[include.stn - 1]
             yield from (t for t in st.tests() if t.matches(testplan, include.pattern))
 
-    def validate_input(self, stn: int | None) -> ui.Status:
+    def validate_input(self, stn: int | None) -> utils.Status:
         if self.testplan is not None:
             validators = self.testplan.validators()
             zipped = zip(self._subtasks, validators, strict=True)
-            status = ui.Status.success
+            status = utils.Status.success
             for i, (subtask, validator) in enumerate(zipped, 1):
                 if stn is None or stn == i:
                     status &= subtask.validate(validator)
             return status
         else:
-            ui.show_message(
+            utils.show_message(
                 "Warning",
                 "Task has a static dataset and cannot read validators from testplan.",
-                ui.WARNING,
+                utils.WARNING,
             )
-            return ui.Status.success
+            return utils.Status.success
 
     def __str__(self) -> str:
         return f"{self._directory}"
@@ -604,8 +604,8 @@ class Dataset:
             mtime = max(mtime, subtask.mtime())
         return mtime
 
-    @ui.work("ZIP")
-    def compress(self, *, random_sort: bool = False) -> ui.Result:
+    @utils.work("ZIP")
+    def compress(self, *, random_sort: bool = False) -> utils.Result:
         """Compress all test cases in the dataset into a single zip file.
 
         The basename of the corresponding subtask subdirectory is prepended to each file.
@@ -619,8 +619,8 @@ class Dataset:
 
             if compressed == 0:
                 path.unlink()
-                return ui.Result.fail("EMPTY DATASET")
-        return ui.Result.success("OK")
+                return utils.Result.fail("EMPTY DATASET")
+        return utils.Result.success("OK")
 
     def count(self) -> list[int]:
         return [st.count() for st in self._subtasks]

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 import click
 import cloup
 from cloup.constraints import If, accept_none, mutually_exclusive
 
-from ocimatic import core, server, ui
+from ocimatic import core, server, utils
 
 
 class CLI:
@@ -21,9 +22,9 @@ class CLI:
 
     def new_task(self, name: str) -> None:
         if Path(self.contest.directory, name).exists():
-            ui.fatal_error("Cannot create task in existing directory.")
+            utils.fatal_error("Cannot create task in existing directory.")
         self.contest.new_task(name)
-        ui.show_message("Info", f"Task [{name}] created", ui.OK)
+        utils.show_message("Info", f"Task [{name}] created", utils.OK)
 
     def select_task(self, name: str | None) -> core.Task:
         task = None
@@ -32,7 +33,7 @@ class CLI:
         elif self.last_dir:
             task = self.contest.find_task(self.last_dir.name)
         if not task:
-            ui.fatal_error("You have to be inside a task to run this command.")
+            utils.fatal_error("You have to be inside a task to run this command.")
         return task
 
     def select_tasks(self) -> list[core.Task]:
@@ -61,11 +62,11 @@ def init(path: str, phase: str | None) -> None:
     try:
         contest_path = Path(Path.cwd(), path)
         if contest_path.exists():
-            ui.fatal_error("Couldn't create contest. Path already exists")
+            utils.fatal_error("Couldn't create contest. Path already exists")
         core.Contest.create_layout(contest_path, phase)
-        ui.show_message("Info", f"Contest [{path}] created", ui.OK)
+        utils.show_message("Info", f"Contest [{path}] created", utils.OK)
     except Exception as exc:  # pylint: disable=broad-except
-        ui.fatal_error("Couldn't create contest: %s." % exc)
+        utils.fatal_error("Couldn't create contest: %s." % exc)
 
 
 @cloup.command(
@@ -83,8 +84,8 @@ def run_server(port: int) -> None:
 @cloup.command(help="Generate problemset pdf.")
 @cloup.pass_obj
 def problemset(cli: CLI) -> None:
-    if cli.contest.build_problemset() != ui.Status.success:
-        sys.exit(2)
+    status = cli.contest.build_problemset()
+    exit_with_status(status)
 
 
 @cloup.command(
@@ -118,35 +119,35 @@ def new_task(cli: CLI, name: str) -> None:
 )
 @cloup.pass_obj
 def check_dataset(cli: CLI) -> None:
-    ui.set_verbosity(ui.Verbosity.quiet)
+    utils.set_verbosity(utils.Verbosity.quiet)
     tasks = cli.select_tasks()
-    failed = [task for task in tasks if task.check_dataset() == ui.Status.fail]
+    failed = [task for task in tasks if task.check_dataset() == utils.Status.fail]
     if len(tasks) > 1:
-        ui.writeln()
+        utils.writeln()
         if failed:
-            ui.writeln(
+            utils.writeln(
                 "------------------------------------------------",
-                ui.ERROR,
+                utils.ERROR,
             )
-            ui.writeln(
+            utils.writeln(
                 "Some tasks have issues that need to be resolved.",
-                ui.ERROR,
+                utils.ERROR,
             )
-            ui.writeln()
-            ui.writeln("Tasks with issues:", ui.ERROR)
+            utils.writeln()
+            utils.writeln("Tasks with issues:", utils.ERROR)
             for task in failed:
-                ui.writeln(f" * {task.name}", ui.ERROR)
-            ui.writeln(
+                utils.writeln(f" * {task.name}", utils.ERROR)
+            utils.writeln(
                 "------------------------------------------------",
-                ui.ERROR,
+                utils.ERROR,
             )
         else:
-            ui.writeln("--------------------", ui.OK)
-            ui.writeln("| No issues found! |", ui.OK)
-            ui.writeln("--------------------", ui.OK)
+            utils.writeln("--------------------", utils.OK)
+            utils.writeln("| No issues found! |", utils.OK)
+            utils.writeln("--------------------", utils.OK)
 
     if len(failed) > 0:
-        sys.exit(2)
+        exit_with_status(utils.Status.fail)
 
 
 @cloup.command(
@@ -173,21 +174,20 @@ def check_dataset(cli: CLI) -> None:
 def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa: FBT001
     tasks = cli.select_tasks()
     if len(tasks) > 1:
-        ui.set_verbosity(ui.Verbosity.quiet)
+        utils.set_verbosity(utils.Verbosity.quiet)
 
     if solution is not None and len(tasks) > 1:
-        ui.fatal_error(
+        utils.fatal_error(
             "A solution can only be specified when there's a single target task.",
         )
 
     solution_path = Path(solution) if solution else None
 
-    status = ui.Status.success
+    status = utils.Status.success
     for task in tasks:
         status &= task.gen_expected(sample=sample, solution=solution_path)
 
-    if status != ui.Status.success:
-        sys.exit(2)
+    exit_with_status(status)
 
 
 @cloup.command(help="Build statement pdf.")
@@ -230,18 +230,17 @@ def normalize(cli: CLI) -> None:
 def run_testplan(cli: CLI, subtask: int | None) -> None:
     tasks = cli.select_tasks()
     if len(tasks) > 1:
-        ui.set_verbosity(ui.Verbosity.quiet)
+        utils.set_verbosity(utils.Verbosity.quiet)
 
     if subtask is not None and len(tasks) > 1:
-        ui.fatal_error(
+        utils.fatal_error(
             "A subtask can only be specified when there's a single target task.",
         )
-    status = ui.Status.success
+    status = utils.Status.success
     for task in tasks:
         status &= task.run_testplan(subtask=subtask)
 
-    if status != ui.Status.success:
-        sys.exit(2)
+    exit_with_status(status)
 
 
 @cloup.command(help="Run input validators.")
@@ -250,14 +249,13 @@ def run_testplan(cli: CLI, subtask: int | None) -> None:
 def validate_input(cli: CLI, subtask: int | None) -> None:
     tasks = cli.select_tasks()
     if len(tasks) > 1:
-        ui.set_verbosity(ui.Verbosity.quiet)
+        utils.set_verbosity(utils.Verbosity.quiet)
 
-    status = ui.Status.success
+    status = utils.Status.success
     for task in tasks:
         status &= task.validate_input(stn=subtask)
 
-    if status == ui.Status.fail:
-        sys.exit(2)
+    exit_with_status(status)
 
 
 @cloup.command(help="Print the score parameters for cms.")
@@ -267,6 +265,14 @@ def score_params(cli: CLI) -> None:
 
     for task in tasks:
         task.score()
+
+
+def exit_with_status(status: utils.Status) -> NoReturn:
+    match status:
+        case utils.Status.success:
+            sys.exit(0)
+        case utils.Status.fail:
+            sys.exit(2)
 
 
 single_task = cloup.option(
@@ -322,7 +328,7 @@ def run_solution(
     if file is not None:
         sol = task.load_solution_from_path(Path(solution))
         if not sol:
-            return ui.show_message("Error", "Solution not found", ui.ERROR)
+            return utils.show_message("Error", "Solution not found", utils.ERROR)
         sol.run_on_input(sys.stdin if file == "-" else Path(file))
     else:
         task.run_solution(Path(solution), timeout, subtask)

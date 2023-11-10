@@ -11,10 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Literal
 
-from ocimatic import ui
+from ocimatic import utils
 from ocimatic.runnable import ret_code_to_str
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
-from ocimatic.ui import Error
+from ocimatic.utils import Error
 
 # https://en.wikipedia.org/wiki/C0_and_C1_control_codes#Field_separators
 FS = chr(28)
@@ -33,7 +33,7 @@ class Testplan:
         self._directory = directory
         self._testplan_path = Path(directory, filename)
         if not self._testplan_path.exists():
-            ui.fatal_error(
+            utils.fatal_error(
                 f'File not found: "{self._testplan_path}"',
             )
         self._task_directory = task_directory
@@ -41,11 +41,11 @@ class Testplan:
 
         subtasks = self._parse_file()
         if isinstance(subtasks, Error):
-            ui.writeln(
-                f"Error when parsing testplan in `{ui.relative_to_cwd(self._testplan_path)}`",
-                ui.ERROR,
+            utils.writeln(
+                f"Error when parsing testplan in `{utils.relative_to_cwd(self._testplan_path)}`",
+                utils.ERROR,
             )
-            ui.writeln(subtasks.msg, ui.ERROR)
+            utils.writeln(subtasks.msg, utils.ERROR)
             sys.exit(1)
 
         self._subtasks = subtasks
@@ -63,22 +63,22 @@ class Testplan:
     def extract_group(self, test_file: Path) -> str | None:
         return _Command.extract_group(test_file)
 
-    def run(self, stn: int | None) -> ui.Status:
+    def run(self, stn: int | None) -> utils.Status:
         cwd = Path.cwd()
         # Run generators with `testplan/` as the cwd
         os.chdir(self._directory)
 
-        status = ui.Status.success
+        status = utils.Status.success
         for i, st in enumerate(self._subtasks, 1):
             if stn is not None and stn != i:
                 continue
             status &= st.run()
 
         if sum(len(st.commands) for st in self._subtasks) == 0:
-            ui.show_message(
+            utils.show_message(
                 "Warning",
                 "no commands were executed for the plan.",
-                ui.WARNING,
+                utils.WARNING,
             )
 
         os.chdir(cwd)
@@ -233,12 +233,12 @@ class _SubtaskPlan:
     def __str__(self) -> str:
         return str(self._dir.name)
 
-    @ui.workgroup("{0}")
-    def run(self) -> ui.Status:
+    @utils.workgroup("{0}")
+    def run(self) -> utils.Status:
         shutil.rmtree(self._dir, ignore_errors=True)
         self._dir.mkdir(parents=True, exist_ok=True)
 
-        status = ui.Status.success
+        status = utils.Status.success
         tests_in_group: Counter[_GroupName] = Counter()
         for cmd in self.commands:
             status &= cmd.run(self._dir, tests_in_group).status
@@ -266,7 +266,7 @@ class _Command(ABC):
         return m.group(1) if m else None
 
     @abstractmethod
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> ui.Result:
+    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
         raise NotImplementedError(
             f"Class {self.__class__.__name__} doesn't implement run()",
         )
@@ -283,19 +283,19 @@ class _Copy(_Command):
     def __str__(self) -> str:
         return self._pattern
 
-    @ui.work("Copy", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> ui.Result:
+    @utils.work("Copy", "{0}")
+    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
         files = list(self._dir.glob(self._pattern))
         if not files:
             msg = "No file matches the pattern" if self.has_magic() else "No such file"
-            return ui.Result.fail(short_msg=msg)
+            return utils.Result.fail(short_msg=msg)
         try:
             for file in files:
                 idx = _next_idx_in_group(self._group, tests_in_group)
                 shutil.copy(file, self.dst_file(dst_dir, idx))
             return _success_with_count_result(len(files))
         except Exception:  # pylint: disable=broad-except
-            return ui.Result.fail(short_msg="Error when copying file")
+            return utils.Result.fail(short_msg="Error when copying file")
 
     def has_magic(self) -> bool:
         return _Copy.magic_check.search(self._pattern) is not None
@@ -309,8 +309,8 @@ class _Echo(_Command):
     def __str__(self) -> str:
         return str(self._args)
 
-    @ui.work("Echo", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> ui.Result:
+    @utils.work("Echo", "{0}")
+    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
         idx = _next_idx_in_group(self._group, tests_in_group)
         with self.dst_file(dst_dir, idx).open("w") as test_file:
             test_file.write(" ".join(self._args) + "\n")
@@ -337,14 +337,14 @@ class _Script(_Command):
         script = self._script_path.name
         return f"{self._group} ; {script} {args}"
 
-    @ui.work("Gen", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> ui.Result:
+    @utils.work("Gen", "{0}")
+    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
         script = self._load_script()
         if not script:
-            return ui.Result.fail(short_msg="Script file not found")
+            return utils.Result.fail(short_msg="Script file not found")
         build_result = script.build()
         if isinstance(build_result, BuildError):
-            return ui.Result.fail(
+            return utils.Result.fail(
                 short_msg="Failed to build generator",
                 long_msg=build_result.msg,
             )
@@ -372,7 +372,7 @@ class _Script(_Command):
                 current_file.close()
 
         if count == 0:
-            return ui.Result.fail(short_msg="generator didn't produce any output")
+            return utils.Result.fail(short_msg="generator didn't produce any output")
 
         ret = process.wait()
         if ret == 0:
@@ -380,7 +380,7 @@ class _Script(_Command):
         else:
             msg = ret_code_to_str(ret)
             long_msg = process.stderr.read() if process.stderr else None
-            return ui.Result.fail(short_msg=msg, long_msg=long_msg)
+            return utils.Result.fail(short_msg=msg, long_msg=long_msg)
 
     def _load_script(self) -> SourceCode | None:
         if not self._script_path.exists():
@@ -404,12 +404,12 @@ def _invalid_command_err(cmd: str, lineno: int) -> Error:
     )
 
 
-def _success_with_count_result(count: int) -> ui.Result:
+def _success_with_count_result(count: int) -> utils.Result:
     assert count > 0
     if count == 1:
-        return ui.Result.success(short_msg="1 test case generated")
+        return utils.Result.success(short_msg="1 test case generated")
     else:
-        return ui.Result.success(short_msg=f"{count} test cases generated")
+        return utils.Result.success(short_msg=f"{count} test cases generated")
 
 
 def _parse_args(args: str) -> list[str]:
