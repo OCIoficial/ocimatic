@@ -310,18 +310,18 @@ class TestGroup:
         *,
         timeout: float | None,
         skip: bool = False,
-    ) -> list[TestResult] | None:
+    ) -> TestGroupResults | None:
         if skip:
             ui.show_message("Info", "skipping")
             return None
-        results: list[TestResult] = []
+        tests: list[TestResult] = []
         for test in self._tests:
             result = test.run(runnable, checker, mode, timeout)
-            results.append(result)
+            tests.append(result)
         if not self._tests and mode == RunMode.run_solution:
             ui.show_message("Warning", "no test cases found", ui.WARNING)
 
-        return results
+        return TestGroupResults(tests=tests)
 
     @ui.workgroup("{0}")
     def gen_expected(self, runnable: Runnable) -> ui.Status:
@@ -419,8 +419,8 @@ class RuntimeStats:
 
 @dataclass
 class DatasetResults:
-    subtasks: list[list[TestResult] | None]
-    sample: list[TestResult] | None
+    subtasks: list[TestGroupResults | None]
+    sample: TestGroupResults | None
 
     def check_all_correct(self) -> bool:
         """Return whether all test cases have a correct answer."""
@@ -433,12 +433,12 @@ class DatasetResults:
 
     def check_passes_correct_subtasks(self, should_pass: set[int]) -> bool:
         """Check all subtasks specified in `should_pass` are correct and the rest fail."""
-        for st, tests in enumerate(self.subtasks):
-            assert tests, f"Subtask {st} has no test results"
-            in_should_pass = (st + 1) in should_pass
-            if in_should_pass and not all(t.is_correct() for t in tests):
+        for stn, st in enumerate(self.subtasks, 1):
+            assert st, f"Subtask {stn} has no test results"
+            in_should_pass = stn in should_pass
+            if in_should_pass and not all(t.is_correct() for t in st):
                 return False
-            if not in_should_pass and not any(t.is_proper_fail() for t in tests):
+            if not in_should_pass and not any(t.is_proper_fail() for t in st):
                 return False
 
         return True
@@ -460,6 +460,14 @@ class DatasetResults:
         for test in self._iter_all(include_sample=include_sample):
             if isinstance(test.kind, TestResult.CheckerRunned):
                 yield test.kind.running_time()
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class TestGroupResults:
+    tests: list[TestResult]
+
+    def __iter__(self) -> Iterator[TestResult]:
+        yield from self.tests
 
 
 class Dataset:
@@ -500,7 +508,7 @@ class Dataset:
         timeout: float | None = None,
         subtask: int | None = None,
     ) -> DatasetResults:
-        subtasks: list[list[TestResult] | None] = []
+        subtasks: list[TestGroupResults | None] = []
         for i, st in enumerate(self._subtasks):
             skip = subtask is not None and subtask != i + 1
             subtasks.append(st.run(runnable, checker, mode, timeout=timeout, skip=skip))
