@@ -177,6 +177,7 @@ class Testplan:
                     return Error(
                         f"line {lineno}: cannot include tests from the same subtask: `{include}`",
                     )
+        return None
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
