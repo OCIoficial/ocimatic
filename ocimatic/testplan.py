@@ -49,6 +49,10 @@ class Testplan:
 
         self._subtasks = subtasks
 
+    @property
+    def subtasks(self) -> int:
+        return len(self._subtasks)
+
     def validators(self) -> list[Path | None]:
         return [subtask.validator for subtask in self._subtasks]
 
@@ -74,8 +78,8 @@ class Testplan:
 
         return status
 
-    def _parse_file(self) -> list[Subtask] | Error:
-        subtasks: dict[int, Subtask] = {}
+    def _parse_file(self) -> list[_SubtaskPlan] | Error:
+        subtasks: dict[int, _SubtaskPlan] = {}
         st = 0
         for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
             line = line.strip()
@@ -102,7 +106,7 @@ class Testplan:
                             f"line {lineno}: found subtask {found_st}, but subtask {st + 1} was expected",
                         )
                     st += 1
-                    subtasks[st] = Subtask(self._dataset_dir, st, validator)
+                    subtasks[st] = _SubtaskPlan(self._dataset_dir, st, validator)
                 elif cmd_match:
                     if st == 0:
                         return Error(
@@ -133,27 +137,27 @@ class Testplan:
         cmd: str,
         args: list[str],
         lineno: int,
-    ) -> Command | Error:
+    ) -> _Command | Error:
         if cmd == "copy":
             if len(args) > 2:
                 return Error(
                     f"line {lineno}: the `copy` command expects exactly one argument.",
                 )
-            return Copy(group, self._task_directory, args[0])
+            return _Copy(group, self._task_directory, args[0])
         elif cmd == "echo":
-            return Echo(group, args)
+            return _Echo(group, args)
         elif Path(cmd).suffix == ".py":
-            return Script(group, Path(self._directory, cmd), "py", args)
+            return _Script(group, Path(self._directory, cmd), "py", args)
         elif Path(cmd).suffix == ".cpp":
-            return Script(group, Path(self._directory, cmd), "cpp", args)
+            return _Script(group, Path(self._directory, cmd), "cpp", args)
         else:
             return _invalid_command_err(cmd, lineno)
 
 
-class Subtask:
+class _SubtaskPlan:
     def __init__(self, dataset_dir: Path, stn: int, validator: Path | None) -> None:
         self._dir = Path(dataset_dir, f"st{stn}")
-        self.commands: list[Command] = []
+        self.commands: list[_Command] = []
         self.validator = validator
 
     def __str__(self) -> str:
@@ -171,7 +175,7 @@ class Subtask:
         return status
 
 
-class Command(ABC):
+class _Command(ABC):
     def __init__(self, group: str) -> None:
         self._group = group
 
@@ -185,7 +189,7 @@ class Command(ABC):
         )
 
 
-class Copy(Command):
+class _Copy(_Command):
     magic_check = re.compile("([*?[])")
 
     def __init__(self, group: str, dir: Path, pattern: str) -> None:
@@ -211,10 +215,10 @@ class Copy(Command):
             return ui.Result.fail(short_msg="Error when copying file")
 
     def has_magic(self) -> bool:
-        return Copy.magic_check.search(self._pattern) is not None
+        return _Copy.magic_check.search(self._pattern) is not None
 
 
-class Echo(Command):
+class _Echo(_Command):
     def __init__(self, group: str, args: list[str]) -> None:
         super().__init__(group)
         self._args = args
@@ -230,7 +234,7 @@ class Echo(Command):
             return _success_with_count_result(1)
 
 
-class Script(Command):
+class _Script(_Command):
     VALID_EXTENSIONS = Literal["py", "cpp"]
 
     def __init__(
@@ -310,7 +314,7 @@ class Script(Command):
 def _invalid_command_err(cmd: str, lineno: int) -> Error:
     from typing import get_args
 
-    extensions = get_args(Script.VALID_EXTENSIONS)
+    extensions = get_args(_Script.VALID_EXTENSIONS)
     return Error(
         f"line {lineno}: invalid command `{cmd}`\n"
         f"The command should be either `copy`, `echo` or a generator with one of the following extensions {extensions}",

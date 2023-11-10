@@ -320,11 +320,6 @@ class Task:
             codename=self.codename,
         )
 
-        self._dataset = Dataset(
-            Path(directory, "dataset"),
-            self._statement.io_samples(),
-        )
-
         self._testplan = None
         if not self._config.static_dataset:
             self._testplan = Testplan(
@@ -332,6 +327,12 @@ class Task:
                 self._directory,
                 Path(self._directory, "dataset"),
             )
+
+        self._dataset = Dataset(
+            Path(directory, "dataset"),
+            self._testplan,
+            self._statement.io_samples(),
+        )
 
     @property
     def codename(self) -> str:
@@ -394,15 +395,7 @@ class Task:
 
     @ui.task("Validating input files")
     def validate_input(self, subtask: int | None) -> None:
-        if self._testplan is not None:
-            validators = self._testplan.validators()
-            self._dataset.validate_input(validators, subtask)
-        else:
-            ui.show_message(
-                "Warning",
-                "Task has a static dataset and cannot read validators from testplan.",
-                ui.WARNING,
-            )
+        self._dataset.validate_input(subtask)
 
     @ui.task("Compressing dataset")
     def compress_dataset(self, *, random_sort: bool) -> None:
@@ -503,7 +496,7 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
         time of correct solutions to set a timeout. Finally, use the timeout to run partial solutions
         and ensure they fail the subtasks they are suppose to fail.
         """
-        if not self._dataset.count():
+        if sum(self._dataset.count()) == 0:
             ui.show_message(
                 "Error",
                 "No test cases found. Generate the dataset by running `ocimatic run-testplan && ocimatic gen-expected`.",
@@ -529,7 +522,7 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
         stats = RuntimeStats.unit()
 
         if not self._correct:
-            ui.show_message("Error", "At least one correct solution needed", ui.ERROR)
+            ui.show_message("Error", "at least one correct solution needed", ui.ERROR)
             return None
 
         # Run correct solutions
@@ -546,7 +539,7 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
                 failed.append(sol)
                 continue
             new_stats = results.runtime_stats()
-            assert new_stats is not None
+            assert new_stats
             stats += new_stats
 
         if failed:

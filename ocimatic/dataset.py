@@ -18,6 +18,7 @@ from ocimatic import ui
 from ocimatic.checkers import Checker, CheckerError, CheckerSuccess
 from ocimatic.runnable import RunError, Runnable, RunSuccess, RunTLE
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
+from ocimatic.testplan import Testplan
 from ocimatic.ui import WorkResult
 
 IN = ".in"
@@ -329,12 +330,15 @@ class TestGroup:
         skip: bool = False,
     ) -> list[TestResult] | None:
         if skip:
-            ui.writeln(" Info: Skipping")
+            ui.show_message("Info", "skipping")
             return None
         results: list[TestResult] = []
         for test in self._tests:
             result = test.run(runnable, checker, mode, timeout)
             results.append(result)
+        if not self._tests and mode == RunMode.run_solution:
+            ui.show_message("Warning", "no test cases found", ui.WARNING)
+
         return results
 
     @ui.workgroup("{0}")
@@ -363,8 +367,12 @@ class Subtask(TestGroup):
     @ui.workgroup("{0}")
     def validate(self, validator: Path | None) -> None:
         if validator is None:
-            ui.show_message("Info", "No validator specified", ui.INFO)
+            ui.show_message("Warning", "no validator available", ui.WARNING)
             return
+        if not self._tests:
+            ui.show_message("Warning", "no test cases", ui.WARNING)
+            return
+
         source: SourceCode
         if validator.suffix == ".cpp":
             source = CppSource(validator)
@@ -434,7 +442,7 @@ class DatasetResults:
         return True
 
     def runtime_stats(self, *, include_sample: bool = False) -> RuntimeStats | None:
-        running_times = list(self._runnint_times(include_sample=include_sample))
+        running_times = list(self._running_times(include_sample=include_sample))
         if not running_times:
             return None
         return RuntimeStats(max=max(running_times), min=min(running_times))
@@ -445,7 +453,7 @@ class DatasetResults:
             tests = itertools.chain(tests, self.sample)
         yield from tests
 
-    def _runnint_times(self, *, include_sample: bool = False) -> Iterator[float]:
+    def _running_times(self, *, include_sample: bool = False) -> Iterator[float]:
         """Return running times of all successful runs."""
         for test in self._iter_all(include_sample=include_sample):
             if isinstance(test.kind, TestResult.CheckerRunned):
@@ -453,11 +461,19 @@ class DatasetResults:
 
 
 class Dataset:
-    """A collection of test cases."""
-
-    def __init__(self, directory: Path, sampledata: list[Test]) -> None:
+    def __init__(
+        self,
+        directory: Path,
+        testplan: Testplan | None,
+        sampledata: list[Test],
+    ) -> None:
         self._directory = directory
-        if directory.exists():
+        self._testplan = testplan
+        if testplan is not None:
+            self._subtasks = [
+                Subtask(directory / f"st{i + 1}") for i in range(testplan.subtasks)
+            ]
+        elif directory.exists():
             self._subtasks = [
                 Subtask(d) for d in sorted(directory.iterdir()) if d.is_dir()
             ]
@@ -498,11 +514,19 @@ class Dataset:
             )
         return DatasetResults(subtasks, sample)
 
-    def validate_input(self, validators: list[Path | None], stn: int | None) -> None:
-        zipped = zip(self._subtasks, validators, strict=True)
-        for i, (subtask, validator) in enumerate(zipped, 1):
-            if stn is None or stn == i:
-                subtask.validate(validator)
+    def validate_input(self, stn: int | None) -> None:
+        if self._testplan is not None:
+            validators = self._testplan.validators()
+            zipped = zip(self._subtasks, validators, strict=True)
+            for i, (subtask, validator) in enumerate(zipped, 1):
+                if stn is None or stn == i:
+                    subtask.validate(validator)
+        else:
+            ui.show_message(
+                "Warning",
+                "Task has a static dataset and cannot read validators from testplan.",
+                ui.WARNING,
+            )
 
     def __str__(self) -> str:
         return f"{self._directory}"

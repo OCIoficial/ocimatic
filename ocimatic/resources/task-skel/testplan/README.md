@@ -46,7 +46,7 @@ sample tesptlan.txt next to this README to see how each type of command can be u
 
 ## Multi-test Script
 
-Normally, a script generates a single test case, and then it's used multiple times in the testplan.
+Normally, a script generates a single test case. Then, it can be used multiple times in the testplan.
 This is convenient because it lets you focus on the properties of a single test when writing the
 script and defer to the testplan how to use it coherently to form the dataset. However, sometimes it
 is convenient to generate a set of test cases programmatically. For example, if a subtask has a
