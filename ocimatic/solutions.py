@@ -46,6 +46,17 @@ class SolutionSpec:
             case None:
                 return set()
 
+    def should_fail(self, results: DatasetResults) -> set[int]:
+        """Return the set of subtasks the solution should fail based on the spec. It must pass the complement."""
+        all_subtasks = {st + 1 for st in range(len(results.subtasks))}
+        match self.subtasks_spec:
+            case ShouldFail(subtasks=subtasks):
+                return all_subtasks.intersection(subtasks)
+            case ShouldPass(subtasks=subtasks):
+                return all_subtasks.difference(subtasks)
+            case None:
+                return set()
+
 
 class Solution:
     def __init__(self, source: SourceCode) -> None:
@@ -55,6 +66,9 @@ class Solution:
 
     def should_pass(self, results: DatasetResults) -> set[int]:
         return self._spec.should_pass(results)
+
+    def should_fail(self, results: DatasetResults) -> set[int]:
+        return self._spec.should_fail(results)
 
     def check_results(self, results: DatasetResults) -> bool:
         assert self.is_partial

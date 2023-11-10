@@ -57,6 +57,12 @@ class Testplan:
     def validators(self) -> list[Path | None]:
         return [subtask.validator for subtask in self._subtasks]
 
+    def includes(self, stn: int) -> list[Include]:
+        return self._subtasks[stn - 1].includes
+
+    def extract_group(self, test_file: Path) -> str | None:
+        return _Command.extract_group(test_file)
+
     def run(self, stn: int | None) -> ui.Status:
         cwd = Path.cwd()
         # Run generators with `testplan/` as the cwd
@@ -241,12 +247,23 @@ class _SubtaskPlan:
 
 class _Command(ABC):
     RE = re.compile(r"\s*([^;\s]+)\s*;\s*(\S+)(:?\s+(.*))?")
+    FILE_RE = re.compile(r"(.*)-(\d+).in")
 
     def __init__(self, group: _GroupName) -> None:
         self._group = group
 
     def dst_file(self, directory: Path, idx: int) -> Path:
-        return Path(directory, f"{self._group}-{idx}.in")
+        return Path(directory, self.add_group(idx))
+
+    def add_group(self, idx: int) -> str:
+        name = f"{self._group}-{idx}.in"
+        assert _Command.FILE_RE.fullmatch(name) is not None
+        return name
+
+    @staticmethod
+    def extract_group(test_file: Path) -> str | None:
+        m = _Command.FILE_RE.fullmatch(test_file.name)
+        return m.group(1) if m else None
 
     @abstractmethod
     def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> ui.Result:

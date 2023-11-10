@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import itertools
 import math
 import random
@@ -151,6 +152,7 @@ class TestResult:
         | CheckerError
         | NoExpectedOutput
     )
+    test: Test
     kind: Kind
     mode: RunMode
 
@@ -207,7 +209,7 @@ class Test:
     ) -> TestResult:
         """Run runnable redirecting this test as its standard input and check output correctness."""
         kind = self.run_inner(runnable, checker, timeout)
-        return TestResult(mode=mode, kind=kind)
+        return TestResult(test=self, mode=mode, kind=kind)
 
     def run_inner(
         self,
@@ -247,6 +249,13 @@ class Test:
                 return TestResult.CheckerError(checker_result)
 
             return TestResult.CheckerRunned(checker_result, run_result)
+
+    def matches(self, testplan: Testplan, pattern: str) -> bool:
+        group = testplan.extract_group(self._in_path)
+        if group:
+            return fnmatch.fnmatch(group, pattern)
+        else:
+            return False
 
     @property
     def in_path(self) -> Path:
@@ -310,18 +319,18 @@ class TestGroup:
         *,
         timeout: float | None,
         skip: bool = False,
-    ) -> TestGroupResults | None:
+    ) -> list[TestResult] | None:
         if skip:
             ui.show_message("Info", "skipping")
             return None
-        tests: list[TestResult] = []
+        results: list[TestResult] = []
         for test in self._tests:
             result = test.run(runnable, checker, mode, timeout)
-            tests.append(result)
+            results.append(result)
         if not self._tests and mode == RunMode.run_solution:
             ui.show_message("Warning", "no test cases found", ui.WARNING)
 
-        return TestGroupResults(tests=tests)
+        return results
 
     @ui.workgroup("{0}")
     def gen_expected(self, runnable: Runnable) -> ui.Status:
@@ -417,10 +426,11 @@ class RuntimeStats:
         return self + other
 
 
-@dataclass
+@dataclass(kw_only=True, frozen=True, slots=True)
 class DatasetResults:
-    subtasks: list[TestGroupResults | None]
-    sample: TestGroupResults | None
+    dataset: Dataset
+    subtasks: list[SubtaskResults | None]
+    sample: list[TestResult] | None
 
     def check_all_correct(self) -> bool:
         """Return whether all test cases have a correct answer."""
@@ -436,12 +446,22 @@ class DatasetResults:
         for stn, st in enumerate(self.subtasks, 1):
             assert st, f"Subtask {stn} has no test results"
             in_should_pass = stn in should_pass
-            if in_should_pass and not all(t.is_correct() for t in st):
+            if in_should_pass and not all(t.is_correct() for t in st.results(self)):
                 return False
-            if not in_should_pass and not any(t.is_proper_fail() for t in st):
+            if not in_should_pass and not any(
+                t.is_proper_fail() for t in st.results(self)
+            ):
                 return False
 
         return True
+
+    def failed_subtasks(self) -> set[int]:
+        failed: set[int] = set()
+        for stn, st in enumerate(self.subtasks, 1):
+            assert st, f"Subtask {stn} has no results"
+            if not all(t.is_correct() for t in st.results(self)):
+                failed.add(stn)
+        return failed
 
     def runtime_stats(self, *, include_sample: bool = False) -> RuntimeStats | None:
         running_times = list(self._running_times(include_sample=include_sample))
@@ -450,7 +470,9 @@ class DatasetResults:
         return RuntimeStats(max=max(running_times), min=min(running_times))
 
     def _iter_all(self, *, include_sample: bool = False) -> Iterator[TestResult]:
-        tests: Iterable[TestResult] = (t for st in self.subtasks if st for t in st)
+        tests: Iterable[TestResult] = (
+            t for st in self.subtasks if st for t in st.results(self)
+        )
         if include_sample and self.sample:
             tests = itertools.chain(tests, self.sample)
         yield from tests
@@ -463,11 +485,23 @@ class DatasetResults:
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
-class TestGroupResults:
+class SubtaskResults:
+    stn: int
     tests: list[TestResult]
 
-    def __iter__(self) -> Iterator[TestResult]:
+    def results(self, results: DatasetResults) -> Iterator[TestResult]:
         yield from self.tests
+        testplan = results.dataset.testplan
+        if not testplan:
+            return
+
+        for include in testplan.includes(self.stn):
+            st = results.subtasks[include.stn - 1]
+            if not st:
+                continue
+            yield from (
+                t for t in st.tests if t.test.matches(testplan, include.pattern)
+            )
 
 
 class Dataset:
@@ -477,8 +511,8 @@ class Dataset:
         testplan: Testplan | None,
         sampledata: list[Test],
     ) -> None:
+        self.testplan = testplan
         self._directory = directory
-        self._testplan = testplan
         if testplan is not None:
             self._subtasks = [
                 Subtask(directory / f"st{i + 1}") for i in range(testplan.subtasks)
@@ -508,10 +542,17 @@ class Dataset:
         timeout: float | None = None,
         subtask: int | None = None,
     ) -> DatasetResults:
-        subtasks: list[TestGroupResults | None] = []
-        for i, st in enumerate(self._subtasks):
-            skip = subtask is not None and subtask != i + 1
-            subtasks.append(st.run(runnable, checker, mode, timeout=timeout, skip=skip))
+        subtasks: list[SubtaskResults | None] = []
+        for stn, st in enumerate(self._subtasks, 1):
+            skip = subtask is not None and subtask != stn
+            results = st.run(runnable, checker, mode, timeout=timeout, skip=skip)
+            if mode == RunMode.run_solution:
+                for t in self.included(stn):
+                    ui.write(f" @include {t}", ui.CYAN)
+                    ui.writeln("  *")
+            subtasks.append(
+                SubtaskResults(stn=stn, tests=results) if results else None,
+            )
 
         sample = None
         if mode is not RunMode.check_partial:
@@ -522,11 +563,24 @@ class Dataset:
                 timeout=timeout,
                 skip=subtask is not None,
             )
-        return DatasetResults(subtasks, sample)
+        return DatasetResults(
+            dataset=self,
+            subtasks=subtasks,
+            sample=sample,
+        )
+
+    def included(self, stn: int) -> Iterator[Test]:
+        testplan = self.testplan
+        if not testplan:
+            return
+
+        for include in testplan.includes(stn):
+            st = self._subtasks[include.stn - 1]
+            yield from (t for t in st.tests() if t.matches(testplan, include.pattern))
 
     def validate_input(self, stn: int | None) -> ui.Status:
-        if self._testplan is not None:
-            validators = self._testplan.validators()
+        if self.testplan is not None:
+            validators = self.testplan.validators()
             zipped = zip(self._subtasks, validators, strict=True)
             status = ui.Status.success
             for i, (subtask, validator) in enumerate(zipped, 1):

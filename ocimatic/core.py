@@ -458,24 +458,31 @@ class Task:
                 _write_stats(stats)
 
             if sol.is_partial:
-                should_pass = ", ".join(
-                    f"st{st}" for st in sorted(sol.should_pass(results))
-                )
                 if sol.check_results(results):
+                    should_pass = ", ".join(
+                        f"st{st}" for st in sorted(sol.should_pass(results))
+                    )
                     ui.writeln()
                     ui.writeln(
                         f"Solution passed the subtasks it was supposed to: should-pass=[{should_pass}]",
                         ui.OK,
                     )
                 else:
+                    should_fail = ", ".join(
+                        f"st{st}" for st in sorted(sol.should_fail(results))
+                    )
+                    failed = ", ".join(
+                        f"st{stn}" for stn in sorted(results.failed_subtasks())
+                    )
                     ui.write(
                         f"""
-The results don't match the solution's specification. The solution should pass the following
-list of subtasks (and fail the rest): [{should_pass}].
+The results don't match the solution's specification.
+ - Subtasks expected to fail: [{should_fail}]
+ - Subtasks that failed: [{failed}]
 
-To specify which tasks the solution should pass/fail, you must either have a `should-pass` or
-`should-fail` comment at the beginning of the file. For example, to specify that a task should
-pass subtasks 1 and 2, write the following comment at the beginning of the file:
+To specify which subtasks the solution should pass/fail, you must either have a `should-pass`
+or `should-fail` comment at the beginning of the file. For example, to specify that a solution
+should pass subtasks 1 and 2, write the following comment at the beginning of the file:
 // @ocimatic should-pass=[st1, st2]
 If no comment is specified, ocimatic will assume that all subtasks should fail.
 """,
