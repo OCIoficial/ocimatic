@@ -413,10 +413,10 @@ class RuntimeStats:
     def unit() -> RuntimeStats:
         return RuntimeStats(max=float("-inf"), min=float("inf"))
 
-    def set_limit(self) -> float | None:
-        return math.ceil(self.max * 20) / 10 if self.max else None
+    def set_limit(self) -> float:
+        return math.ceil(self.max * 20) / 10
 
-    def print_limit_calculation(self) -> str:
+    def fmt_limit_calculation(self) -> str:
         return f"math.ceil({self.max:.3f} * 20) / 10"
 
     def __add__(self, other: RuntimeStats) -> RuntimeStats:
@@ -581,7 +581,7 @@ class Dataset:
             return
 
         for include in testplan.includes(stn):
-            st = self._subtasks[stn]
+            st = self._subtasks[include.stn]
             yield from (t for t in st.tests() if t.matches(testplan, include.pattern))
 
     def validate_input(self, stn: Stn | None) -> utils.Status:

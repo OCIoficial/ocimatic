@@ -14,7 +14,7 @@ from typing import ClassVar, Literal
 from ocimatic import utils
 from ocimatic.runnable import ret_code_to_str
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
-from ocimatic.utils import Error, SortedDict, Stn
+from ocimatic.utils import SortedDict, Stn
 
 # https://en.wikipedia.org/wiki/C0_and_C1_control_codes#Field_separators
 FS = chr(28)
@@ -40,12 +40,12 @@ class Testplan:
         self._dataset_dir = dataset_directory
 
         subtasks = self._parse_file()
-        if isinstance(subtasks, Error):
+        if isinstance(subtasks, ParseError):
             utils.writeln(
                 f"Error when parsing testplan in `{utils.relative_to_cwd(self._testplan_path)}`",
                 utils.ERROR,
             )
-            utils.writeln(subtasks.msg, utils.ERROR)
+            utils.writeln(f"{subtasks}", utils.ERROR)
             sys.exit(1)
 
         self._subtasks = subtasks
@@ -85,7 +85,7 @@ class Testplan:
 
         return status
 
-    def _parse_file(self) -> SortedDict[Stn, _SubtaskPlan] | Error:
+    def _parse_file(self) -> SortedDict[Stn, _SubtaskPlan] | ParseError:
         comment_re = re.compile(r"\s*#.*")
         subtasks: SortedDict[Stn, _SubtaskPlan] = SortedDict()
         sti = 0
@@ -102,20 +102,23 @@ class Testplan:
                 validator = Path(self._directory, m.group(2)) if m.group(2) else None
                 sti += 1
                 if sti != found_st:
-                    return Error(
-                        f"line {lineno}: found [Subtask {found_st}], but [Subtask {sti}] was expected",
+                    return ParseError(
+                        lineno=lineno,
+                        msg=f"found [Subtask {found_st}], but [Subtask {sti}] was expected",
                     )
                 subtasks[Stn(sti)] = _SubtaskPlan(self._dataset_dir, sti, validator)
             elif m := _Command.RE.fullmatch(line):
                 if sti == 0:
-                    return Error(
-                        f"line {lineno}: found command before declaring a subtask.",
+                    return ParseError(
+                        lineno=lineno,
+                        msg="found command before declaring a subtask.",
                     )
                 group_str = m.group(1)
                 group = _GroupName.parse(group_str)
                 if not group:
-                    return Error(
-                        f"line {lineno}: invalid group name `{group_str}`. The group name should "
+                    return ParseError(
+                        lineno=lineno,
+                        msg="invalid group name `{group_str}`. The group name should "
                         f"match the regex `{_GroupName.RE.pattern}`.",
                     )
                 cmd = m.group(2)
@@ -127,7 +130,7 @@ class Testplan:
                     args,
                     lineno,
                 )
-                if isinstance(command, Error):
+                if isinstance(command, ParseError):
                     return command
                 subtasks[Stn(sti)].commands.append(command)
             elif m := Include.RE.fullmatch(line):
@@ -139,11 +142,9 @@ class Testplan:
                     ),
                 )
             else:
-                return Error(
-                    f"line {lineno}: invalid line `{line}`\n",
-                )
+                return ParseError(lineno=lineno, msg=f"invalid line `{line}`")
         validated = Testplan._validate(subtasks)
-        if isinstance(validated, Error):
+        if isinstance(validated, ParseError):
             return validated
         return subtasks
 
@@ -153,11 +154,12 @@ class Testplan:
         cmd: str,
         args: list[str],
         lineno: int,
-    ) -> _Command | Error:
+    ) -> _Command | ParseError:
         if cmd == "copy":
             if len(args) > 2:
-                return Error(
-                    f"line {lineno}: the `copy` command expects exactly one argument.",
+                return ParseError(
+                    lineno=lineno,
+                    msg="the `copy` command expects exactly one argument.",
                 )
             return _Copy(group, self._task_directory, args[0])
         elif cmd == "echo":
@@ -167,22 +169,33 @@ class Testplan:
         elif Path(cmd).suffix == ".cpp":
             return _Script(group, Path(self._directory, cmd), "cpp", args)
         else:
-            return _invalid_command_err(cmd, lineno)
+            return ParseError(lineno=lineno, msg=_invalid_command_err_msg(cmd))
 
     @staticmethod
-    def _validate(subtasks: SortedDict[Stn, _SubtaskPlan]) -> Error | None:
+    def _validate(subtasks: SortedDict[Stn, _SubtaskPlan]) -> ParseError | None:
         for stn, st in subtasks.items():
             for include in st.includes:
                 lineno = include.lineno
                 if include.stn not in subtasks:
-                    return Error(
-                        f"line {lineno}: invalid subtask {include.stn}: `{include}`",
+                    return ParseError(
+                        lineno=lineno,
+                        msg=f"invalid subtask {include.stn}: `{include}`",
                     )
                 if include.stn == stn:
-                    return Error(
-                        f"line {lineno}: cannot include tests from the same subtask: `{include}`",
+                    return ParseError(
+                        lineno=lineno,
+                        msg=f"cannot include tests from the same subtask: `{include}`",
                     )
         return None
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class ParseError:
+    lineno: int
+    msg: str
+
+    def __str__(self) -> str:
+        return f"line {self.lineno}: {self.msg}"
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
@@ -393,13 +406,13 @@ class _Script(_Command):
         return f"{directory.name}-{self._group}-{idx}"
 
 
-def _invalid_command_err(cmd: str, lineno: int) -> Error:
+def _invalid_command_err_msg(cmd: str) -> str:
     from typing import get_args
 
     extensions = get_args(_Script.VALID_EXTENSIONS)
-    return Error(
-        f"line {lineno}: invalid command `{cmd}`\n"
-        f"The command should be either `copy`, `echo` or a generator with one of the following extensions {extensions}",
+    return (
+        f"invalid command `{cmd}`\n"
+        f"The command should be either `copy`, `echo` or a generator with one of the following extensions {extensions}"
     )
 
 

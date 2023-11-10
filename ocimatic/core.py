@@ -557,7 +557,6 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
             return None
 
         # Run correct solutions
-        utils.writeln()
         utils.writeln("Running correct solutions", utils.INFO)
         failed: list[Solution] = []
         for sol in self._correct:
@@ -576,36 +575,34 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
         if failed:
             utils.write(
                 """
+Summary
+-------
 Some correct solutions failed to run or produced wrong results. Run them individually with
 `ocimatic run` to get more information.
 
 Solutions with issues:
 """,
-                utils.ERROR,
+                utils.RED,
             )
 
             for sol in failed:
-                utils.writeln(" * " + str(sol), utils.ERROR)
+                utils.writeln(" * " + str(sol), utils.RED)
             return None
 
         utils.writeln()
         _write_stats(stats)
         utils.writeln()
-        utils.writeln("All correct solutions produced correct results", utils.OK)
+        utils.writeln("All correct solutions produced correct results", utils.GREEN)
         return stats
 
     def _check_dataset_run_partial_solutions(self, stats: RuntimeStats) -> utils.Status:
         timeout = stats.set_limit()
 
-        # we already checked the dataset is present and all tests had expected output so
-        # the timeout must alwas be not None
-        assert timeout is not None
-
         utils.writeln()
         utils.writeln("Running partial solutions", utils.INFO)
         utils.writeln()
         utils.writeln(
-            f"Timeout set to {timeout:.1f}s ({stats.print_limit_calculation()})",
+            f"Timeout set to {timeout:.1f}s ({stats.fmt_limit_calculation()})",
         )
         if not self._partial:
             utils.writeln()
@@ -621,27 +618,31 @@ Solutions with issues:
                 timeout=timeout,
             )
             if results is None or not sol.check_results(results):
+                if len(self._partial) > 1:
+                    utils.writeln("issues found", utils.RED)
                 failed.append(sol)
 
         if failed:
             utils.write(
                 """
+Summary
+-------
 Some partial solutions had issues when running or didn't pass/fail the subtasks they were supposed to.
 Run them individually with `ocimatic run` to get more information. Remember to set an appropiate timeout
-setting the `--timeout` flag.
+using the `--timeout` flag.
 
 Solutions with issues:
 """,
-                utils.ERROR,
+                utils.RED,
             )
             for sol in failed:
-                utils.writeln(" * " + str(sol), utils.ERROR)
+                utils.writeln(" * " + str(sol), utils.RED)
             return utils.Status.fail
 
         utils.writeln()
         utils.writeln(
             "All partial solutions passed/failed the subtasks they were supposed to.",
-            utils.OK,
+            utils.GREEN,
         )
         return utils.Status.success
 
