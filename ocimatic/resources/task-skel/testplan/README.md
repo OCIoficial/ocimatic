@@ -10,7 +10,7 @@ Inside a subtask, each line specifies a command to generate one or multiple test
 
 ## Commands
 
-A command can be either `copy`, `echo`, or a file containing a generator script. Check the sample `testplan.txt` next to this README to see how each type of command can be used.
+A command can be either `copy`, `echo`, or a file containing a generator script. Check the sample `testplan.txt` next to this README to see how each command is used.
 
 * `copy`:
   The copy command takes as a single argument a glob pattern. The command will copy all files matching the pattern, relative to the root of the current task.
