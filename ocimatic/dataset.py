@@ -288,24 +288,6 @@ class TestGroup:
         self._name = name
         self._tests = tests
 
-    def write_to_zip(self, zip_file: ZipFile, *, random_sort: bool = False) -> int:
-        copied = 0
-        for test in self._tests:
-            if test.expected_path.exists():
-                # Sort testcases within a subtask randomly
-                if random_sort:
-                    choices = string.ascii_lowercase
-                    rnd_str = "".join(random.choice(choices) for _ in range(3))
-                    in_name = f"{self._name}-{rnd_str}-{test.in_path.name}"
-                    sol_name = f"{self._name}-{rnd_str}-{test.expected_path.name}"
-                else:
-                    in_name = f"{self._name}-{test.in_path.name}"
-                    sol_name = f"{self._name}-{test.expected_path.name}"
-                zip_file.write(test.in_path, in_name)
-                zip_file.write(test.expected_path, sol_name)
-                copied += 1
-        return copied
-
     def mtime(self) -> float:
         mtime = -1.0
         for test in self._tests:
@@ -393,6 +375,24 @@ class Subtask(TestGroup):
         for test in self._tests:
             status &= test.validate(build).status
         return status
+
+    def write_to_zip(self, zip_file: ZipFile, *, random_sort: bool = False) -> int:
+        copied = 0
+        for test in self._tests:
+            if test.expected_path.exists():
+                # Sort testcases within a subtask randomly
+                if random_sort:
+                    choices = string.ascii_lowercase
+                    rnd_str = "".join(random.choice(choices) for _ in range(3))
+                    in_name = f"{self._name}-{rnd_str}-{test.in_path.name}"
+                    sol_name = f"{self._name}-{rnd_str}-{test.expected_path.name}"
+                else:
+                    in_name = f"{self._name}-{test.in_path.name}"
+                    sol_name = f"{self._name}-{test.expected_path.name}"
+                zip_file.write(test.in_path, in_name)
+                zip_file.write(test.expected_path, sol_name)
+                copied += 1
+        return copied
 
 
 @dataclass
