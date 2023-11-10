@@ -9,6 +9,7 @@ import cloup
 from cloup.constraints import If, accept_none, mutually_exclusive
 
 from ocimatic import core, server, utils
+from ocimatic.utils import Stn
 
 
 class CLI:
@@ -238,7 +239,7 @@ def run_testplan(cli: CLI, subtask: int | None) -> None:
         )
     status = utils.Status.success
     for task in tasks:
-        status &= task.run_testplan(subtask=subtask)
+        status &= task.run_testplan(stn=Stn(subtask) if subtask else None)
 
     exit_with_status(status)
 
@@ -253,7 +254,7 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
 
     status = utils.Status.success
     for task in tasks:
-        status &= task.validate_input(stn=subtask)
+        status &= task.validate_input(stn=Stn(subtask) if subtask else None)
 
     exit_with_status(status)
 
@@ -331,7 +332,11 @@ def run_solution(
             return utils.show_message("Error", "Solution not found", utils.ERROR)
         sol.run_on_input(sys.stdin if file == "-" else Path(file))
     else:
-        task.run_solution(Path(solution), timeout, subtask)
+        task.run_solution(
+            Path(solution),
+            timeout,
+            stn=Stn(subtask) if subtask else None,
+        )
 
 
 @cloup.command(help="Build a solution.")

@@ -18,6 +18,7 @@ from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
 from ocimatic.solutions import Solution
 from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
 from ocimatic.testplan import Testplan
+from ocimatic.utils import Stn
 
 
 def find_contest_root() -> tuple[Path, Path | None]:
@@ -362,10 +363,10 @@ class Task:
         return True
 
     @utils.hd1("{0}", "Running testplan", COLOR)
-    def run_testplan(self, subtask: int | None) -> utils.Status:
+    def run_testplan(self, stn: Stn | None) -> utils.Status:
         if self._testplan is None:
             utils.fatal_error("Task has a static dataset.")
-        return self._testplan.run(subtask)
+        return self._testplan.run(stn)
 
     def load_solution_from_path(self, path: Path) -> Solution | None:
         """Search for a solution matching a path.
@@ -398,7 +399,7 @@ class Task:
         return None
 
     @utils.hd1("{0}", "Validating input files", COLOR)
-    def validate_input(self, stn: int | None) -> utils.Status:
+    def validate_input(self, stn: Stn | None) -> utils.Status:
         return self._dataset.validate_input(stn)
 
     @utils.hd1("{0}", "Compressing dataset", COLOR)
@@ -443,7 +444,7 @@ class Task:
         self._dataset.normalize()
 
     @utils.hd1("{0}", "Running solution", COLOR)
-    def run_solution(self, solution: Path, timeout: float, subtask: int | None) -> None:
+    def run_solution(self, solution: Path, timeout: float, stn: Stn | None) -> None:
         """Run all solutions reporting outcome and running time."""
         sol = self.load_solution_from_path(solution)
         if not sol:
@@ -454,7 +455,7 @@ class Task:
             self._checker,
             RunMode.run_solution,
             timeout=timeout,
-            subtask=subtask,
+            stn=stn,
         )
         if results:
             utils.writeln()

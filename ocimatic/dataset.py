@@ -20,7 +20,7 @@ from ocimatic.checkers import Checker, CheckerError, CheckerSuccess
 from ocimatic.runnable import RunError, Runnable, RunSuccess, RunTLE
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
 from ocimatic.testplan import Testplan
-from ocimatic.utils import WorkResult
+from ocimatic.utils import SortedDict, Stn, WorkResult
 
 IN = ".in"
 SOL = ".sol"
@@ -429,7 +429,7 @@ class RuntimeStats:
 @dataclass(kw_only=True, frozen=True, slots=True)
 class DatasetResults:
     dataset: Dataset
-    subtasks: list[SubtaskResults | None]
+    subtasks: SortedDict[Stn, SubtaskResults | None]
     sample: list[TestResult] | None
 
     def check_all_correct(self) -> bool:
@@ -441,9 +441,9 @@ class DatasetResults:
                 return False
         return True
 
-    def check_passes_correct_subtasks(self, should_pass: set[int]) -> bool:
+    def check_passes_correct_subtasks(self, should_pass: set[Stn]) -> bool:
         """Check all subtasks specified in `should_pass` are correct and the rest fail."""
-        for stn, st in enumerate(self.subtasks, 1):
+        for stn, st in self.subtasks.items():
             assert st, f"Subtask {stn} has no test results"
             in_should_pass = stn in should_pass
             if in_should_pass and not all(t.is_correct() for t in st.results(self)):
@@ -486,7 +486,7 @@ class DatasetResults:
 
 @dataclass(kw_only=True, frozen=True, slots=True)
 class SubtaskResults:
-    stn: int
+    stn: Stn
     tests: list[TestResult]
 
     def results(self, results: DatasetResults) -> Iterator[TestResult]:
@@ -496,7 +496,7 @@ class SubtaskResults:
             return
 
         for include in testplan.includes(self.stn):
-            st = results.subtasks[include.stn - 1]
+            st = results.subtasks[include.stn]
             if not st:
                 continue
             yield from (
@@ -513,16 +513,22 @@ class Dataset:
     ) -> None:
         self.testplan = testplan
         self._directory = directory
+
+        self._subtasks: SortedDict[Stn, Subtask]
         if testplan is not None:
-            self._subtasks = [
-                Subtask(directory / f"st{i + 1}") for i in range(testplan.subtasks)
-            ]
+            self._subtasks = SortedDict(
+                (Stn(stn), Subtask(directory / f"st{stn}"))
+                for stn in range(1, testplan.subtasks + 1)
+            )
         elif directory.exists():
-            self._subtasks = [
-                Subtask(d) for d in sorted(directory.iterdir()) if d.is_dir()
-            ]
+            self._subtasks = SortedDict(
+                (Stn(stn), Subtask(d))
+                for stn, d in enumerate(sorted(directory.iterdir()), 1)
+                if d.is_dir()
+            )
         else:
-            self._subtasks = []
+            self._subtasks = SortedDict()
+
         self._sampledata = TestGroup("sample", sampledata)
 
     def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> utils.Status:
@@ -540,18 +546,18 @@ class Dataset:
         mode: RunMode,
         *,
         timeout: float | None = None,
-        subtask: int | None = None,
+        stn: Stn | None = None,
     ) -> DatasetResults:
-        subtasks: list[SubtaskResults | None] = []
-        for stn, st in enumerate(self._subtasks, 1):
-            skip = subtask is not None and subtask != stn
+        subtasks: SortedDict[Stn, SubtaskResults | None] = SortedDict()
+        for stni, st in self._subtasks.items():
+            skip = stn is not None and stn != stni
             results = st.run(runnable, checker, mode, timeout=timeout, skip=skip)
             if mode == RunMode.run_solution:
-                for t in self.included(stn):
+                for t in self.included(stni):
                     utils.write(f" @include {t}", utils.CYAN)
                     utils.writeln("  *")
-            subtasks.append(
-                SubtaskResults(stn=stn, tests=results) if results else None,
+            subtasks[stni] = (
+                SubtaskResults(stn=stni, tests=results) if results else None
             )
 
         sample = None
@@ -561,7 +567,7 @@ class Dataset:
                 checker,
                 mode,
                 timeout=timeout,
-                skip=subtask is not None,
+                skip=stn is not None,
             )
         return DatasetResults(
             dataset=self,
@@ -569,22 +575,22 @@ class Dataset:
             sample=sample,
         )
 
-    def included(self, stn: int) -> Iterator[Test]:
+    def included(self, stn: Stn) -> Iterator[Test]:
         testplan = self.testplan
         if not testplan:
             return
 
         for include in testplan.includes(stn):
-            st = self._subtasks[include.stn - 1]
+            st = self._subtasks[stn]
             yield from (t for t in st.tests() if t.matches(testplan, include.pattern))
 
-    def validate_input(self, stn: int | None) -> utils.Status:
+    def validate_input(self, stn: Stn | None) -> utils.Status:
         if self.testplan is not None:
             validators = self.testplan.validators()
-            zipped = zip(self._subtasks, validators, strict=True)
+            zipped = zip(self._subtasks.items(), validators, strict=True)
             status = utils.Status.success
-            for i, (subtask, validator) in enumerate(zipped, 1):
-                if stn is None or stn == i:
+            for (stni, subtask), validator in zipped:
+                if stn is None or stn == stni:
                     status &= subtask.validate(validator)
             return status
         else:

@@ -17,6 +17,7 @@ from ocimatic.source_code import (
     ShouldPass,
     SourceCode,
 )
+from ocimatic.utils import Stn
 
 
 class SolutionSpec:
@@ -35,9 +36,9 @@ class SolutionSpec:
                     f"Only one of should-pass or should-fail must be specified: {name}",
                 )
 
-    def should_pass(self, results: DatasetResults) -> set[int]:
+    def should_pass(self, results: DatasetResults) -> set[Stn]:
         """Return the set of subtasks the solution should pass based on the spec. It must fail the complement."""
-        all_subtasks = {st + 1 for st in range(len(results.subtasks))}
+        all_subtasks = set(results.subtasks.keys())
         match self.subtasks_spec:
             case ShouldFail(subtasks=subtasks):
                 return all_subtasks.difference(subtasks)
@@ -46,9 +47,9 @@ class SolutionSpec:
             case None:
                 return set()
 
-    def should_fail(self, results: DatasetResults) -> set[int]:
+    def should_fail(self, results: DatasetResults) -> set[Stn]:
         """Return the set of subtasks the solution should fail based on the spec. It must pass the complement."""
-        all_subtasks = {st + 1 for st in range(len(results.subtasks))}
+        all_subtasks = set(results.subtasks.keys())
         match self.subtasks_spec:
             case ShouldFail(subtasks=subtasks):
                 return all_subtasks.intersection(subtasks)
@@ -66,10 +67,10 @@ class Solution:
         self._spec = SolutionSpec(source.name, source.comments)
         self.is_partial = source.file.parent.name == "partial"
 
-    def should_pass(self, results: DatasetResults) -> set[int]:
+    def should_pass(self, results: DatasetResults) -> set[Stn]:
         return self._spec.should_pass(results)
 
-    def should_fail(self, results: DatasetResults) -> set[int]:
+    def should_fail(self, results: DatasetResults) -> set[Stn]:
         return self._spec.should_fail(results)
 
     def check_results(self, results: DatasetResults) -> bool:
@@ -129,7 +130,7 @@ class Solution:
         mode: RunMode,
         *,
         timeout: float | None = None,
-        subtask: int | None = None,
+        stn: Stn | None = None,
     ) -> utils.WorkHd[DatasetResults | None]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
@@ -143,7 +144,7 @@ class Solution:
                 checker,
                 mode,
                 timeout=timeout,
-                subtask=subtask,
+                stn=stn,
             )
 
     @utils.workhd("{0}", COLOR)

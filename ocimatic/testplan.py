@@ -14,7 +14,7 @@ from typing import ClassVar, Literal
 from ocimatic import utils
 from ocimatic.runnable import ret_code_to_str
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
-from ocimatic.utils import Error
+from ocimatic.utils import Error, SortedDict, Stn
 
 # https://en.wikipedia.org/wiki/C0_and_C1_control_codes#Field_separators
 FS = chr(28)
@@ -57,20 +57,20 @@ class Testplan:
     def validators(self) -> list[Path | None]:
         return [subtask.validator for subtask in self._subtasks]
 
-    def includes(self, stn: int) -> list[Include]:
-        return self._subtasks[stn - 1].includes
+    def includes(self, stn: Stn) -> list[Include]:
+        return self._subtasks[stn].includes
 
     def extract_group(self, test_file: Path) -> str | None:
         return _Command.extract_group(test_file)
 
-    def run(self, stn: int | None) -> utils.Status:
+    def run(self, stn: Stn | None) -> utils.Status:
         cwd = Path.cwd()
         # Run generators with `testplan/` as the cwd
         os.chdir(self._directory)
 
         status = utils.Status.success
-        for i, st in enumerate(self._subtasks, 1):
-            if stn is not None and stn != i:
+        for stni, st in self._subtasks.items():
+            if stn is not None and stn != stni:
                 continue
             status &= st.run()
 
@@ -85,10 +85,10 @@ class Testplan:
 
         return status
 
-    def _parse_file(self) -> list[_SubtaskPlan] | Error:
+    def _parse_file(self) -> SortedDict[Stn, _SubtaskPlan] | Error:
         comment_re = re.compile(r"\s*#.*")
-        subtasks_map: dict[int, _SubtaskPlan] = {}
-        stn = 0
+        subtasks: SortedDict[Stn, _SubtaskPlan] = SortedDict()
+        sti = 0
         for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
             line = line.strip()
 
@@ -100,14 +100,14 @@ class Testplan:
             if m := _SubtaskPlan.RE.fullmatch(line):
                 found_st = int(m.group(1))
                 validator = Path(self._directory, m.group(2)) if m.group(2) else None
-                stn += 1
-                if stn != found_st:
+                sti += 1
+                if sti != found_st:
                     return Error(
-                        f"line {lineno}: found [Subtask {found_st}], but [Subtask {stn}] was expected",
+                        f"line {lineno}: found [Subtask {found_st}], but [Subtask {sti}] was expected",
                     )
-                subtasks_map[stn] = _SubtaskPlan(self._dataset_dir, stn, validator)
+                subtasks[Stn(sti)] = _SubtaskPlan(self._dataset_dir, sti, validator)
             elif m := _Command.RE.fullmatch(line):
-                if stn == 0:
+                if sti == 0:
                     return Error(
                         f"line {lineno}: found command before declaring a subtask.",
                     )
@@ -129,11 +129,11 @@ class Testplan:
                 )
                 if isinstance(command, Error):
                     return command
-                subtasks_map[stn].commands.append(command)
+                subtasks[Stn(sti)].commands.append(command)
             elif m := Include.RE.fullmatch(line):
-                subtasks_map[stn].includes.append(
+                subtasks[Stn(sti)].includes.append(
                     Include(
-                        stn=int(m.group(2)),
+                        stn=Stn(int(m.group(2))),
                         pattern=m.group(1),
                         lineno=lineno,
                     ),
@@ -142,7 +142,6 @@ class Testplan:
                 return Error(
                     f"line {lineno}: invalid line `{line}`\n",
                 )
-        subtasks = [st for (_, st) in sorted(subtasks_map.items())]
         validated = Testplan._validate(subtasks)
         if isinstance(validated, Error):
             return validated
@@ -171,15 +170,15 @@ class Testplan:
             return _invalid_command_err(cmd, lineno)
 
     @staticmethod
-    def _validate(subtasks: list[_SubtaskPlan]) -> Error | None:
-        for i, st in enumerate(subtasks):
+    def _validate(subtasks: SortedDict[Stn, _SubtaskPlan]) -> Error | None:
+        for stn, st in subtasks.items():
             for include in st.includes:
                 lineno = include.lineno
-                if include.stn not in range(1, len(subtasks) + 1):
+                if include.stn not in subtasks:
                     return Error(
                         f"line {lineno}: invalid subtask {include.stn}: `{include}`",
                     )
-                if include.stn == i + 1:
+                if include.stn == stn:
                     return Error(
                         f"line {lineno}: cannot include tests from the same subtask: `{include}`",
                     )
@@ -197,7 +196,7 @@ class Include:
         r"\s*@\s*include\s*([^\s]+)\s+from\s+subtask\s*(\d+)\s*",
     )
 
-    stn: int
+    stn: Stn
     pattern: str
     lineno: int
 

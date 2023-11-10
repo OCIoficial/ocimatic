@@ -3,11 +3,11 @@ from __future__ import annotations
 import os
 import re
 import sys
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Literal, NoReturn, ParamSpec, Protocol, TypeVar, cast
+from typing import Generic, Literal, NoReturn, ParamSpec, Protocol, TypeVar, cast
 
 from colorama import Fore, Style
 
@@ -323,3 +323,70 @@ def relative_to_cwd(path: Path) -> str:
         return relpath
     else:
         return str(path)
+
+
+class Comparable(Protocol):
+    def __lt__(self: _T, __other: _T) -> bool:
+        ...
+
+
+_K = TypeVar("_K", bound=Comparable)
+_V = TypeVar("_V")
+
+
+class SortedDict(Generic[_K, _V]):
+    """A dict that iterates over keys in sorted order."""
+
+    def __init__(self, iter: Iterable[tuple[_K, _V]] | None = None) -> None:
+        self._dict = dict(iter or [])
+
+    def __getitem__(self, key: _K) -> _V:
+        return self._dict[key]
+
+    def __setitem__(self, key: _K, val: _V) -> None:
+        self._dict[key] = val
+
+    def __contains__(self, key: _K) -> bool:
+        return key in self._dict
+
+    def __repr__(self) -> str:
+        items = ", ".join(f"{key!r}: {val!r}" for key, val in self.items())
+        return f"{{{items}}}"
+
+    def __len__(self) -> int:
+        return len(self._dict)
+
+    def keys(self) -> list[_K]:
+        return sorted(self._dict.keys())
+
+    def items(self) -> Iterator[tuple[_K, _V]]:
+        for key in self.keys():
+            yield (key, self._dict[key])
+
+    def __iter__(self) -> Iterator[_V]:
+        for key in self.keys():
+            yield self._dict[key]
+
+
+class Stn:
+    """A wrapper over an integer used as an identifier for a subtask."""
+
+    def __init__(self, stn: int) -> None:
+        self._idx = stn
+
+    def __hash__(self) -> int:
+        return hash(self._idx)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Stn):
+            raise ValueError(f"Cannot compare Stn with {type(other)}")
+        return self._idx == other._idx
+
+    def __str__(self) -> str:
+        return f"{self._idx}"
+
+    def __repr__(self) -> str:
+        return f"st{self._idx}"
+
+    def __lt__(self, other: Stn) -> bool:
+        return self._idx < other._idx

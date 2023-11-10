@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ocimatic import utils
 from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
+from ocimatic.utils import Stn
 
 
 @dataclass
@@ -19,28 +20,32 @@ class BuildError:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ShouldFail:
     REGEX = re.compile(r"\s+should-fail\s*=\s*\[(\s*st\d+\s*(,\s*st\d+\s*)*(,\s*)?)\]")
-    subtasks: set[int]
+    subtasks: set[Stn]
 
     @staticmethod
     def parse(comment: str) -> ShouldFail | None:
         m = ShouldFail.REGEX.match(comment)
         if not m:
             return None
-        subtasks = {int(st.strip().removeprefix("st")) for st in m.group(1).split(",")}
+        subtasks = {
+            Stn(int(st.strip().removeprefix("st"))) for st in m.group(1).split(",")
+        }
         return ShouldFail(subtasks=subtasks)
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ShouldPass:
     REGEX = re.compile(r"\s+should-pass\s*=\s*\[(\s*st\d+\s*(,\s*st\d+\s*)*(,\s*)?)\]")
-    subtasks: set[int]
+    subtasks: set[Stn]
 
     @staticmethod
     def parse(comment: str) -> ShouldPass | None:
         m = ShouldPass.REGEX.match(comment)
         if not m:
             return None
-        subtasks = {int(st.strip().removeprefix("st")) for st in m.group(1).split(",")}
+        subtasks = {
+            Stn(int(st.strip().removeprefix("st"))) for st in m.group(1).split(",")
+        }
         return ShouldPass(subtasks=subtasks)
 
 
