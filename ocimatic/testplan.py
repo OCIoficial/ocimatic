@@ -7,6 +7,7 @@ import shutil
 import sys
 from abc import ABC, abstractmethod
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -152,6 +153,12 @@ class Testplan:
             return _Script(group, Path(self._directory, cmd), "cpp", args)
         else:
             return _invalid_command_err(cmd, lineno)
+
+
+@dataclass
+class _Include:
+    stn: int
+    patterh: str
 
 
 class _SubtaskPlan:
