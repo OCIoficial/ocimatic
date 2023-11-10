@@ -11,12 +11,13 @@
   # You can also use `copy` to specify manual test cases
   manual ; copy testplan/manual-1.in
 
-  # Use a script to generate test case programatically
+  # Use a script to generate a test case programatically
   rand ; gen_random.py 10 100
 
 
 # We don't define a validator for this subtask.
 [Subtask 2]
+
   # You can also write a script in C++, useful to speed up generation.
   rand ; gen_random.cpp -2000000000 2000000000
 

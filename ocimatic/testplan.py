@@ -7,8 +7,9 @@ import shutil
 import sys
 from abc import ABC, abstractmethod
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from ocimatic import ui
 from ocimatic.runnable import ret_code_to_str
@@ -79,61 +80,71 @@ class Testplan:
         return status
 
     def _parse_file(self) -> list[_SubtaskPlan] | Error:
-        subtasks: dict[int, _SubtaskPlan] = {}
-        st = 0
+        comment_re = re.compile(r"\s*#.*")
+        subtasks_map: dict[int, _SubtaskPlan] = {}
+        stn = 0
         for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
             line = line.strip()
-            subtask_header = re.compile(
-                r"\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*",
-            )
-            cmd_line = re.compile(r"\s*([^;\s]+)\s*;\s*(\S+)(:?\s+(.*))?")
-            comment = re.compile(r"\s*#.*")
 
             if not line:
                 continue
-            if not comment.fullmatch(line):
-                header_match = subtask_header.fullmatch(line)
-                cmd_match = cmd_line.fullmatch(line)
-                if header_match:
-                    found_st = int(header_match.group(1))
-                    validator = (
-                        Path(self._directory, header_match.group(2))
-                        if header_match.group(2)
-                        else None
-                    )
-                    if st + 1 != found_st:
-                        return Error(
-                            f"line {lineno}: found subtask {found_st}, but subtask {st + 1} was expected",
-                        )
-                    st += 1
-                    subtasks[st] = _SubtaskPlan(self._dataset_dir, st, validator)
-                elif cmd_match:
-                    if st == 0:
-                        return Error(
-                            f"line {lineno}: found command before declaring a subtask.",
-                        )
-                    group = cmd_match.group(1)
-                    cmd = cmd_match.group(2)
-                    args = _parse_args(cmd_match.group(3) or "")
+            if comment_re.fullmatch(line):
+                continue
 
-                    command = self._parse_command(
-                        group,
-                        cmd,
-                        args,
-                        lineno,
-                    )
-                    if isinstance(command, Error):
-                        return command
-                    subtasks[st].commands.append(command)
-                else:
+            if m := _SubtaskPlan.RE.fullmatch(line):
+                found_st = int(m.group(1))
+                validator = Path(self._directory, m.group(2)) if m.group(2) else None
+                stn += 1
+                if stn != found_st:
                     return Error(
-                        f"line {lineno}: invalid line `{line}`\n",
+                        f"line {lineno}: found [Subtask {found_st}], but [Subtask {stn}] was expected",
                     )
-        return [st for (_, st) in sorted(subtasks.items())]
+                subtasks_map[stn] = _SubtaskPlan(self._dataset_dir, stn, validator)
+            elif m := _Command.RE.fullmatch(line):
+                if stn == 0:
+                    return Error(
+                        f"line {lineno}: found command before declaring a subtask.",
+                    )
+                group_str = m.group(1)
+                group = _GroupName.parse(group_str)
+                if not group:
+                    return Error(
+                        f"line {lineno}: invalid group name `{group_str}`. The group name should "
+                        f"match the regex `{_GroupName.RE.pattern}`.",
+                    )
+                cmd = m.group(2)
+                args = _parse_args(m.group(3) or "")
+
+                command = self._parse_command(
+                    group,
+                    cmd,
+                    args,
+                    lineno,
+                )
+                if isinstance(command, Error):
+                    return command
+                subtasks_map[stn].commands.append(command)
+            elif m := Include.RE.fullmatch(line):
+                subtasks_map[stn].includes.append(
+                    Include(
+                        stn=int(m.group(2)),
+                        pattern=m.group(1),
+                        lineno=lineno,
+                    ),
+                )
+            else:
+                return Error(
+                    f"line {lineno}: invalid line `{line}`\n",
+                )
+        subtasks = [st for (_, st) in sorted(subtasks_map.items())]
+        validated = Testplan._validate(subtasks)
+        if isinstance(validated, Error):
+            return validated
+        return subtasks
 
     def _parse_command(
         self,
-        group: str,
+        group: _GroupName,
         cmd: str,
         args: list[str],
         lineno: int,
@@ -153,11 +164,64 @@ class Testplan:
         else:
             return _invalid_command_err(cmd, lineno)
 
+    @staticmethod
+    def _validate(subtasks: list[_SubtaskPlan]) -> Error | None:
+        for i, st in enumerate(subtasks):
+            for include in st.includes:
+                lineno = include.lineno
+                if include.stn not in range(1, len(subtasks) + 1):
+                    return Error(
+                        f"line {lineno}: invalid subtask {include.stn}: `{include}`",
+                    )
+                if include.stn == i + 1:
+                    return Error(
+                        f"line {lineno}: cannot include tests from the same subtask: `{include}`",
+                    )
+        return None
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class Include:
+    """An include directive can be used to include tests from another subtask.
+
+    This is not fully impelemented yet.
+    """
+
+    RE: ClassVar[re.Pattern[str]] = re.compile(
+        r"\s*@\s*include\s*([^\s]+)\s+from\s+subtask\s*(\d+)\s*",
+    )
+
+    stn: int
+    pattern: str
+    lineno: int
+
+    def __str__(self) -> str:
+        return f"@include {self.pattern} from subtask {self.stn}"
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class _GroupName:
+    RE: ClassVar[re.Pattern[str]] = re.compile(r"[a-zA-Z0-9_-]+")
+
+    name: str
+
+    @staticmethod
+    def parse(name: str) -> _GroupName | None:
+        if not _GroupName.RE.fullmatch(name):
+            return None
+        return _GroupName(name=name)
+
+    def __str__(self) -> str:
+        return self.name
+
 
 class _SubtaskPlan:
+    RE = re.compile(r"\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*")
+
     def __init__(self, dataset_dir: Path, stn: int, validator: Path | None) -> None:
         self._dir = Path(dataset_dir, f"st{stn}")
         self.commands: list[_Command] = []
+        self.includes: list[Include] = []
         self.validator = validator
 
     def __str__(self) -> str:
@@ -169,21 +233,23 @@ class _SubtaskPlan:
         self._dir.mkdir(parents=True, exist_ok=True)
 
         status = ui.Status.success
-        tests_in_group: Counter[str] = Counter()
+        tests_in_group: Counter[_GroupName] = Counter()
         for cmd in self.commands:
             status &= cmd.run(self._dir, tests_in_group).status
         return status
 
 
 class _Command(ABC):
-    def __init__(self, group: str) -> None:
+    RE = re.compile(r"\s*([^;\s]+)\s*;\s*(\S+)(:?\s+(.*))?")
+
+    def __init__(self, group: _GroupName) -> None:
         self._group = group
 
     def dst_file(self, directory: Path, idx: int) -> Path:
         return Path(directory, f"{self._group}-{idx}.in")
 
     @abstractmethod
-    def run(self, dst_dir: Path, tests_in_group: Counter[str]) -> ui.Result:
+    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> ui.Result:
         raise NotImplementedError(
             f"Class {self.__class__.__name__} doesn't implement run()",
         )
@@ -192,7 +258,7 @@ class _Command(ABC):
 class _Copy(_Command):
     magic_check = re.compile("([*?[])")
 
-    def __init__(self, group: str, dir: Path, pattern: str) -> None:
+    def __init__(self, group: _GroupName, dir: Path, pattern: str) -> None:
         super().__init__(group)
         self._dir = dir
         self._pattern = pattern
@@ -201,7 +267,7 @@ class _Copy(_Command):
         return self._pattern
 
     @ui.work("Copy", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[str]) -> ui.Result:
+    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> ui.Result:
         files = list(self._dir.glob(self._pattern))
         if not files:
             msg = "No file matches the pattern" if self.has_magic() else "No such file"
@@ -219,7 +285,7 @@ class _Copy(_Command):
 
 
 class _Echo(_Command):
-    def __init__(self, group: str, args: list[str]) -> None:
+    def __init__(self, group: _GroupName, args: list[str]) -> None:
         super().__init__(group)
         self._args = args
 
@@ -227,7 +293,7 @@ class _Echo(_Command):
         return str(self._args)
 
     @ui.work("Echo", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[str]) -> ui.Result:
+    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> ui.Result:
         idx = _next_idx_in_group(self._group, tests_in_group)
         with self.dst_file(dst_dir, idx).open("w") as test_file:
             test_file.write(" ".join(self._args) + "\n")
@@ -239,7 +305,7 @@ class _Script(_Command):
 
     def __init__(
         self,
-        group: str,
+        group: _GroupName,
         path: Path,
         ext: VALID_EXTENSIONS,
         args: list[str],
@@ -255,7 +321,7 @@ class _Script(_Command):
         return f"{self._group} ; {script} {args}"
 
     @ui.work("Gen", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[str]) -> ui.Result:
+    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> ui.Result:
         script = self._load_script()
         if not script:
             return ui.Result.fail(short_msg="Script file not found")
@@ -334,6 +400,6 @@ def _parse_args(args: str) -> list[str]:
     return [a.encode().decode("unicode_escape") for a in shlex.split(args)]
 
 
-def _next_idx_in_group(group: str, tests_in_group: Counter[str]) -> int:
+def _next_idx_in_group(group: _GroupName, tests_in_group: Counter[_GroupName]) -> int:
     tests_in_group[group] += 1
     return tests_in_group[group]
