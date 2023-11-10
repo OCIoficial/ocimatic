@@ -233,7 +233,7 @@ class _SubtaskPlan:
     def __str__(self) -> str:
         return str(self._dir.name)
 
-    @utils.workgroup("{0}")
+    @utils.hd2("{0}")
     def run(self) -> utils.Status:
         shutil.rmtree(self._dir, ignore_errors=True)
         self._dir.mkdir(parents=True, exist_ok=True)

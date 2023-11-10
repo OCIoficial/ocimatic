@@ -7,7 +7,7 @@ from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Concatenate, NoReturn, ParamSpec, Protocol, TypeVar, cast
+from typing import Literal, NoReturn, ParamSpec, Protocol, TypeVar, cast
 
 from colorama import Fore, Style
 
@@ -160,68 +160,14 @@ def writeln(text: str = "", color: str = RESET) -> None:
     flush()
 
 
-def task_header(name: str, msg: str) -> None:
-    """Print header for task."""
-    write("\n\n")
-    write(colorize(f"[{name}] {msg}", BOLD + Fore.MAGENTA))
+def fatal_error(message: str) -> NoReturn:
+    writeln(colorize("ocimatic: " + message, INFO + RED))
     writeln()
+    sys.exit(1)
 
 
-def workgroup_header(label: str, msg: str | None) -> None:
-    """Print header for a generic group of works."""
-    writeln()
-    color = INFO if _verbosity is Verbosity.verbose else RESET
-    write(colorize(f"[{label}]", color))
-    if _verbosity is Verbosity.verbose:
-        if msg:
-            write(colorize(f" {msg}", color))
-        writeln()
-    else:
-        write(" ")
-    flush()
-
-
-def contest_group_header(msg: str) -> None:
-    """Print header for a group of works involving a contest."""
-    write("\n\n")
-    write(colorize(msg, INFO + MAGENTA))
-    writeln()
-    flush()
-
-
-SolutionGroup = Generator[Result, None, _T]
-
-
-def solution_group(
-    formatter: str = "{}",
-) -> Callable[[Callable[_P, SolutionGroup[_T]]], Callable[_P, _T]]:
-    def decorator(func: Callable[_P, SolutionGroup[_T]]) -> Callable[_P, _T]:
-        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
-            solution_group_header(formatter.format(*args, **kwargs))
-            gen = func(*args, **kwargs)
-            try:
-                while True:
-                    result = next(gen).into_work_result()
-                    end_work(result)
-            except StopIteration as exc:
-                solution_group_footer()
-                return cast(_T, exc.value)
-
-        return wrapper
-
-    return decorator
-
-
-def solution_group_header(msg: str) -> None:
-    """Print header for a solution group."""
-    writeln()
-    write(colorize(f"[{msg}]", INFO + BLUE) + " ")
-    flush()
-
-
-def solution_group_footer() -> None:
-    writeln()
-    flush()
+def show_message(label: str, msg: str, color: str = INFO) -> None:
+    write(" %s \n" % colorize(label + ": " + str(msg), color))
 
 
 _TIntoWorkResult = TypeVar("_TIntoWorkResult", bound=IntoWorkResult)
@@ -235,9 +181,9 @@ def work(
         func: Callable[_P, _TIntoWorkResult],
     ) -> Callable[_P, _TIntoWorkResult]:
         def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _TIntoWorkResult:
-            start_work(action, formatter.format(*args, **kwargs))
+            _start_work(action, formatter.format(*args, **kwargs))
             result = func(*args, **kwargs)
-            end_work(result.into_work_result())
+            _end_work(result.into_work_result(), _verbosity)
             return result
 
         return wrapper
@@ -245,7 +191,7 @@ def work(
     return decorator
 
 
-def start_work(action: str, msg: str, length: int = 80) -> None:
+def _start_work(action: str, msg: str, length: int = 80) -> None:
     if _verbosity is Verbosity.quiet:
         return
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
@@ -254,93 +200,118 @@ def start_work(action: str, msg: str, length: int = 80) -> None:
     flush()
 
 
-def end_work(result: WorkResult) -> None:
+def _end_work(result: WorkResult, verbosity: Verbosity) -> None:
     match result.status:
         case None:
             char = _INFO_CHAR
-            color = INFO
+            color = RESET
         case Status.success:
             char = _SUCCESS_CHAR
-            color = OK
+            color = GREEN
         case Status.fail:
             char = _FAIL_CHAR
-            color = ERROR
-    if _verbosity is Verbosity.verbose:
+            color = RED
+    if verbosity is Verbosity.verbose:
         write(colorize(str(result.short_msg), color))
         writeln()
+
+        if result.long_msg:
+            long_msg = result.long_msg.strip()
+            long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))
+            write(long_msg)
+            writeln()
+            writeln()
     else:
         write(colorize(char, color))
-    if result.long_msg and _verbosity is Verbosity.verbose:
-        long_msg = result.long_msg.strip()
-        long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))
-        write(long_msg)
+    flush()
+
+
+def hd(
+    level: Literal[1, 2],
+    label_formatter: str,
+    msg: str | None = None,
+    color: str | None = None,
+) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
+    def decorator(func: Callable[_P, _T]) -> Callable[_P, _T]:
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+            _fmt_header(level, label_formatter.format(*args, **kwargs), msg, color)
+            result = func(*args, **kwargs)
+            _fmt_footer(level)
+            return result
+
+        return wrapper
+
+    return decorator
+
+
+def hd1(
+    label_formatter: str,
+    msg: str | None = None,
+    color: str = RESET,
+) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
+    return hd(1, label_formatter, msg, color)
+
+
+def hd2(
+    label_formatter: str,
+    msg: str | None = None,
+    color: str | None = None,
+) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
+    return hd(2, label_formatter, msg, color)
+
+
+WorkHd = Generator[Result, None, _T]
+
+
+def workhd(
+    formatter: str = "{}",
+    color: str | None = None,
+) -> Callable[[Callable[_P, WorkHd[_T]]], Callable[_P, _T]]:
+    def decorator(func: Callable[_P, WorkHd[_T]]) -> Callable[_P, _T]:
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+            _start_workhd(formatter.format(*args, **kwargs), color=color)
+            gen = func(*args, **kwargs)
+            try:
+                while True:
+                    result = next(gen).into_work_result()
+                    _end_work(result, Verbosity.verbose)
+            except StopIteration as exc:
+                _fmt_footer(1)
+                return cast(_T, exc.value)
+
+        return wrapper
+
+    return decorator
+
+
+def _fmt_header(
+    level: Literal[1, 2],
+    label: str,
+    msg: str | None,
+    color: str | None = None,
+) -> None:
+    if level == 1 or _verbosity is Verbosity.verbose:
         writeln()
+    write(colorize(f"[{label}]", color or RESET))
+    if msg:
+        write(colorize(f" {msg}", color or RESET))
+
+    if level == 2 and _verbosity is Verbosity.quiet:
+        write(" ")
+    else:
         writeln()
     flush()
 
 
-def fatal_error(message: str) -> NoReturn:
-    writeln(colorize("ocimatic: " + message, INFO + RED))
+def _start_workhd(label: str, color: str | None = None) -> None:
     writeln()
-    sys.exit(1)
+    write(colorize(f"[{label}] ", color or RESET))
 
 
-def show_message(label: str, msg: str, color: str = INFO) -> None:
-    write(" %s \n" % colorize(label + ": " + str(msg), color))
-
-
-def contest_group(
-    formatter: str = "{}",
-) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
-    def decorator(func: Callable[_P, _T]) -> Callable[_P, _T]:
-        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
-            contest_group_header(formatter.format(*args, **kwargs))
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-def workgroup(
-    label_formatter: str,
-    msg: str | None = None,
-) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
-    def decorator(func: Callable[_P, _T]) -> Callable[_P, _T]:
-        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
-            workgroup_header(label_formatter.format(*args, **kwargs), msg)
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
-class HasName(Protocol):
-    @property
-    def name(self) -> str:
-        ...
-
-
-_THasName = TypeVar("_THasName", bound=HasName)
-
-
-def task(
-    action: str,
-) -> Callable[
-    [Callable[Concatenate[_THasName, _P], _T]],
-    Callable[Concatenate[_THasName, _P], _T],
-]:
-    def decorator(
-        func: Callable[Concatenate[_THasName, _P], _T],
-    ) -> Callable[Concatenate[_THasName, _P], _T]:
-        def wrapper(self: _THasName, *args: _P.args, **kwargs: _P.kwargs) -> _T:
-            task_header(self.name, action)
-            return func(self, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
+def _fmt_footer(level: Literal[1, 2]) -> None:
+    if level == 2 and _verbosity is Verbosity.quiet:
+        writeln()
+        flush()
 
 
 def relative_to_cwd(path: Path) -> str:

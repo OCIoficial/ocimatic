@@ -59,6 +59,8 @@ class SolutionSpec:
 
 
 class Solution:
+    COLOR = utils.BLUE
+
     def __init__(self, source: SourceCode) -> None:
         self._source = source
         self._spec = SolutionSpec(source.name, source.comments)
@@ -119,7 +121,7 @@ class Solution:
 
         return Solution(source)
 
-    @utils.solution_group()
+    @utils.workhd("{0}", COLOR)
     def run_on_dataset(
         self,
         dataset: Dataset,
@@ -128,7 +130,7 @@ class Solution:
         *,
         timeout: float | None = None,
         subtask: int | None = None,
-    ) -> utils.SolutionGroup[DatasetResults | None]:
+    ) -> utils.WorkHd[DatasetResults | None]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
@@ -144,8 +146,8 @@ class Solution:
                 subtask=subtask,
             )
 
-    @utils.solution_group()
-    def run_on_input(self, input: Path | TextIO) -> utils.SolutionGroup[None]:
+    @utils.workhd("{0}", COLOR)
+    def run_on_input(self, input: Path | TextIO) -> utils.WorkHd[None]:
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
             yield utils.Result.fail(short_msg="Failed", long_msg=build_result.msg)
@@ -154,13 +156,13 @@ class Solution:
             yield utils.Result.success(short_msg="OK")
         build_result.run_on_input(input)
 
-    @utils.solution_group()
+    @utils.workhd("{0}", COLOR)
     def gen_expected(
         self,
         dataset: Dataset,
         *,
         sample: bool = False,
-    ) -> utils.SolutionGroup[utils.Status]:
+    ) -> utils.WorkHd[utils.Status]:
         """Generate expected output files for all test cases in the given dataset running this solution."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):

@@ -73,6 +73,8 @@ class Contest:
     to a directory in the filesystem.
     """
 
+    COLOR = utils.MAGENTA
+
     def __init__(self, directory: Path) -> None:
         self._directory = directory
         self._config = ContestConfig.load(directory)
@@ -117,7 +119,7 @@ class Contest:
     def tasks(self) -> list[Task]:
         return self._tasks
 
-    @utils.contest_group("Generating problemset")
+    @utils.hd1("Generating problemset", color=COLOR)
     def build_problemset(self) -> utils.Status:
         """Build titlepage and statement of all tasks. Then merge all pdfs into a single pdf."""
         status = utils.Status.success
@@ -125,7 +127,7 @@ class Contest:
         status &= self._build_problemset_oneside()
         return status
 
-    @utils.workgroup("oneside")
+    @utils.hd1("oneside")
     def _build_problemset_oneside(self) -> utils.Status:
         os.environ["OCIMATIC_SIDENESS"] = "oneside"
         if self._compile_titlepage().is_fail():
@@ -140,7 +142,7 @@ class Contest:
 
         return self._merge_pdfs("oneside.pdf").status
 
-    @utils.workgroup("twoside")
+    @utils.hd1("twoside")
     def _build_problemset_twoside(self) -> utils.Status:
         os.environ["OCIMATIC_SIDENESS"] = "twoside"
         if self._compile_titlepage().is_fail():
@@ -157,7 +159,7 @@ class Contest:
 
         return self._merge_pdfs("twoside.pdf").status
 
-    @utils.contest_group("Creating archive")
+    @utils.hd1("Creating archive", color=COLOR)
     def archive(self) -> None:
         """Package statements and datasets of all tasks into a single zip file."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -275,6 +277,8 @@ class Task:
     and a dataset. A task is associated to a directory in the filesystem.
     """
 
+    COLOR = utils.MAGENTA + utils.BOLD
+
     @staticmethod
     def create_layout(task_path: Path) -> None:
         ocimatic_dir = Path(__file__).parent
@@ -338,7 +342,7 @@ class Task:
     def codename(self) -> str:
         return self._config.codename
 
-    @utils.workgroup("{0}", "Copy to archive")
+    @utils.hd1("{0}", "Copy to archive")
     def copy_to(self, directory: Path) -> bool:
         new_dir = Path(directory, self.codename)
         new_dir.mkdir()
@@ -357,7 +361,7 @@ class Task:
         shutil.copy2(Path(self._directory, "statement", "statement.pdf"), statement)
         return True
 
-    @utils.task("Generating dataset input files")
+    @utils.hd1("{0}", "Running testplan", COLOR)
     def run_testplan(self, subtask: int | None) -> utils.Status:
         if self._testplan is None:
             utils.fatal_error("Task has a static dataset.")
@@ -393,11 +397,11 @@ class Task:
                 return sol
         return None
 
-    @utils.task("Validating input files")
+    @utils.hd1("{0}", "Validating input files", COLOR)
     def validate_input(self, stn: int | None) -> utils.Status:
         return self._dataset.validate_input(stn)
 
-    @utils.task("Compressing dataset")
+    @utils.hd1("{0}", "Compressing dataset", COLOR)
     def compress_dataset(self, *, random_sort: bool) -> None:
         """Compress dataset into a single file."""
         self._dataset.compress(random_sort=random_sort)
@@ -414,7 +418,7 @@ class Task:
     def statement(self) -> Statement:
         return self._statement
 
-    @utils.task("Score Params")
+    @utils.hd1("{0}", "Score Params", COLOR)
     def score(self) -> None:
         counts = self._dataset.count()
         scores = self._statement.scores()
@@ -434,11 +438,11 @@ class Task:
             str([[m, t] for (m, t) in zip(scores, counts, strict=True)]),
         )
 
-    @utils.task("Normalizing")
+    @utils.hd1("{0}", "Normalizing", COLOR)
     def normalize(self) -> None:
         self._dataset.normalize()
 
-    @utils.task("Running solution")
+    @utils.hd1("{0}", "Running solution", COLOR)
     def run_solution(self, solution: Path, timeout: float, subtask: int | None) -> None:
         """Run all solutions reporting outcome and running time."""
         sol = self.load_solution_from_path(solution)
@@ -453,24 +457,22 @@ class Task:
             subtask=subtask,
         )
         if results:
+            utils.writeln()
             stats = results.runtime_stats()
             if stats:
                 _write_stats(stats)
 
             if sol.is_partial:
+                should_fail = ", ".join(
+                    f"st{st}" for st in sorted(sol.should_fail(results))
+                )
                 if sol.check_results(results):
-                    should_pass = ", ".join(
-                        f"st{st}" for st in sorted(sol.should_pass(results))
-                    )
                     utils.writeln()
                     utils.writeln(
-                        f"Solution passed the subtasks it was supposed to: should-pass=[{should_pass}]",
+                        f"Solution failed the subtasks it was supposed to: should-fail=[{should_fail}]",
                         utils.OK,
                     )
                 else:
-                    should_fail = ", ".join(
-                        f"st{st}" for st in sorted(sol.should_fail(results))
-                    )
                     failed = ", ".join(
                         f"st{stn}" for stn in sorted(results.failed_subtasks())
                     )
@@ -495,7 +497,7 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
                 else:
                     utils.writeln("Result: Some test failed", utils.ERROR)
 
-    @utils.task("Checking dataset")
+    @utils.hd1("{0}", "Checking dataset", COLOR)
     def check_dataset(self) -> utils.Status:
         """Check input/output correctness.
 
@@ -533,6 +535,7 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
     def _check_dataset_validate_input(self) -> utils.Status:
         utils.writeln()
         utils.writeln("Running validators on input files", utils.INFO)
+        utils.writeln()
         status = self._dataset.validate_input(stn=None)
         utils.writeln()
         if status == utils.Status.fail:
@@ -641,7 +644,7 @@ Solutions with issues:
         )
         return utils.Status.success
 
-    @utils.task("Building solutions")
+    @utils.hd1("{0}", "Building solutions", COLOR)
     def build_solution(self, solution: Path) -> None:
         """Force compilation of solutions."""
         sol = self.load_solution_from_path(solution)
@@ -649,7 +652,7 @@ Solutions with issues:
             return utils.show_message("Error", "Solution not found", utils.ERROR)
         sol.build()
 
-    @utils.task("Generating expected output")
+    @utils.hd1("{0}", "Generating expected output", COLOR)
     def gen_expected(
         self,
         *,
@@ -692,7 +695,7 @@ Solutions with issues:
 
         return utils.Status.success
 
-    @utils.task("Building statement")
+    @utils.hd1("{0}", "Building statement", COLOR)
     def build_statement(self, *, blank_page: bool = False) -> None:
         """Generate pdf for the statement."""
         self._statement.build(blank_page=blank_page)

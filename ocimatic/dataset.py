@@ -310,7 +310,7 @@ class TestGroup:
     def count(self) -> int:
         return len(self._tests)
 
-    @utils.workgroup("{0}")
+    @utils.hd2("{0}")
     def run(
         self,
         runnable: Runnable,
@@ -332,7 +332,7 @@ class TestGroup:
 
         return results
 
-    @utils.workgroup("{0}")
+    @utils.hd2("{0}")
     def gen_expected(self, runnable: Runnable) -> utils.Status:
         status = utils.Status.success
         for test in self._tests:
@@ -355,7 +355,7 @@ class Subtask(TestGroup):
             [Test(f, f.with_suffix(SOL)) for f in directory.glob(f"*{IN}")],
         )
 
-    @utils.workgroup("{0}")
+    @utils.hd2("{0}")
     def validate(self, validator: Path | None) -> utils.Status:
         if validator is None:
             utils.show_message("Warning", "no validator available", utils.WARNING)
