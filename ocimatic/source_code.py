@@ -109,15 +109,18 @@ class CppSource(SourceCode):
         self._out.parent.mkdir(parents=True, exist_ok=True)
         if force or CppSource.should_build(self.files, self._out):
             cmd = self.build_cmd()
-            complete = subprocess.run(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
-            if complete.returncode != 0:
-                return BuildError(msg=complete.stderr)
+            try:
+                complete = subprocess.run(
+                    cmd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                )
+                if complete.returncode != 0:
+                    return BuildError(msg=complete.stderr)
+            except Exception as e:
+                return BuildError(msg=str(e))
         return Binary(self._out)
 
     @property
