@@ -282,7 +282,7 @@ class Test:
         return self._expected_path.exists()
 
 
-class TestGroup:
+class _TestGroup:
     """A collection of test cases."""
 
     def __init__(self, name: str, tests: list[Test]) -> None:
@@ -344,7 +344,7 @@ class TestGroup:
         return self._name
 
 
-class Subtask(TestGroup):
+class _Subtask(_TestGroup):
     """Subclass of `TestGroup` to represet a subtask."""
 
     def __init__(self, directory: Path) -> None:
@@ -357,7 +357,7 @@ class Subtask(TestGroup):
     def validate_input(
         self,
         validator: Path | None,
-        ancestors: list[Subtask],
+        ancestors: list[_Subtask],
     ) -> utils.Status:
         if validator is None:
             utils.writeln(" warning: no validator available", utils.YELLOW)
@@ -518,22 +518,22 @@ class Dataset:
         self.testplan = testplan
         self._directory = directory
 
-        self._subtasks: SortedDict[Stn, Subtask]
+        self._subtasks: SortedDict[Stn, _Subtask]
         if testplan is not None:
             self._subtasks = SortedDict(
-                (Stn(stn), Subtask(directory / f"st{stn}"))
+                (Stn(stn), _Subtask(directory / f"st{stn}"))
                 for stn in range(1, testplan.subtasks + 1)
             )
         elif directory.exists():
             self._subtasks = SortedDict(
-                (Stn(stn), Subtask(d))
+                (Stn(stn), _Subtask(d))
                 for stn, d in enumerate(sorted(directory.iterdir()), 1)
                 if d.is_dir()
             )
         else:
             self._subtasks = SortedDict()
 
-        self._sampledata = TestGroup("sample", sampledata)
+        self._sampledata = _TestGroup("sample", sampledata)
 
     def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> utils.Status:
         status = utils.Status.success

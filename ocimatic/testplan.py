@@ -282,18 +282,12 @@ class _Subtask:
 
 class _Command(ABC):
     RE = re.compile(r"\s*([^;\s]+)\s*;\s*(\S+)(:?\s+(.*))?")
-    FILE_RE = re.compile(r"(.*)-(\d+).in")
 
     def __init__(self, group: _GroupName) -> None:
         self._group = group
 
     def dst_file(self, directory: Path, idx: int) -> Path:
-        return Path(directory, self.add_group(idx))
-
-    def add_group(self, idx: int) -> str:
-        name = f"{self._group}-{idx}.in"
-        assert _Command.FILE_RE.fullmatch(name) is not None
-        return name
+        return Path(directory, f"{self._group}-{idx}.in")
 
     @abstractmethod
     def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
@@ -384,7 +378,7 @@ class _Script(_Command):
         count = 0
         idx = _next_idx_in_group(self._group, tests_in_group)
         # We seed the script with the first `idx`, this guarantees it will be different next time.
-        args = [self._seed_arg(dst_dir, idx), *self._args]
+        args = self._args_with_seed(dst_dir, idx)
         process = build_result.spawn(args, cwd=self._cwd)
         current_file = None
         try:
@@ -426,8 +420,8 @@ class _Script(_Command):
         elif self._ext == ".cpp":
             return CppSource(self._script_path)
 
-    def _seed_arg(self, directory: Path, idx: int) -> str:
-        return f"{directory.name}-{self._group}-{idx}"
+    def _args_with_seed(self, directory: Path, idx: int) -> list[str]:
+        return [f"{directory.name}-{self._group}-{idx}", *self._args]
 
 
 def _invalid_command_err_msg(cmd: str) -> str:
