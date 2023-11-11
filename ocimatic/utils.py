@@ -220,7 +220,6 @@ def _end_work(result: WorkResult, verbosity: Verbosity) -> None:
             long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))
             write(long_msg)
             writeln()
-            writeln()
     else:
         write(colorize(char, color))
     flush()
@@ -356,16 +355,22 @@ class SortedDict(Generic[_K, _V]):
     def __len__(self) -> int:
         return len(self._dict)
 
+    def setdefault(self, key: _K, default: _V) -> _V:
+        return self._dict.setdefault(key, default)
+
     def keys(self) -> list[_K]:
         return sorted(self._dict.keys())
+
+    def values(self) -> Iterator[_V]:
+        for key in self.keys():
+            yield self._dict[key]
 
     def items(self) -> Iterator[tuple[_K, _V]]:
         for key in self.keys():
             yield (key, self._dict[key])
 
-    def __iter__(self) -> Iterator[_V]:
-        for key in self.keys():
-            yield self._dict[key]
+    def __iter__(self) -> Iterator[_K]:
+        yield from self.keys()
 
 
 class Stn:

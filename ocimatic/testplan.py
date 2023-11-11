@@ -55,13 +55,24 @@ class Testplan:
         return len(self._subtasks)
 
     def validators(self) -> list[Path | None]:
-        return [subtask.validator for subtask in self._subtasks]
+        return [st.validator for st in self._subtasks.values()]
 
-    def includes(self, stn: Stn) -> list[Include]:
-        return self._subtasks[stn].includes
+    def ancestors_of(self, stn: Stn) -> list[Stn]:
+        visited: set[Stn] = set()
 
-    def extract_group(self, test_file: Path) -> str | None:
-        return _Command.extract_group(test_file)
+        def dfs(sti: Stn) -> None:
+            visited.add(sti)
+
+            for extends in self._subtasks[sti].extends:
+                if extends.stn not in visited:
+                    dfs(extends.stn)
+
+        dfs(stn)
+        visited.remove(stn)
+        return sorted(visited)
+
+    def parents_of(self, stn: Stn) -> list[Stn]:
+        return sorted(extends.stn for extends in self._subtasks[stn].extends)
 
     def run(self, stn: Stn | None) -> utils.Status:
         cwd = Path.cwd()
@@ -69,12 +80,12 @@ class Testplan:
         os.chdir(self._directory)
 
         status = utils.Status.success
-        for stni, st in self._subtasks.items():
-            if stn is not None and stn != stni:
+        for sti, st in self._subtasks.items():
+            if stn is not None and stn != sti:
                 continue
             status &= st.run()
 
-        if sum(len(st.commands) for st in self._subtasks) == 0:
+        if sum(len(st.commands) for st in self._subtasks.values()) == 0:
             utils.show_message(
                 "Warning",
                 "no commands were executed for the plan.",
@@ -85,9 +96,9 @@ class Testplan:
 
         return status
 
-    def _parse_file(self) -> SortedDict[Stn, _SubtaskPlan] | ParseError:
+    def _parse_file(self) -> SortedDict[Stn, _Subtask] | ParseError:
         comment_re = re.compile(r"\s*#.*")
-        subtasks: SortedDict[Stn, _SubtaskPlan] = SortedDict()
+        subtasks: SortedDict[Stn, _Subtask] = SortedDict()
         sti = 0
         for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
             line = line.strip()
@@ -97,7 +108,7 @@ class Testplan:
             if comment_re.fullmatch(line):
                 continue
 
-            if m := _SubtaskPlan.RE.fullmatch(line):
+            if m := _Subtask.RE.fullmatch(line):
                 found_st = int(m.group(1))
                 validator = Path(self._directory, m.group(2)) if m.group(2) else None
                 sti += 1
@@ -106,7 +117,7 @@ class Testplan:
                         lineno=lineno,
                         msg=f"found [Subtask {found_st}], but [Subtask {sti}] was expected",
                     )
-                subtasks[Stn(sti)] = _SubtaskPlan(self._dataset_dir, sti, validator)
+                subtasks[Stn(sti)] = _Subtask(self._dataset_dir, sti, validator)
             elif m := _Command.RE.fullmatch(line):
                 if sti == 0:
                     return ParseError(
@@ -133,17 +144,16 @@ class Testplan:
                 if isinstance(command, ParseError):
                     return command
                 subtasks[Stn(sti)].commands.append(command)
-            elif m := Include.RE.fullmatch(line):
-                subtasks[Stn(sti)].includes.append(
-                    Include(
-                        stn=Stn(int(m.group(2))),
-                        pattern=m.group(1),
+            elif m := _Extends.RE.fullmatch(line):
+                subtasks[Stn(sti)].extends.append(
+                    _Extends(
+                        stn=Stn(int(m.group(1))),
                         lineno=lineno,
                     ),
                 )
             else:
                 return ParseError(lineno=lineno, msg=f"invalid line `{line}`")
-        validated = Testplan._validate(subtasks)
+        validated = Testplan._validate_extends_graph(subtasks)
         if isinstance(validated, ParseError):
             return validated
         return subtasks
@@ -172,49 +182,61 @@ class Testplan:
             return ParseError(lineno=lineno, msg=_invalid_command_err_msg(cmd))
 
     @staticmethod
-    def _validate(subtasks: SortedDict[Stn, _SubtaskPlan]) -> ParseError | None:
-        for stn, st in subtasks.items():
-            for include in st.includes:
-                lineno = include.lineno
-                if include.stn not in subtasks:
+    def _validate_extends_graph(
+        subtasks: SortedDict[Stn, _Subtask],
+    ) -> ParseError | None:
+        for sti, st in subtasks.items():
+            seen: set[Stn] = set()
+            for extends in st.extends:
+                lineno = extends.lineno
+                if extends.stn in seen:
                     return ParseError(
                         lineno=lineno,
-                        msg=f"invalid subtask {include.stn}: `{include}`",
+                        msg=f"cannot extends twice from the same subtask: `{extends}`",
                     )
-                if include.stn == stn:
+                if extends.stn not in subtasks:
                     return ParseError(
                         lineno=lineno,
-                        msg=f"cannot include tests from the same subtask: `{include}`",
+                        msg=f"invalid subtask {extends.stn}: `{extends}`",
                     )
-        return None
+                if extends.stn == sti:
+                    return ParseError(
+                        lineno=lineno,
+                        msg=f"a subtask cannot extend itself: `{subtasks}`",
+                    )
+                seen.add(extends.stn)
+        if _has_cycles(subtasks):
+            return ParseError(msg="the extends graph contains cycles")
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
 class ParseError:
-    lineno: int
+    lineno: int | None = None
     msg: str
 
     def __str__(self) -> str:
-        return f"line {self.lineno}: {self.msg}"
+        if self.lineno:
+            return f"line {self.lineno}: {self.msg}"
+        else:
+            return self.msg
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
-class Include:
-    """An include directive can be used to include tests from another subtask.
+class _Extends:
+    """An extends directive can be used to include all tests from another subtask.
 
     This is not fully impelemented yet.
     """
 
     RE: ClassVar[re.Pattern[str]] = re.compile(
-        r"\s*@\s*include\s*([^\s]+)\s+from\s+subtask\s*(\d+)\s*",
+        r"\s*@\s*extends\s*subtask\s*(\d+)\s*",
     )
 
     stn: Stn
-    pattern: str
     lineno: int
 
     def __str__(self) -> str:
-        return f"@include {self.pattern} from subtask {self.stn}"
+        return f"@extends subtask {self.stn}"
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
@@ -233,14 +255,15 @@ class _GroupName:
         return self.name
 
 
-class _SubtaskPlan:
+class _Subtask:
     RE = re.compile(r"\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*")
 
     def __init__(self, dataset_dir: Path, stn: int, validator: Path | None) -> None:
         self._dir = Path(dataset_dir, f"st{stn}")
         self.commands: list[_Command] = []
-        self.includes: list[Include] = []
+        self.extends: list[_Extends] = []
         self.validator = validator
+        self.parents: set[Stn] = set()
 
     def __str__(self) -> str:
         return str(self._dir.name)
@@ -271,11 +294,6 @@ class _Command(ABC):
         name = f"{self._group}-{idx}.in"
         assert _Command.FILE_RE.fullmatch(name) is not None
         return name
-
-    @staticmethod
-    def extract_group(test_file: Path) -> str | None:
-        m = _Command.FILE_RE.fullmatch(test_file.name)
-        return m.group(1) if m else None
 
     @abstractmethod
     def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
@@ -432,3 +450,24 @@ def _parse_args(args: str) -> list[str]:
 def _next_idx_in_group(group: _GroupName, tests_in_group: Counter[_GroupName]) -> int:
     tests_in_group[group] += 1
     return tests_in_group[group]
+
+
+def _has_cycles(subtasks: SortedDict[Stn, _Subtask]) -> bool:
+    visited: set[Stn] = set()
+    stack: set[Stn] = set()
+
+    def dfs(sti: Stn) -> bool:
+        visited.add(sti)
+        stack.add(sti)
+
+        for extends in subtasks[sti].extends:
+            if extends.stn not in visited:
+                if dfs(extends.stn):
+                    return True
+            elif extends.stn in stack:
+                return True
+
+        stack.remove(sti)
+        return False
+
+    return any(dfs(node) for node in subtasks)

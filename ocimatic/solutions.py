@@ -139,7 +139,7 @@ class Solution:
             return None
         else:
             yield utils.Result.success(short_msg="OK")
-            return dataset.run(
+            return dataset.run_on(
                 build_result,
                 checker,
                 mode,

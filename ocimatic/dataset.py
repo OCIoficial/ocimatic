@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fnmatch
 import itertools
 import math
 import random
@@ -180,8 +179,8 @@ class Test:
             )
         return self._in_path.stat().st_mtime
 
-    @utils.work("Validate", "{0}")
-    def validate(self, validator: Runnable) -> utils.Result:
+    @utils.work("validate", "{0}")
+    def validate_input(self, validator: Runnable) -> utils.Result:
         result = validator.run(in_path=self._in_path)
         match result:
             case RunSuccess(_):
@@ -189,7 +188,7 @@ class Test:
             case RunError(msg, stderr):
                 return utils.Result.fail(short_msg=msg, long_msg=stderr)
 
-    @utils.work("Gen")
+    @utils.work("gen")
     def gen_expected(self, runnable: Runnable) -> utils.Result:
         """Run binary with this test as input to generate expected output file."""
         result = runnable.run(in_path=self.in_path, out_path=self.expected_path)
@@ -199,8 +198,8 @@ class Test:
             case RunError(msg, stderr):
                 return utils.Result.fail(short_msg=msg, long_msg=stderr)
 
-    @utils.work("Run")
-    def run(
+    @utils.work("run")
+    def run_on(
         self,
         runnable: Runnable,
         checker: Checker,
@@ -222,7 +221,7 @@ class Test:
 
         # We could use NamedTemporaryFile but the documentation says not every platform can use the
         # name to reopen the file while still open, so we create a temporary directory and a file
-        # inside it instead.
+        # inside instead.
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = Path(tmpdir, "out")
 
@@ -249,13 +248,6 @@ class Test:
                 return TestResult.CheckerError(checker_result)
 
             return TestResult.CheckerRunned(checker_result, run_result)
-
-    def matches(self, testplan: Testplan, pattern: str) -> bool:
-        group = testplan.extract_group(self._in_path)
-        if group:
-            return fnmatch.fnmatch(group, pattern)
-        else:
-            return False
 
     @property
     def in_path(self) -> Path:
@@ -311,24 +303,30 @@ class TestGroup:
         return len(self._tests)
 
     @utils.hd2("{0}")
-    def run(
+    def run_on(
         self,
         runnable: Runnable,
         checker: Checker,
+        parents: list[Stn],
         mode: RunMode,
         *,
         timeout: float | None,
         skip: bool = False,
     ) -> list[TestResult] | None:
         if skip:
-            utils.show_message("Info", "skipping")
+            utils.show_message("info", "skipping")
             return None
+
+        if mode == RunMode.run_solution:
+            for sti in parents:
+                utils.writeln(f" @extends st{sti}", utils.CYAN)
+
         results: list[TestResult] = []
         for test in self._tests:
-            result = test.run(runnable, checker, mode, timeout)
+            result = test.run_on(runnable, checker, mode, timeout)
             results.append(result)
-        if not self._tests and mode == RunMode.run_solution:
-            utils.show_message("Warning", "no test cases found", utils.WARNING)
+        if not self._tests:
+            utils.writeln(" warning: no test cases", utils.YELLOW)
 
         return results
 
@@ -356,33 +354,43 @@ class Subtask(TestGroup):
         )
 
     @utils.hd2("{0}")
-    def validate(self, validator: Path | None) -> utils.Status:
+    def validate_input(
+        self,
+        validator: Path | None,
+        ancestors: list[Subtask],
+    ) -> utils.Status:
         if validator is None:
-            utils.show_message("Warning", "no validator available", utils.WARNING)
+            utils.writeln(" warning: no validator available", utils.YELLOW)
             return utils.Status.success
-        if not self._tests:
-            utils.show_message("Warning", "no test cases", utils.WARNING)
-            return utils.Status.success
-
         source: SourceCode
         if validator.suffix == ".cpp":
             source = CppSource(validator)
         elif validator.suffix == ".py":
             source = PythonSource(validator)
         else:
-            utils.show_message("Error", "unsupported file for validator", utils.ERROR)
+            utils.show_message("error", "unsupported file for validator", utils.RED)
             return utils.Status.fail
         build = source.build()
         if isinstance(build, BuildError):
             utils.show_message(
                 "Error",
                 f"failed to build validator\n{build.msg}",
-                utils.ERROR,
+                utils.RED,
             )
             return utils.Status.fail
+
         status = utils.Status.success
+        for st in ancestors:
+            for test in st.tests():
+                status &= test.validate_input(build).status
+
         for test in self._tests:
-            status &= test.validate(build).status
+            status &= test.validate_input(build).status
+
+        if not self._tests:
+            utils.writeln(" warning: no test cases", utils.YELLOW)
+            return utils.Status.success
+
         return status
 
     def write_to_zip(self, zip_file: ZipFile, *, random_sort: bool = False) -> int:
@@ -443,9 +451,9 @@ class DatasetResults:
 
     def check_passes_correct_subtasks(self, should_pass: set[Stn]) -> bool:
         """Check all subtasks specified in `should_pass` are correct and the rest fail."""
-        for stn, st in self.subtasks.items():
-            assert st, f"Subtask {stn} has no test results"
-            in_should_pass = stn in should_pass
+        for sti, st in self.subtasks.items():
+            assert st is not None, f"Subtask {sti} has no test results"
+            in_should_pass = sti in should_pass
             if in_should_pass and not all(t.is_correct() for t in st.results(self)):
                 return False
             if not in_should_pass and not any(
@@ -455,12 +463,12 @@ class DatasetResults:
 
         return True
 
-    def failed_subtasks(self) -> set[int]:
-        failed: set[int] = set()
-        for stn, st in enumerate(self.subtasks, 1):
-            assert st, f"Subtask {stn} has no results"
+    def failed_subtasks(self) -> set[Stn]:
+        failed: set[Stn] = set()
+        for sti, st in self.subtasks.items():
+            assert st, f"Subtask {sti} has no results"
             if not all(t.is_correct() for t in st.results(self)):
-                failed.add(stn)
+                failed.add(sti)
         return failed
 
     def runtime_stats(self, *, include_sample: bool = False) -> RuntimeStats | None:
@@ -471,7 +479,7 @@ class DatasetResults:
 
     def _iter_all(self, *, include_sample: bool = False) -> Iterator[TestResult]:
         tests: Iterable[TestResult] = (
-            t for st in self.subtasks if st for t in st.results(self)
+            t for st in self.subtasks.values() if st for t in st.results(self)
         )
         if include_sample and self.sample:
             tests = itertools.chain(tests, self.sample)
@@ -495,13 +503,9 @@ class SubtaskResults:
         if not testplan:
             return
 
-        for include in testplan.includes(self.stn):
-            st = results.subtasks[include.stn]
-            if not st:
-                continue
-            yield from (
-                t for t in st.tests if t.test.matches(testplan, include.pattern)
-            )
+        for sti in results.dataset.ancestors_of(self.stn):
+            st = results.subtasks[sti]
+            yield from (st.tests if st else [])
 
 
 class Dataset:
@@ -533,13 +537,13 @@ class Dataset:
 
     def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> utils.Status:
         status = utils.Status.success
-        for subtask in self._subtasks:
+        for subtask in self._subtasks.values():
             status &= subtask.gen_expected(runnable)
         if sample:
             status &= self._sampledata.gen_expected(runnable)
         return status
 
-    def run(
+    def run_on(
         self,
         runnable: Runnable,
         checker: Checker,
@@ -549,22 +553,26 @@ class Dataset:
         stn: Stn | None = None,
     ) -> DatasetResults:
         subtasks: SortedDict[Stn, SubtaskResults | None] = SortedDict()
-        for stni, st in self._subtasks.items():
-            skip = stn is not None and stn != stni
-            results = st.run(runnable, checker, mode, timeout=timeout, skip=skip)
-            if mode == RunMode.run_solution:
-                for t in self.included(stni):
-                    utils.write(f" @include {t}", utils.CYAN)
-                    utils.writeln("  *")
-            subtasks[stni] = (
-                SubtaskResults(stn=stni, tests=results) if results else None
+        for sti, st in self._subtasks.items():
+            skip = stn is not None and stn != sti
+            tests = st.run_on(
+                runnable,
+                checker,
+                self.parents_of(sti),
+                mode,
+                timeout=timeout,
+                skip=skip,
+            )
+            subtasks[sti] = (
+                SubtaskResults(stn=sti, tests=tests) if tests is not None else None
             )
 
         sample = None
         if mode is not RunMode.check_partial:
-            sample = self._sampledata.run(
+            sample = self._sampledata.run_on(
                 runnable,
                 checker,
+                [],
                 mode,
                 timeout=timeout,
                 skip=stn is not None,
@@ -575,23 +583,29 @@ class Dataset:
             sample=sample,
         )
 
-    def included(self, stn: Stn) -> Iterator[Test]:
+    def parents_of(self, stn: Stn) -> list[Stn]:
         testplan = self.testplan
         if not testplan:
-            return
+            return []
 
-        for include in testplan.includes(stn):
-            st = self._subtasks[include.stn]
-            yield from (t for t in st.tests() if t.matches(testplan, include.pattern))
+        return testplan.parents_of(stn)
+
+    def ancestors_of(self, stn: Stn) -> list[Stn]:
+        testplan = self.testplan
+        if not testplan:
+            return []
+
+        return testplan.ancestors_of(stn)
 
     def validate_input(self, stn: Stn | None) -> utils.Status:
         if self.testplan is not None:
             validators = self.testplan.validators()
             zipped = zip(self._subtasks.items(), validators, strict=True)
             status = utils.Status.success
-            for (stni, subtask), validator in zipped:
-                if stn is None or stn == stni:
-                    status &= subtask.validate(validator)
+            for (sti, subtask), validator in zipped:
+                if stn is None or stn == sti:
+                    ancestors = [self._subtasks[stj] for stj in self.ancestors_of(sti)]
+                    status &= subtask.validate_input(validator, ancestors)
             return status
         else:
             utils.show_message(
@@ -606,7 +620,7 @@ class Dataset:
 
     def mtime(self) -> float:
         mtime = -1.0
-        for subtask in self._subtasks:
+        for subtask in self._subtasks.values():
             mtime = max(mtime, subtask.mtime())
         return mtime
 
@@ -620,7 +634,7 @@ class Dataset:
         path = Path(self._directory, "data.zip")
         with ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zip:
             compressed = 0
-            for subtask in self._subtasks:
+            for subtask in self._subtasks.values():
                 compressed += subtask.write_to_zip(zip, random_sort=random_sort)
 
             if compressed == 0:
@@ -629,15 +643,15 @@ class Dataset:
         return utils.Result.success("OK")
 
     def count(self) -> list[int]:
-        return [st.count() for st in self._subtasks]
+        return [st.count() for st in self._subtasks.values()]
 
     def normalize(self) -> None:
-        for subtask in self._subtasks:
+        for subtask in self._subtasks.values():
             subtask.normalize()
         self._sampledata.normalize()
 
     def check_all_have_expected(self) -> bool:
-        for st in self._subtasks:
+        for st in self._subtasks.values():
             for test in st.tests():
                 if not test.has_expected():
                     return False
