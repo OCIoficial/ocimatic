@@ -97,7 +97,7 @@ def init(path: str, phase: str | None) -> None:
             utils.fatal_error("Couldn't create contest. Path already exists")
         core.Contest.create_layout(contest_path, phase)
         utils.show_message("Info", f"Contest [{path}] created", utils.OK)
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         utils.fatal_error("Couldn't create contest: %s." % exc)
 
 
