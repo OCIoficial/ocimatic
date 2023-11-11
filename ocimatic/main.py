@@ -16,7 +16,7 @@ from ocimatic.utils import Stn
 
 class CLI:
     def __init__(self) -> None:
-        self._data = None
+        self._data: tuple[core.Contest, Path | None] | None = None
 
     @property
     def contest(self) -> core.Contest:
@@ -109,8 +109,9 @@ def init(path: str, phase: str | None) -> None:
     "and run a solution.",
 )
 @cloup.option("--port", "-p", default="9999", type=int)
-def run_server(port: int) -> None:
-    server.run(port)
+@cloup.pass_obj
+def run_server(cli: CLI, port: int) -> None:
+    server.run(cli.contest, port)
 
 
 @cloup.command(help="Generate problemset pdf")

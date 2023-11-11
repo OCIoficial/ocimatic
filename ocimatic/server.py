@@ -73,8 +73,7 @@ def submit() -> Response | str:
     return Response(stream())
 
 
-def run(port: int = 9999) -> None:
+def run(contest_: core.Contest, port: int = 9999) -> None:
     global contest
-    contest_dir = core.find_contest_root()[0]
-    contest = core.Contest(contest_dir)
+    contest = contest_
     app.run(port=port, debug=True)
