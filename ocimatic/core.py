@@ -78,23 +78,38 @@ class Contest:
 
     COLOR = utils.MAGENTA
 
-    def __init__(self, directory: Path) -> None:
-        self._directory = directory
-        self._config = ContestConfig.load(directory)
-        self._init_tasks()
-
-        os.environ["OCIMATIC_PHASE"] = self._config.phase
-
-        self._titlepage = LatexSource(Path(directory, "titlepage.tex"))
-
-    def _init_tasks(self) -> None:
+    @staticmethod
+    def detect_tasks_in(contest_dir: Path) -> list[tuple[TaskConfig, Path]]:
         tasks: list[tuple[TaskConfig, Path]] = []
-        for dir in self._directory.iterdir():
+        for dir in contest_dir.iterdir():
             config = TaskConfig.load(dir)
             if config:
                 tasks.append((config, dir))
         tasks.sort()
-        self._tasks = [Task(d, config, i) for (i, (config, d)) in enumerate(tasks)]
+        return tasks
+
+    @staticmethod
+    def select_task(contest_dir: Path, task_name: str) -> Task | None:
+        tasks = Contest.detect_tasks_in(contest_dir)
+        found = next(
+            ((i, c, p) for i, (c, p) in enumerate(tasks) if c.codename == task_name),
+            None,
+        )
+        if not found:
+            return None
+        return Task(found[2], found[1], found[0])
+
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+        self._config = ContestConfig.load(directory)
+        self._tasks = [
+            Task(d, config, i)
+            for (i, (config, d)) in enumerate(Contest.detect_tasks_in(directory))
+        ]
+
+        os.environ["OCIMATIC_PHASE"] = self._config.phase
+
+        self._titlepage = LatexSource(Path(directory, "titlepage.tex"))
 
     @property
     def directory(self) -> Path:
@@ -436,7 +451,7 @@ class Task:
     @property
     def name(self) -> str:
         """Name of the task."""
-        return self._directory.name
+        return self._config.codename
 
     def __str__(self) -> str:
         return self.name

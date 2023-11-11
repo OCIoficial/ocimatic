@@ -76,9 +76,18 @@ def _solution_completion(
 ) -> list[CompletionItem]:
     try:
         del param
+        data = core.find_contest_root()
+        if not data:
+            return []
+
         task_name: str | None = ctx.params.get("task_name")
-        cli = CLI()
-        task = cli.select_task(task_name)
+        if task_name is None and data[1] is not None:
+            task_name = data[1].name
+
+        if not task_name:
+            return []
+
+        task = core.Contest.select_task(data[0], task_name)
         if not task:
             return []
 
