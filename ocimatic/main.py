@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
-from typing import NoReturn
+from typing import Literal, NoReturn
 
 import click
 import cloup
@@ -56,8 +57,8 @@ SOLUTION_HELP = (
 )
 
 
-@cloup.command(help="Initializes a contest in a new directory.")
-@cloup.argument("path", help="Path to directory.")
+@cloup.command(help="Initializes a contest in a new directory")
+@cloup.argument("path", help="Path to directory")
 @cloup.option("--phase")
 def init(path: str, phase: str | None) -> None:
     try:
@@ -72,7 +73,7 @@ def init(path: str, phase: str | None) -> None:
 
 @cloup.command(
     "server",
-    short_help="Start a server to control ocimatic from a browser.",
+    short_help="Start a server to control ocimatic from a browser",
     help="Start a server which can be used to control ocimatic from a browser. "
     "This is for the moment very limited, but it's useful during a contest to quickly paste "
     "and run a solution.",
@@ -82,7 +83,7 @@ def run_server(port: int) -> None:
     server.run(port)
 
 
-@cloup.command(help="Generate problemset pdf.")
+@cloup.command(help="Generate problemset pdf")
 @cloup.pass_obj
 def problemset(cli: CLI) -> None:
     status = cli.contest.build_problemset()
@@ -90,7 +91,7 @@ def problemset(cli: CLI) -> None:
 
 
 @cloup.command(
-    short_help="Make a zip archive of the contest.",
+    short_help="Make a zip archive of the contest",
     help="Make an archive of the contest containing the statements and dataset.",
 )
 @cloup.pass_obj
@@ -105,15 +106,15 @@ def _validate_task_name(ctx: click.Context, param: click.Argument, value: str) -
     return value
 
 
-@cloup.command(help="Creates a new task.")
-@cloup.argument("name", help="Name of the task.", callback=_validate_task_name)
+@cloup.command(help="Creates a new task")
+@cloup.argument("name", help="Name of the task", callback=_validate_task_name)
 @cloup.pass_obj
 def new_task(cli: CLI, name: str) -> None:
     cli.new_task(name)
 
 
 @cloup.command(
-    short_help="Check input/output correctness.",
+    short_help="Check input/output correctness",
     help="Check input/output correcteness by running all correct solutions against all "
     "test cases and sample inputs. Also check robustness by checking partial solutions pass/fail "
     "the subtasks they are suppose to.",
@@ -152,7 +153,7 @@ def check_dataset(cli: CLI) -> None:
 
 
 @cloup.command(
-    short_help="Generate expected output.",
+    short_help="Generate expected output",
     help="Generate expected output by running a correct solution against all the input data. "
     "By default it will choose any correct solution preferring solutions "
     "written in C++.",
@@ -167,7 +168,7 @@ def check_dataset(cli: CLI) -> None:
 )
 @cloup.option(
     "--sample",
-    help="Generate expected output for sample input as well.",
+    help="Generate expected output for sample input as well",
     is_flag=True,
     default=False,
 )
@@ -191,7 +192,7 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa:
     exit_with_status(status)
 
 
-@cloup.command(help="Build statement pdf.")
+@cloup.command(help="Build statement pdf")
 @cloup.pass_obj
 def build_statement(cli: CLI) -> None:
     tasks = cli.select_tasks()
@@ -200,7 +201,7 @@ def build_statement(cli: CLI) -> None:
         task.build_statement()
 
 
-@cloup.command(help="Generate zip file with all test data.")
+@cloup.command(help="Generate zip file with all test data")
 @cloup.option(
     "--random-sort",
     "-r",
@@ -216,7 +217,7 @@ def compress_dataset(cli: CLI, random_sort: bool) -> None:  # noqa: FBT001
         task.compress_dataset(random_sort=random_sort)
 
 
-@cloup.command(help="Normalize input and output files running dos2unix.")
+@cloup.command(help="Normalize input and output files running dos2unix")
 @cloup.pass_obj
 def normalize(cli: CLI) -> None:
     tasks = cli.select_tasks()
@@ -225,8 +226,8 @@ def normalize(cli: CLI) -> None:
         task.normalize()
 
 
-@cloup.command(help="Run the testplan.")
-@cloup.option("--subtask", "-st", type=int, help="Only run testplan for this subtask.")
+@cloup.command(help="Run test plan")
+@cloup.option("--subtask", "-st", type=int, help="Only run test plan for this subtask")
 @cloup.pass_obj
 def run_testplan(cli: CLI, subtask: int | None) -> None:
     tasks = cli.select_tasks()
@@ -244,7 +245,7 @@ def run_testplan(cli: CLI, subtask: int | None) -> None:
     exit_with_status(status)
 
 
-@cloup.command(help="Run input validators.")
+@cloup.command(help="Run input validators")
 @cloup.option("--subtask", "-st", type=int, help="Only run validator for this subtask.")
 @cloup.pass_obj
 def validate_input(cli: CLI, subtask: int | None) -> None:
@@ -259,7 +260,7 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
     exit_with_status(status)
 
 
-@cloup.command(help="Print the score parameters for cms.")
+@cloup.command(help="Print the score parameters for cms")
 @cloup.pass_obj
 def score_params(cli: CLI) -> None:
     tasks = cli.select_tasks()
@@ -279,14 +280,14 @@ def exit_with_status(status: utils.Status) -> NoReturn:
 single_task = cloup.option(
     "--task",
     "task_name",
-    help="Force command to run on the specified task instead of the one in the current directory.",
+    help="Force command to run on the specified task instead of the one in the current directory",
 )
 
 
 @cloup.command(
     "run",
-    short_help="Run a solution.",
-    help="Run a solution against all test data and display the output of the checker and running time.",
+    short_help="Run a solution",
+    help="Run a solution against all test data and display the output of the checker and running time",
 )
 @cloup.argument(
     "solution",
@@ -299,7 +300,7 @@ single_task = cloup.option(
         "--subtask",
         "-st",
         type=int,
-        help="Only run solution on the given subtask.",
+        help="Only run solution on the given subtask",
     ),
     cloup.option(
         "--file",
@@ -339,7 +340,7 @@ def run_solution(
         )
 
 
-@cloup.command(help="Build a solution.")
+@cloup.command(help="Build a solution")
 @single_task
 @cloup.argument(
     "solution",
@@ -350,6 +351,41 @@ def run_solution(
 def build(cli: CLI, solution: str, task_name: str | None) -> None:
     task = cli.select_task(task_name)
     task.build_solution(Path(solution))
+
+
+@cloup.command(
+    short_help="Generate shell completion scripts",
+    help="""
+    Generate shell completion scripts for ocimatic commands.
+
+    ### Bash
+
+    First, ensure that you install `bash-completion` using your package manager.
+
+    \b
+    Then, add this to your `~/.bash_profile`:
+        eval "$(ocimatic completion bash)"
+
+    ### Zsh
+
+    \b
+    Add this to ~/.zshrc:
+        eval "$(ocimatic completion zsh)"
+
+    ### Fish
+
+    \b
+    Generate an `ocimatic.fish` completion script:
+        ocimatic completion fish > ~/.config/fish/completions/ocimatic.fish
+    """,
+)
+@cloup.argument(
+    "shell",
+    type=click.Choice(["bash", "zsh", "fish"]),
+)
+def completion(shell: Literal["bash", "zsh", "fish"]) -> None:
+    os.environ["_OCIMATIC_COMPLETE"] = f"{shell}_source"
+    cli()
 
 
 SECTIONS = [
@@ -383,13 +419,22 @@ SECTIONS = [
             build,
         ],
     ),
+    cloup.Section(
+        "Config commands",
+        [
+            completion,
+        ],
+    ),
 ]
 
 
-@cloup.group(sections=SECTIONS)
+@cloup.group(
+    sections=SECTIONS,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
 @cloup.pass_context
 def cli(ctx: click.Context) -> None:
-    if ctx.invoked_subcommand not in ["init", "server"]:
+    if ctx.invoked_subcommand not in ["init", "server", "completion"]:
         ctx.obj = CLI()
 
 
