@@ -7,6 +7,7 @@ from typing import Literal, NoReturn
 
 import click
 import cloup
+from click.shell_completion import CompletionItem
 from cloup.constraints import If, accept_none, mutually_exclusive
 
 from ocimatic import core, server, utils
@@ -28,14 +29,12 @@ class CLI:
         self.contest.new_task(name)
         utils.show_message("Info", f"Task [{name}] created", utils.OK)
 
-    def select_task(self, name: str | None) -> core.Task:
+    def select_task(self, name: str | None) -> core.Task | None:
         task = None
         if name is not None:
             task = self.contest.find_task(name)
         elif self.last_dir:
             task = self.contest.find_task(self.last_dir.name)
-        if not task:
-            utils.fatal_error("You have to be inside a task to run this command.")
         return task
 
     def select_tasks(self) -> list[core.Task]:
@@ -48,13 +47,31 @@ class CLI:
             return self.contest.tasks
 
 
-SOLUTION_HELP = (
+_SOLUTION_HELP = (
     "If the path is absolute, load solution directly from the path. "
     "If the path is relative, try finding the solution relative to the following locations "
     "until a match is found (or we fail to find one): '<task>/solutions/correct', "
-    "'<task>/solutions/partial', '<task>/solutions/', '<task>', and '<cwd>'. "
+    "'<task>/solutions/partial', '<task>/solutions/', and '<cwd>'. "
     "Here <task> refers to the path of the current task and <cwd> to the current working directory."
 )
+
+
+def _solution_completion(
+    ctx: click.Context,
+    param: click.Parameter,
+    incomplete: str,
+) -> list[CompletionItem]:
+    try:
+        del param
+        task_name: str | None = ctx.params.get("task_name")
+        cli = CLI()
+        task = cli.select_task(task_name)
+        if not task:
+            return []
+
+        return task.solution_completion(incomplete)
+    except Exception:
+        return []
 
 
 @cloup.command(help="Initializes a contest in a new directory")
@@ -163,8 +180,9 @@ def check_dataset(cli: CLI) -> None:
     required=False,
     help="A path to a solution. If specified, generate expected output running that solution. "
     "This option can only be used when running the command on a single task. "
-    + SOLUTION_HELP,
+    + _SOLUTION_HELP,
     type=click.Path(),
+    shell_complete=_solution_completion,
 )
 @cloup.option(
     "--sample",
@@ -291,14 +309,16 @@ single_task = cloup.option(
 )
 @cloup.argument(
     "solution",
-    help="A path to a solution. " + SOLUTION_HELP,
+    help="A path to a solution. " + _SOLUTION_HELP,
     type=click.Path(),
+    shell_complete=_solution_completion,
 )
 @single_task
 @mutually_exclusive(
     cloup.option(
         "--subtask",
         "-st",
+        "stn",
         type=int,
         help="Only run solution on the given subtask",
     ),
@@ -321,12 +341,14 @@ def run_solution(
     cli: CLI,
     solution: str,
     task_name: str | None,
-    subtask: int | None,
+    stn: int | None,
     file: str | None,
     timeout: float | None,
 ) -> None:
     timeout = timeout or 3.0
     task = cli.select_task(task_name)
+    if not task:
+        utils.fatal_error("You have to be inside a task to run this command.")
     if file is not None:
         sol = task.load_solution_from_path(Path(solution))
         if not sol:
@@ -336,7 +358,7 @@ def run_solution(
         task.run_solution(
             Path(solution),
             timeout,
-            stn=Stn(subtask) if subtask else None,
+            stn=Stn(stn) if stn else None,
         )
 
 
@@ -344,12 +366,14 @@ def run_solution(
 @single_task
 @cloup.argument(
     "solution",
-    help="A path to a solution. " + SOLUTION_HELP,
+    help="A path to a solution. " + _SOLUTION_HELP,
     type=click.Path(),
 )
 @cloup.pass_obj
 def build(cli: CLI, solution: str, task_name: str | None) -> None:
     task = cli.select_task(task_name)
+    if not task:
+        utils.fatal_error("You have to be inside a task to run this command.")
     task.build_solution(Path(solution))
 
 

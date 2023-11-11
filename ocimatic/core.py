@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import os
 import re
 import shutil
@@ -10,6 +11,7 @@ from typing import Any, cast
 
 import pypdf
 import tomlkit
+from click.shell_completion import CompletionItem
 
 import ocimatic
 from ocimatic import utils
@@ -378,7 +380,6 @@ class Task:
         1. <task>/solutions/correct
         2. <task>/solutions/partial
         3. <task>/solutions/
-        4. <task>
         4. <cwd>
         Where <task> is the path of the current task and <cwd> is the current working
         directory.
@@ -390,13 +391,38 @@ class Task:
             Path(self._directory, "solutions", "correct"),
             Path(self._directory, "solutions", "partial"),
             Path(self._directory, "solutions"),
-            self._directory,
             Path.cwd(),
         ]:
             sol = Solution.load(self.codename, Path(dir, path), self._managers_dir)
             if sol:
                 return sol
         return None
+
+    def solution_completion(self, incomplete: str) -> list[CompletionItem]:
+        candidates: dict[str, str] = {
+            sol.source.file.name: "correct" for sol in self._correct
+        }
+        for sol in self._partial:
+            key = sol.source.file.name
+            if key in candidates:
+                key = "partial" + os.path.sep + key
+            candidates[key] = "partial"
+
+        for key in glob.glob(incomplete + "*"):  # noqa: PTH207
+            if key in candidates:
+                continue
+            path = Path(key)
+            if path.is_dir():
+                candidates[key + os.path.sep] = "directory"
+            elif path.suffix in Solution.VALID_EXTENSIONS:
+                candidates[key] = "file"
+
+        completions = [
+            CompletionItem(value=k, help=v)
+            for k, v in candidates.items()
+            if k.startswith(incomplete)
+        ]
+        return completions
 
     @utils.hd1("{0}", "Validating input files", COLOR)
     def validate_input(self, stn: Stn | None) -> utils.Status:

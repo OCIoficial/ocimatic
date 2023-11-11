@@ -60,6 +60,8 @@ class SolutionSpec:
 
 
 class Solution:
+    VALID_EXTENSIONS = (".cpp", ".java", ".py", ".rs")
+
     COLOR = utils.BLUE
 
     def __init__(self, source: SourceCode) -> None:
