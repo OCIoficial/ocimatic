@@ -79,7 +79,7 @@ class Contest:
     COLOR = utils.MAGENTA
 
     @staticmethod
-    def detect_tasks_in(contest_dir: Path) -> list[tuple[TaskConfig, Path]]:
+    def _detect_tasks_in(contest_dir: Path) -> list[tuple[TaskConfig, Path]]:
         tasks: list[tuple[TaskConfig, Path]] = []
         for dir in contest_dir.iterdir():
             config = TaskConfig.load(dir)
@@ -90,7 +90,7 @@ class Contest:
 
     @staticmethod
     def select_task(contest_dir: Path, task_name: str) -> Task | None:
-        tasks = Contest.detect_tasks_in(contest_dir)
+        tasks = Contest._detect_tasks_in(contest_dir)
         found = next(
             ((i, c, p) for i, (c, p) in enumerate(tasks) if c.codename == task_name),
             None,
@@ -104,7 +104,7 @@ class Contest:
         self._config = ContestConfig.load(directory)
         self._tasks = [
             Task(d, config, i)
-            for (i, (config, d)) in enumerate(Contest.detect_tasks_in(directory))
+            for (i, (config, d)) in enumerate(Contest._detect_tasks_in(directory))
         ]
 
         os.environ["OCIMATIC_PHASE"] = self._config.phase
@@ -192,14 +192,14 @@ class Contest:
                     return
 
             self._build_problemset_twoside()
-            oneside = Path(self._directory, "oneside.pdf")
-            shutil.copy2(oneside, Path(tmpdir, "oneside.pdf"))
-
-            self._build_problemset_oneside()
             twoside = Path(self._directory, "twoside.pdf")
             shutil.copy2(twoside, Path(tmpdir, "twoside.pdf"))
 
-            shutil.make_archive(self.name, "zip", tmpdir)
+            self._build_problemset_oneside()
+            oneside = Path(self._directory, "oneside.pdf")
+            shutil.copy2(oneside, Path(tmpdir, "oneside.pdf"))
+
+            shutil.make_archive("archive", "zip", tmpdir)
 
     @utils.work("LATEX", "titlepage.tex")
     def _compile_titlepage(self) -> utils.Result:
