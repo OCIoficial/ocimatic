@@ -408,8 +408,8 @@ class _Script(_Command):
         if ret != 0:
             msg = ret_code_to_str(ret)
             args_fmt = " ".join(args)
-            script = utils.relative_to_cwd(self._script_path)
-            cmd = f"$ {script} {args_fmt}"
+            script_path = utils.relative_to_cwd(self._script_path)
+            cmd = f"$ {script_path} {args_fmt}"
             long_msg = f"{cmd}\n{process.stderr.read()}" if process.stderr else cmd
             return utils.Result.fail(short_msg=msg, long_msg=long_msg)
 
