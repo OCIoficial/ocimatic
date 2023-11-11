@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 import shlex
 import shutil
@@ -75,10 +74,6 @@ class Testplan:
         return sorted(extends.stn for extends in self._subtasks[stn].extends)
 
     def run(self, stn: Stn | None) -> utils.Status:
-        cwd = Path.cwd()
-        # Run generators with `testplan/` as the cwd
-        os.chdir(self._directory)
-
         status = utils.Status.success
         for sti, st in self._subtasks.items():
             if stn is not None and stn != sti:
@@ -91,8 +86,6 @@ class Testplan:
                 "no commands were executed for the plan.",
                 utils.WARNING,
             )
-
-        os.chdir(cwd)
 
         return status
 
@@ -174,10 +167,14 @@ class Testplan:
             return _Copy(group, self._task_directory, args[0])
         elif cmd == "echo":
             return _Echo(group, args)
-        elif Path(cmd).suffix == ".py":
-            return _Script(group, Path(self._directory, cmd), "py", args)
-        elif Path(cmd).suffix == ".cpp":
-            return _Script(group, Path(self._directory, cmd), "cpp", args)
+        elif (ext := Path(cmd).suffix) in (".py", ".cpp"):
+            return _Script(
+                group,
+                Path(self._directory, cmd),
+                ext,  # type: ignore
+                args,
+                self._directory,
+            )
         else:
             return ParseError(lineno=lineno, msg=_invalid_command_err_msg(cmd))
 
@@ -205,8 +202,11 @@ class Testplan:
                         msg=f"a subtask cannot extend itself: `{subtasks}`",
                     )
                 seen.add(extends.stn)
+
         if _has_cycles(subtasks):
             return ParseError(msg="the extends graph contains cycles")
+
+        return None
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
@@ -313,7 +313,7 @@ class _Copy(_Command):
     def __str__(self) -> str:
         return self._pattern
 
-    @utils.work("Copy", "{0}")
+    @utils.work("copy", "{0}")
     def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
         files = list(self._dir.glob(self._pattern))
         if not files:
@@ -339,7 +339,7 @@ class _Echo(_Command):
     def __str__(self) -> str:
         return str(self._args)
 
-    @utils.work("Echo", "{0}")
+    @utils.work("echo", "{0}")
     def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
         idx = _next_idx_in_group(self._group, tests_in_group)
         with self.dst_file(dst_dir, idx).open("w") as test_file:
@@ -348,7 +348,7 @@ class _Echo(_Command):
 
 
 class _Script(_Command):
-    VALID_EXTENSIONS = Literal["py", "cpp"]
+    VALID_EXTENSIONS = Literal[".py", ".cpp"]
 
     def __init__(
         self,
@@ -356,8 +356,10 @@ class _Script(_Command):
         path: Path,
         ext: VALID_EXTENSIONS,
         args: list[str],
+        cwd: Path,
     ) -> None:
         super().__init__(group)
+        self._cwd = cwd
         self._args = args
         self._script_path = path
         self._ext = ext
@@ -365,9 +367,9 @@ class _Script(_Command):
     def __str__(self) -> str:
         args = " ".join(self._args)
         script = self._script_path.name
-        return f"{self._group} ; {script} {args}"
+        return f"{script} {args}"
 
-    @utils.work("Gen", "{0}")
+    @utils.work("gen", "{0}")
     def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
         script = self._load_script()
         if not script:
@@ -382,7 +384,8 @@ class _Script(_Command):
         count = 0
         idx = _next_idx_in_group(self._group, tests_in_group)
         # We seed the script with the first `idx`, this guarantees it will be different next time.
-        process = build_result.spawn([self._seed_arg(dst_dir, idx), *self._args])
+        args = [self._seed_arg(dst_dir, idx), *self._args]
+        process = build_result.spawn(args, cwd=self._cwd)
         current_file = None
         try:
             assert process.stdout
@@ -401,23 +404,26 @@ class _Script(_Command):
             if current_file:
                 current_file.close()
 
+        ret = process.wait()
+        if ret != 0:
+            msg = ret_code_to_str(ret)
+            args_fmt = " ".join(args)
+            script = utils.relative_to_cwd(self._script_path)
+            cmd = f"$ {script} {args_fmt}"
+            long_msg = f"{cmd}\n{process.stderr.read()}" if process.stderr else cmd
+            return utils.Result.fail(short_msg=msg, long_msg=long_msg)
+
         if count == 0:
             return utils.Result.fail(short_msg="generator didn't produce any output")
 
-        ret = process.wait()
-        if ret == 0:
-            return _success_with_count_result(count)
-        else:
-            msg = ret_code_to_str(ret)
-            long_msg = process.stderr.read() if process.stderr else None
-            return utils.Result.fail(short_msg=msg, long_msg=long_msg)
+        return _success_with_count_result(count)
 
     def _load_script(self) -> SourceCode | None:
         if not self._script_path.exists():
             return None
-        if self._ext == "py":
+        if self._ext == ".py":
             return PythonSource(self._script_path)
-        elif self._ext == "cpp":
+        elif self._ext == ".cpp":
             return CppSource(self._script_path)
 
     def _seed_arg(self, directory: Path, idx: int) -> str:

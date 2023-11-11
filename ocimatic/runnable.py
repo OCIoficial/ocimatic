@@ -157,11 +157,16 @@ class Runnable(ABC):
             cmd = self.cmd()
             subprocess.run(cmd, stdin=input, check=False)
 
-    def spawn(self, args: list[str] | None = None) -> subprocess.Popen[str]:
+    def spawn(
+        self,
+        args: list[str] | None = None,
+        cwd: Path | None = None,
+    ) -> subprocess.Popen[str]:
         cmd = self.cmd()
         cmd.extend(args or [])
         return subprocess.Popen(
             cmd,
+            cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
