@@ -23,7 +23,7 @@ from ocimatic.testplan import Testplan
 from ocimatic.utils import Stn
 
 
-def find_contest_root() -> tuple[Path, Path | None]:
+def find_contest_root() -> tuple[Path, Path | None] | None:
     """Find the root contest's directory.
 
     Returns the absolute path to the root of the contest and the last directory
@@ -37,7 +37,7 @@ def find_contest_root() -> tuple[Path, Path | None]:
         last_dir = curr_dir
         curr_dir = curr_dir.parent
         if curr_dir.samefile(last_dir):
-            utils.fatal_error("ocimatic was not called inside a contest.")
+            return None
     ocimatic.config["contest_root"] = curr_dir
     return (curr_dir, last_dir)
 

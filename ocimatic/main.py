@@ -15,13 +15,26 @@ from ocimatic.utils import Stn
 
 
 class CLI:
-    contest: core.Contest
-    last_dir: Path | None
-
     def __init__(self) -> None:
-        (contest_dir, last_dir) = core.find_contest_root()
-        self.contest = core.Contest(contest_dir)
-        self.last_dir = last_dir
+        self._data = None
+
+    @property
+    def contest(self) -> core.Contest:
+        (contest, _) = self._load()
+        return contest
+
+    @property
+    def last_dir(self) -> core.Path | None:
+        (_, last_dir) = self._load()
+        return last_dir
+
+    def _load(self) -> tuple[core.Contest, Path | None]:
+        if not self._data:
+            result = core.find_contest_root()
+            if not result:
+                utils.fatal_error("ocimatic was not called inside a contest.")
+            self._data = (core.Contest(result[0]), result[1])
+        return self._data
 
     def new_task(self, name: str) -> None:
         if Path(self.contest.directory, name).exists():
@@ -74,7 +87,7 @@ def _solution_completion(
         return []
 
 
-@cloup.command(help="Initializes a contest in a new directory")
+@cloup.command(help="Initialize a contest in a new directory")
 @cloup.argument("path", help="Path to directory")
 @cloup.option("--phase")
 def init(path: str, phase: str | None) -> None:
@@ -123,7 +136,7 @@ def _validate_task_name(ctx: click.Context, param: click.Argument, value: str) -
     return value
 
 
-@cloup.command(help="Creates a new task")
+@cloup.command(help="Create a new task")
 @cloup.argument("name", help="Name of the task", callback=_validate_task_name)
 @cloup.pass_obj
 def new_task(cli: CLI, name: str) -> None:
@@ -458,8 +471,7 @@ SECTIONS = [
 )
 @cloup.pass_context
 def cli(ctx: click.Context) -> None:
-    if ctx.invoked_subcommand not in ["init", "server", "completion"]:
-        ctx.obj = CLI()
+    ctx.obj = CLI()
 
 
 def main() -> None:
