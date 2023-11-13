@@ -119,9 +119,8 @@ class Contest:
     def create_layout(dest: Path, phase: str | None) -> None:
         """Copy contest skeleton to `dest` and save configuration."""
         ocimatic_dir = Path(__file__).parent
-        contest_skel = Path(ocimatic_dir, "resources", "contest-skel")
         shutil.copytree(
-            contest_skel,
+            ocimatic_dir / "resources" / "contest-skel",
             dest,
             ignore=shutil.ignore_patterns("auto"),
             symlinks=True,
@@ -130,8 +129,7 @@ class Contest:
             ContestConfig.init(dest, phase)
 
     def new_task(self, name: str) -> None:
-        task_dir = Path(self._directory, name)
-        Task.create_layout(task_dir)
+        Task.create_layout(self._directory / name)
 
     @property
     def tasks(self) -> list[Task]:
@@ -180,9 +178,10 @@ class Contest:
     @utils.hd1("Creating archive", color=COLOR)
     def archive(self) -> None:
         """Package statements and datasets of all tasks into a single zip file."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory() as tmpdir_str:
+            tmpdir = Path(tmpdir_str)
             for task in self._tasks:
-                if not task.copy_to(Path(tmpdir)):
+                if not task.copy_to(tmpdir):
                     utils.writeln()
                     utils.show_message(
                         "Error",
@@ -192,12 +191,10 @@ class Contest:
                     return
 
             self._build_problemset_twoside()
-            twoside = Path(self._directory, "twoside.pdf")
-            shutil.copy2(twoside, Path(tmpdir, "twoside.pdf"))
+            shutil.copy2(self._directory / "twoside.pdf", tmpdir)
 
             self._build_problemset_oneside()
-            oneside = Path(self._directory, "oneside.pdf")
-            shutil.copy2(oneside, Path(tmpdir, "oneside.pdf"))
+            shutil.copy2(self._directory / "oneside.pdf", tmpdir)
 
             shutil.make_archive("archive", "zip", tmpdir)
 
@@ -215,7 +212,7 @@ class Contest:
         """Merge titlepage and statements pdfs into a single file."""
         try:
             merger = pypdf.PdfWriter()
-            titlepage = Path(self._directory, "titlepage.pdf")
+            titlepage = self._directory / "titlepage.pdf"
             if titlepage.exists():
                 merger.append(titlepage)
             for task in self._tasks:
@@ -226,7 +223,7 @@ class Contest:
                     )
                 merger.append(task.statement.pdf)
 
-            merger.write(Path(self._directory, filename))  # pyright: ignore [reportUnknownMemberType]
+            merger.write(self._directory / filename)  # pyright: ignore [reportUnknownMemberType]
             merger.close()
             return utils.Result.success(short_msg="OK")
         except Exception as exc:
@@ -302,7 +299,7 @@ class Task:
         ocimatic_dir = Path(__file__).parent
 
         # Copy task skeleton
-        task_skel = Path(ocimatic_dir, "resources", "task-skel")
+        task_skel = ocimatic_dir / "resources" / "task-skel"
         shutil.copytree(task_skel, task_path, symlinks=True)
 
         # Init config
@@ -310,34 +307,32 @@ class Task:
 
         # We put oci.cls and logo.eps in the statement directory to make it easier to work on the
         # pdf without using ocimatic.
-        contest_skel = Path(ocimatic_dir, "resources", "contest-skel")
-        statement_path = Path(task_path, "statement")
-        shutil.copy(Path(contest_skel, "oci.cls"), Path(statement_path, "oci.cls"))
-        shutil.copy(Path(contest_skel, "logo.eps"), Path(statement_path, "logo.eps"))
+        contest_skel = ocimatic_dir / "resources" / "contest-skel"
+        statement_path = task_path / "statement"
+        shutil.copy2(contest_skel / "oci.cls", statement_path)
+        shutil.copy2(contest_skel / "logo.eps", statement_path)
 
     def __init__(self, directory: Path, config: TaskConfig, num: int) -> None:
         self._directory = directory
         self._config = config
 
-        self._managers_dir = Path(directory, "managers")
+        self._managers_dir = directory / "managers"
 
         self._checker = Checker.find_in_directory(self._managers_dir)
 
-        correct_dir = Path(directory, "solutions", "correct")
         self._correct = Solution.load_solutions_in_dir(
             self.codename,
-            correct_dir,
+            directory / "solutions" / "correct",
             self._managers_dir,
         )
-        partial_dir = Path(directory, "solutions", "partial")
         self._partial = Solution.load_solutions_in_dir(
             self.codename,
-            partial_dir,
+            directory / "solutions" / "partial",
             self._managers_dir,
         )
 
         self._statement = Statement(
-            Path(directory, "statement"),
+            directory / "statement",
             num=num,
             codename=self.codename,
         )
@@ -345,13 +340,13 @@ class Task:
         self._testplan = None
         if not self._config.static_dataset:
             self._testplan = Testplan(
-                Path(self._directory, "testplan"),
-                self._directory,
-                Path(self._directory, "dataset"),
+                directory / "testplan",
+                directory,
+                directory / "dataset",
             )
 
         self._dataset = Dataset(
-            Path(directory, "dataset"),
+            directory / "dataset",
             self._testplan,
             self._statement.io_samples(),
         )
@@ -362,21 +357,21 @@ class Task:
 
     @utils.hd1("{0}", "Copy to archive")
     def copy_to(self, directory: Path) -> bool:
-        new_dir = Path(directory, self.codename)
+        new_dir = directory / self.codename
         new_dir.mkdir()
 
         if self._dataset.compress(random_sort=False).is_fail():
             return False
 
-        dataset = Path(self._directory, "dataset", "data.zip")
-        dataset_dst = Path(new_dir, "data.zip")
+        dataset = self._directory / "dataset" / "data.zip"
+        dataset_dst = new_dir / "data.zip"
         shutil.copy2(dataset, dataset_dst)
 
         if self.statement.build(blank_page=False).is_fail():
             return False
 
-        statement = Path(new_dir, "statement.pdf")
-        shutil.copy2(Path(self._directory, "statement", "statement.pdf"), statement)
+        statement = new_dir / "statement.pdf"
+        shutil.copy2(self._directory / "statement" / "statement.pdf", statement)
         return True
 
     @utils.hd1("{0}", "Running testplan", COLOR)
@@ -403,12 +398,12 @@ class Task:
             return Solution.load(self.codename, path, self._managers_dir)
 
         for dir in [
-            Path(self._directory, "solutions", "correct"),
-            Path(self._directory, "solutions", "partial"),
-            Path(self._directory, "solutions"),
+            self._directory / "solutions" / "correct",
+            self._directory / "solutions" / "partial",
+            self._directory / "solutions",
             Path.cwd(),
         ]:
-            sol = Solution.load(self.codename, Path(dir, path), self._managers_dir)
+            sol = Solution.load(self.codename, dir / path, self._managers_dir)
             if sol:
                 return sol
         return None
@@ -486,7 +481,7 @@ class Task:
 
     @utils.hd1("{0}", "Running solution", COLOR)
     def run_solution(self, solution: Path, timeout: float, stn: Stn | None) -> None:
-        """Run all solutions reporting outcome and running time."""
+        """Run a solution reporting outcome and running time."""
         sol = self.load_solution_from_path(solution)
         if not sol:
             return utils.show_message("Error", "Solution not found", utils.ERROR)
@@ -753,8 +748,8 @@ class Statement:
         num: int | None = None,
         codename: str | None = None,
     ) -> None:
-        assert Path(directory, "statement.tex").exists()
-        self._source = LatexSource(Path(directory, "statement.tex"))
+        assert (directory / "statement.tex").exists()
+        self._source = LatexSource(directory / "statement.tex")
         self._directory = directory
         self._num = num
         self._codename = codename
@@ -791,7 +786,7 @@ class Statement:
             if m:
                 samples.add(m.group(2))
         return [
-            Test(Path(self._directory, f"{s}.in"), Path(self._directory, f"{s}.sol"))
+            Test(self._directory / f"{s}.in", self._directory / f"{s}.sol")
             for s in samples
         ]
 

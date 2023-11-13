@@ -30,7 +30,7 @@ class Testplan:
         filename: str = "testplan.txt",
     ) -> None:
         self._directory = directory
-        self._testplan_path = Path(directory, filename)
+        self._testplan_path = directory / filename
         if not self._testplan_path.exists():
             utils.fatal_error(
                 f'File not found: "{self._testplan_path}"',
