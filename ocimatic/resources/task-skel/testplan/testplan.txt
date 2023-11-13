@@ -17,6 +17,7 @@
 
 # We don't define a validator for this subtask.
 [Subtask 2]
+  @extends subtask 1
 
   # You can also write a script in C++, useful to speed up generation.
   rand ; gen_random.cpp -2000000000 2000000000

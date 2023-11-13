@@ -486,24 +486,15 @@ class Task:
             "GroupMin",
             str(
                 [
-                    [m, c]
-                    for (m, c) in zip(scores.values(), counts.values(), strict=True)
+                    [m, f"{regex}"]
+                    for (m, regex) in zip(
+                        scores.values(),
+                        regexes.values(),
+                        strict=True,
+                    )
                 ],
             ),
         )
-        # utils.show_message(
-        #     "GroupMin",
-        #     str(
-        #         [
-        #             [m, f"{regex}"]
-        #             for (m, regex) in zip(
-        #                 scores.values(),
-        #                 regexes.values(),
-        #                 strict=True,
-        #             )
-        #         ],
-        #     ),
-        # )
 
     @utils.hd1("{0}", "Solutions", COLOR)
     def list_solutions(self) -> None:

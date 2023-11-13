@@ -25,6 +25,14 @@ A command can be either `copy`, `echo`, or a file containing a generator script.
 
 An input validator is a script that checks whether the input of a test case satisfies the format and restrictions in the statement. You can specify a validator for a subtask in the subtask's header. See `testplan.txt` for an example. Validators are optional, but their use is highly encouraged.
 
+## The `@extends` directive
+
+It's common for subtasks to be cumulative, i.e., a solution for a harder subtask subsumes and should solve all test cases for an easier subtask. The `@extends` directive can be used to specify that a subtask extends from another, and should include all its test cases. The format is `@extends subtask N`, where `N` is the number of the subtask extending from.
+
+If a subtask `a` extends from `b`, we say `b` is a parent of `a`. The extends relationship is transitive. We call ancestors of `a` to all subtasks reachable from `a` following the extends relationship.
+
+The `@extends` directive *does not duplicate* test cases. Solutions still run once per test case, but the extra information is used for validation. For example, input validators are run on the target subtask and all its ancestors. Similarly, when validating if partial solutions pass/fail the appropriate subtasks, the extends relationship is also considered.
+
 ## Multi-test Script
 
 Normally, a script generates a single test case. Then, it can be used multiple times in the test plan. This is convenient because it lets you focus on the properties of a single test when writing the script and defer to the test plan how to use it coherently to form the dataset. However, sometimes it is convenient to generate a set of test cases *programmatically*. For example, if a subtask has a finite set of possible cases (common for easy subtasks), you may want to include them all. To accommodate this, a script may also generate multiple test cases in a single invocation.
