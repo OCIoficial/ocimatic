@@ -87,7 +87,7 @@ def _solution_completion(
         if not task_name:
             return []
 
-        task = core.Contest.select_task(data[0], task_name)
+        task = core.Contest.find_task_in(data[0], task_name)
         if not task:
             return []
 

@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -79,43 +80,6 @@ class Contest:
     COLOR = utils.MAGENTA
 
     @staticmethod
-    def _detect_tasks_in(contest_dir: Path) -> list[tuple[TaskConfig, Path]]:
-        tasks: list[tuple[TaskConfig, Path]] = []
-        for dir in contest_dir.iterdir():
-            config = TaskConfig.load(dir)
-            if config:
-                tasks.append((config, dir))
-        tasks.sort()
-        return tasks
-
-    @staticmethod
-    def select_task(contest_dir: Path, task_name: str) -> Task | None:
-        tasks = Contest._detect_tasks_in(contest_dir)
-        found = next(
-            ((i, c, p) for i, (c, p) in enumerate(tasks) if c.codename == task_name),
-            None,
-        )
-        if not found:
-            return None
-        return Task(found[2], found[1], found[0])
-
-    def __init__(self, directory: Path) -> None:
-        self._directory = directory
-        self._config = ContestConfig.load(directory)
-        self._tasks = [
-            Task(d, config, i)
-            for (i, (config, d)) in enumerate(Contest._detect_tasks_in(directory))
-        ]
-
-        os.environ["OCIMATIC_PHASE"] = self._config.phase
-
-        self._titlepage = LatexSource(Path(directory, "titlepage.tex"))
-
-    @property
-    def directory(self) -> Path:
-        return self._directory
-
-    @staticmethod
     def create_layout(dest: Path, phase: str | None) -> None:
         """Copy contest skeleton to `dest` and save configuration."""
         ocimatic_dir = Path(__file__).parent
@@ -127,6 +91,42 @@ class Contest:
         )
         if phase is not None:
             ContestConfig.init(dest, phase)
+
+    @staticmethod
+    def _detect_tasks_in(contest_dir: Path) -> Iterator[tuple[int, TaskConfig, Path]]:
+        tasks: list[tuple[TaskConfig, Path]] = []
+        for dir in contest_dir.iterdir():
+            config = TaskConfig.load(dir)
+            if config:
+                tasks.append((config, dir))
+        tasks.sort()
+        return ((i, c, d) for i, (c, d) in enumerate(tasks))
+
+    @staticmethod
+    def find_task_in(contest_dir: Path, task_name: str) -> Task | None:
+        return next(
+            (
+                Task(d, config, i)
+                for i, config, d in Contest._detect_tasks_in(contest_dir)
+                if config.codename == task_name
+            ),
+            None,
+        )
+
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+        self._config = ContestConfig.load(directory)
+        self._tasks = [
+            Task(d, config, i) for i, config, d in Contest._detect_tasks_in(directory)
+        ]
+
+        os.environ["OCIMATIC_PHASE"] = self._config.phase
+
+        self._titlepage = LatexSource(directory / "titlepage.tex")
+
+    @property
+    def directory(self) -> Path:
+        return self._directory
 
     def new_task(self, name: str) -> None:
         Task.create_layout(self._directory / name)
@@ -417,6 +417,15 @@ class Task:
             if key in candidates:
                 key = "partial" + os.path.sep + key
             candidates[key] = "partial"
+
+        for kind, sols in [("correct", self._correct), ("partial", self._partial)]:
+            if incomplete.startswith(kind):
+                for sol in sols:
+                    key = kind + os.path.sep + sol.source.file.name
+                    if key not in candidates:
+                        candidates[key] = kind
+            else:
+                candidates[kind + os.path.sep] = "group"
 
         for key in glob.glob(incomplete + "*"):  # noqa: PTH207
             if key in candidates:
