@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -21,7 +21,7 @@ from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
 from ocimatic.solutions import Solution
 from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
 from ocimatic.testplan import Testplan
-from ocimatic.utils import Stn
+from ocimatic.utils import SortedDict, Stn
 
 
 def find_contest_root() -> tuple[Path, Path | None] | None:
@@ -467,30 +467,50 @@ class Task:
 
     @utils.hd1("{0}", "Score Params", COLOR)
     def score_params(self) -> None:
-        counts = self._dataset.count()
+        counts = self._dataset.counts()
         scores = self._statement.scores()
-        if len(scores) != len(counts):
+        regexes = self._dataset.regexes()
+        assert regexes.keys() == counts.keys()
+        if scores.keys() != counts.keys():
             utils.show_message(
-                "Error",
-                "The number of subtasks in the statement doesn't match the number of "
+                "error",
+                "the number of subtasks in the statement doesn't match the number of "
                 "subtasks in the dataset.",
                 utils.ERROR,
             )
             return
 
         if len(counts) == len(scores) == 1:
-            utils.show_message("Sum", str(scores[0] / counts[0]))
+            utils.show_message("Sum", str(scores[Stn(1)] / counts[Stn(1)]))
         utils.show_message(
             "GroupMin",
-            str([[m, t] for (m, t) in zip(scores, counts, strict=True)]),
+            str(
+                [
+                    [m, c]
+                    for (m, c) in zip(scores.values(), counts.values(), strict=True)
+                ],
+            ),
         )
+        # utils.show_message(
+        #     "GroupMin",
+        #     str(
+        #         [
+        #             [m, f"{regex}"]
+        #             for (m, regex) in zip(
+        #                 scores.values(),
+        #                 regexes.values(),
+        #                 strict=True,
+        #             )
+        #         ],
+        #     ),
+        # )
 
     @utils.hd1("{0}", "Solutions", COLOR)
     def list_solutions(self) -> None:
         for sol in self._correct:
             utils.writeln(f" * [correct] {sol.source.file.name}", utils.CYAN)
         for sol in self._partial:
-            should_fail = _fmt_should_fail(sol.should_fail(self._dataset))
+            should_fail = _fmt_stn_iter(sol.should_fail(self._dataset))
             utils.write(f" * [partial] {sol.source.file.name}", utils.CYAN)
             utils.writeln(f", should-fail=[{should_fail}]", utils.CYAN)
 
@@ -519,22 +539,20 @@ class Task:
                 _write_stats(stats)
 
             if sol.is_partial:
-                should_fail = _fmt_should_fail(sol.should_fail(self._dataset))
+                should_fail = _fmt_stn_iter(sol.should_fail(self._dataset))
                 if sol.check_results(results):
                     utils.writeln()
                     utils.writeln(
-                        f"Solution failed the subtasks it was supposed to: should-fail=[{should_fail}]",
+                        f"Solution failed the subtasks it was supposed to: should-fail={should_fail}",
                         utils.OK,
                     )
                 else:
-                    failed = ", ".join(
-                        f"st{stn}" for stn in sorted(results.failed_subtasks())
-                    )
+                    failed = _fmt_stn_iter(results.failed_subtasks())
                     utils.write(
                         f"""
 The results don't match the solution's specification.
- - Subtasks expected to fail: [{should_fail}]
- - Subtasks that failed: [{failed}]
+ - Subtasks expected to fail: {should_fail}
+ - Subtasks that failed: {failed}
 
 To specify which subtasks the solution should pass/fail, you must either have a `should-pass`
 or `should-fail` comment at the beginning of the file. For example, to specify that a solution
@@ -559,7 +577,7 @@ If no comment is specified, ocimatic will assume that all subtasks should fail.
         time of correct solutions to set a timeout. Finally, use the timeout to run partial solutions
         and ensure they fail the subtasks they are suppose to fail.
         """
-        if sum(self._dataset.count()) == 0:
+        if sum(c for c in self._dataset.counts().values()) == 0:
             utils.show_message(
                 "Error",
                 "No test cases found. Generate the dataset by running `ocimatic run-testplan && ocimatic gen-expected`.",
@@ -745,7 +763,7 @@ Solutions with issues:
         if generator.gen_expected(self._dataset, sample=sample) == utils.Status.fail:
             return utils.Status.fail
 
-        if sum(self._dataset.count()) == 0:
+        if sum(c for c in self._dataset.counts().values()) == 0:
             utils.show_message("warning", "empty dataset", utils.WARNING)
 
         return utils.Status.success
@@ -807,26 +825,29 @@ class Statement:
             for s in samples
         ]
 
-    def scores(self) -> list[int]:
-        """Find the scores for the subtasks."""
-        scores: list[int] = []
+    def scores(self) -> SortedDict[Stn, int]:
+        """Find the scores for each subtask."""
+        scores: SortedDict[Stn, int] = SortedDict()
+        sti = 1
         for line in self._source.iter_lines():
             m = re.match(r"[^%]*\\subtask{([^}]+)}", line)
             if m:
-                scores.append(int(m.group(1)))
+                scores[Stn(sti)] = int(m.group(1))
+                sti += 1
         if not scores:
             utils.show_message(
-                "Warning",
-                "Couldn't infer the score from the statement, assuming 100.",
+                "warning",
+                "couldn't infer the score from the statement, assuming a single subtask with 100 points.",
                 utils.WARNING,
             )
-            scores = [100]
+            scores[Stn(sti)] = 100
 
         return scores
 
 
-def _fmt_should_fail(should_fail: set[Stn]) -> str:
-    return ", ".join(f"st{st}" for st in sorted(should_fail))
+def _fmt_stn_iter(should_fail: Iterable[Stn]) -> str:
+    joined = ", ".join(f"st{st}" for st in sorted(should_fail))
+    return f"[{joined}]"
 
 
 def _write_stats(stats: RuntimeStats) -> None:

@@ -643,8 +643,23 @@ class Dataset:
                 return utils.Result.fail("EMPTY DATASET")
         return utils.Result.success("OK")
 
-    def count(self) -> list[int]:
-        return [st.count() for st in self._subtasks.values()]
+    def counts(self) -> SortedDict[Stn, int]:
+        """Return the number of test cases in each subtask."""
+        return SortedDict((stn, st.count()) for stn, st in self._subtasks.items())
+
+    def regexes(self) -> SortedDict[Stn, str]:
+        """Return the regex for each subtask that should be included in the params score in cms."""
+        regexes: SortedDict[Stn, str] = SortedDict()
+        for sti in self._subtasks:
+            stns = [sti]
+            stns.extend(self.ancestors_of(sti))
+            stns.sort()
+            joined = "|".join(f"st{stj}" for stj in stns)
+            if len(stns) > 1:
+                regexes[sti] = f"({joined}).*"
+            else:
+                regexes[sti] = f"{joined}.*"
+        return regexes
 
     def normalize(self) -> None:
         for subtask in self._subtasks.values():
