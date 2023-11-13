@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2 # Sets the working directory
+      - uses: actions/checkout@v4 # Sets the working directory
       # This runs the following commands on an environment with texlive-full.
       - uses: xu-cheng/texlive-action@v2
         with:

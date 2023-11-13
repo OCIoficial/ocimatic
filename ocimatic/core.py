@@ -215,6 +215,9 @@ class Contest:
         """Merge titlepage and statements pdfs into a single file."""
         try:
             merger = pypdf.PdfWriter()
+            titlepage = Path(self._directory, "titlepage.pdf")
+            if titlepage.exists():
+                merger.append(titlepage)
             for task in self._tasks:
                 if not task.statement.pdf:
                     return utils.Result.fail(
@@ -222,9 +225,6 @@ class Contest:
                         long_msg="No statement",
                     )
                 merger.append(task.statement.pdf)
-            titlepage = Path(self._directory, "titlepage.pdf")
-            if titlepage.exists():
-                merger.append(titlepage)
 
             merger.write(Path(self._directory, filename))  # pyright: ignore [reportUnknownMemberType]
             merger.close()
