@@ -449,16 +449,14 @@ class DatasetResults:
                 return False
         return True
 
-    def check_passes_correct_subtasks(self, should_pass: set[Stn]) -> bool:
-        """Check all subtasks specified in `should_pass` are correct and the rest fail."""
+    def check_passes_correct_subtasks(self, should_fail: set[Stn]) -> bool:
+        """Check all subtasks specified in `should_fail` fail and the rest pass."""
         for sti, st in self.subtasks.items():
             assert st is not None, f"Subtask {sti} has no test results"
-            in_should_pass = sti in should_pass
-            if in_should_pass and not all(t.is_correct() for t in st.results(self)):
+            in_should_fail = sti in should_fail
+            if in_should_fail and not any(t.is_proper_fail() for t in st.results(self)):
                 return False
-            if not in_should_pass and not any(
-                t.is_proper_fail() for t in st.results(self)
-            ):
+            if not in_should_fail and not all(t.is_correct() for t in st.results(self)):
                 return False
 
         return True
@@ -534,6 +532,9 @@ class Dataset:
             self._subtasks = SortedDict()
 
         self._sampledata = _TestGroup("sample", sampledata)
+
+    def subtasks(self) -> set[Stn]:
+        return set(self._subtasks.keys())
 
     def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> utils.Status:
         status = utils.Status.success

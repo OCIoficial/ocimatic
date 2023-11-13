@@ -337,9 +337,9 @@ class Task:
             codename=self.codename,
         )
 
-        self._testplan = None
+        testplan = None
         if not self._config.static_dataset:
-            self._testplan = Testplan(
+            testplan = Testplan(
                 directory / "testplan",
                 directory,
                 directory / "dataset",
@@ -347,7 +347,7 @@ class Task:
 
         self._dataset = Dataset(
             directory / "dataset",
-            self._testplan,
+            testplan,
             self._statement.io_samples(),
         )
 
@@ -376,9 +376,10 @@ class Task:
 
     @utils.hd1("{0}", "Running testplan", COLOR)
     def run_testplan(self, stn: Stn | None) -> utils.Status:
-        if self._testplan is None:
-            utils.fatal_error("Task has a static dataset.")
-        return self._testplan.run(stn)
+        if self._dataset.testplan is None:
+            utils.writeln(" Skipping: task has static dataset")
+            return utils.Status.success
+        return self._dataset.testplan.run(stn)
 
     def load_solution_from_path(self, path: Path) -> Solution | None:
         """Search for a solution matching a path.
@@ -465,7 +466,7 @@ class Task:
         return self._statement
 
     @utils.hd1("{0}", "Score Params", COLOR)
-    def score(self) -> None:
+    def score_params(self) -> None:
         counts = self._dataset.count()
         scores = self._statement.scores()
         if len(scores) != len(counts):
@@ -483,6 +484,15 @@ class Task:
             "GroupMin",
             str([[m, t] for (m, t) in zip(scores, counts, strict=True)]),
         )
+
+    @utils.hd1("{0}", "Solutions", COLOR)
+    def list_solutions(self) -> None:
+        for sol in self._correct:
+            utils.writeln(f" * [correct] {sol.source.file.name}", utils.CYAN)
+        for sol in self._partial:
+            should_fail = _fmt_should_fail(sol.should_fail(self._dataset))
+            utils.write(f" * [partial] {sol.source.file.name}", utils.CYAN)
+            utils.writeln(f", should-fail=[{should_fail}]", utils.CYAN)
 
     @utils.hd1("{0}", "Normalizing", COLOR)
     def normalize(self) -> None:
@@ -509,9 +519,7 @@ class Task:
                 _write_stats(stats)
 
             if sol.is_partial:
-                should_fail = ", ".join(
-                    f"st{st}" for st in sorted(sol.should_fail(results))
-                )
+                should_fail = _fmt_should_fail(sol.should_fail(self._dataset))
                 if sol.check_results(results):
                     utils.writeln()
                     utils.writeln(
@@ -651,7 +659,7 @@ Solutions with issues:
         )
         if not self._partial:
             utils.writeln()
-            utils.writeln("No partial solutions", utils.WARNING)
+            utils.writeln("warning: no partial solutions", utils.YELLOW)
             return utils.Status.success
 
         failed: list[Solution] = []
@@ -664,7 +672,7 @@ Solutions with issues:
             )
             if results is None or not sol.check_results(results):
                 if len(self._partial) > 1:
-                    utils.writeln("issues found", utils.RED)
+                    utils.writeln("error: issues found", utils.RED)
                 failed.append(sol)
 
         if failed:
@@ -713,10 +721,10 @@ Solutions with issues:
         prioritizing C++ solutions.
         """
         if self._config.static_dataset:
-            utils.show_message("Skipping", "Task has a static dataset.", utils.WARNING)
+            utils.show_message("skipping", "task has a static dataset.")
             return utils.Status.success
         if not self._correct:
-            utils.show_message("Error", "No correct solution.", utils.ERROR)
+            utils.show_message("error", "no correct solution.", utils.RED)
             return utils.Status.fail
         generator = None
         if solution:
@@ -738,7 +746,7 @@ Solutions with issues:
             return utils.Status.fail
 
         if sum(self._dataset.count()) == 0:
-            utils.show_message("Warning", "Empty dataset", utils.WARNING)
+            utils.show_message("warning", "empty dataset", utils.WARNING)
 
         return utils.Status.success
 
@@ -815,6 +823,10 @@ class Statement:
             scores = [100]
 
         return scores
+
+
+def _fmt_should_fail(should_fail: set[Stn]) -> str:
+    return ", ".join(f"st{st}" for st in sorted(should_fail))
 
 
 def _write_stats(stats: RuntimeStats) -> None:

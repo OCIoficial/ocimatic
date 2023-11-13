@@ -36,27 +36,16 @@ class SolutionSpec:
                     f"Only one of should-pass or should-fail must be specified: {name}",
                 )
 
-    def should_pass(self, results: DatasetResults) -> set[Stn]:
-        """Return the set of subtasks the solution should pass based on the spec. It must fail the complement."""
-        all_subtasks = set(results.subtasks.keys())
-        match self.subtasks_spec:
-            case ShouldFail(subtasks=subtasks):
-                return all_subtasks.difference(subtasks)
-            case ShouldPass(subtasks=subtasks):
-                return all_subtasks.intersection(subtasks)
-            case None:
-                return set()
-
-    def should_fail(self, results: DatasetResults) -> set[Stn]:
+    def should_fail(self, data: Dataset) -> set[Stn]:
         """Return the set of subtasks the solution should fail based on the spec. It must pass the complement."""
-        all_subtasks = set(results.subtasks.keys())
+        all_subtasks = data.subtasks()
         match self.subtasks_spec:
             case ShouldFail(subtasks=subtasks):
                 return all_subtasks.intersection(subtasks)
             case ShouldPass(subtasks=subtasks):
                 return all_subtasks.difference(subtasks)
             case None:
-                return set()
+                return all_subtasks
 
 
 class Solution:
@@ -69,17 +58,12 @@ class Solution:
         self._spec = SolutionSpec(source.name, source.comments)
         self.is_partial = source.file.parent.name == "partial"
 
-    def should_pass(self, results: DatasetResults) -> set[Stn]:
-        return self._spec.should_pass(results)
-
-    def should_fail(self, results: DatasetResults) -> set[Stn]:
-        return self._spec.should_fail(results)
+    def should_fail(self, data: Dataset) -> set[Stn]:
+        return self._spec.should_fail(data)
 
     def check_results(self, results: DatasetResults) -> bool:
         assert self.is_partial
-        return results.check_passes_correct_subtasks(
-            should_pass=self.should_pass(results),
-        )
+        return results.check_passes_correct_subtasks(self.should_fail(results.dataset))
 
     @staticmethod
     def load_solutions_in_dir(

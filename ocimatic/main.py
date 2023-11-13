@@ -301,13 +301,22 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
     exit_with_status(status)
 
 
-@cloup.command(help="Print the score parameters for cms")
+@cloup.command(help="Print score parameters for cms")
 @cloup.pass_obj
 def score_params(cli: CLI) -> None:
     tasks = cli.select_tasks()
 
     for task in tasks:
-        task.score()
+        task.score_params()
+
+
+@cloup.command(help="List all solutions")
+@cloup.pass_obj
+def list_solutions(cli: CLI) -> None:
+    tasks = cli.select_tasks()
+
+    for task in tasks:
+        task.list_solutions()
 
 
 def exit_with_status(status: utils.Status) -> NoReturn:
@@ -457,6 +466,7 @@ SECTIONS = [
             compress_dataset,
             normalize,
             score_params,
+            list_solutions,
         ],
     ),
     cloup.Section(
