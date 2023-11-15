@@ -29,7 +29,7 @@ An input validator is a script that checks whether the input of a test case sati
 
 It's common for subtasks to be cumulative, i.e., a solution for a harder subtask subsumes and should solve all test cases for an easier subtask. The `@extends` directive can be used to specify that a subtask extends from another, and should include all its test cases. The format is `@extends subtask N`, where `N` is the number of the subtask extending from.
 
-If a subtask `a` extends from `b`, we say `b` is a parent of `a`. The extends relationship is transitive. We call ancestors of `a` to all subtasks reachable from `a` following the extends relationship.
+If a subtask `N` extends from `M`, we say `M` is a parent of `N`. The extends relationship is transitive. We call ancestors of `N` to all subtasks reachable from `N` following the extends relationship.
 
 The `@extends` directive *does not duplicate* test cases. Solutions still run once per test case, but the extra information is used for validation. For example, input validators are run on the target subtask and all its ancestors. Similarly, when validating if partial solutions pass/fail the appropriate subtasks, the extends relationship is also considered.
 
