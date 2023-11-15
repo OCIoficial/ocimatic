@@ -3,7 +3,8 @@ import os
 
 from setuptools import setup
 
-from ocimatic import __version__
+__version__ = "0.1.0"
+
 
 pkg_dir = os.path.dirname(os.path.realpath(__file__))
 

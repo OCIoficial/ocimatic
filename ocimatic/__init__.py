@@ -5,14 +5,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, ClassVar, cast
 
 import tomlkit
-
-__version__ = "0.1.0"
-
-from dataclasses import dataclass
-from pathlib import Path
 
 contest_root: Path = Path("/")
 
