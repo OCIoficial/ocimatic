@@ -315,7 +315,7 @@ def _fmt_footer(level: Literal[1, 2]) -> None:
 
 def relative_to_cwd(path: Path) -> str:
     commonpath = Path(os.path.commonpath([path, Path.cwd()]))
-    if commonpath.is_relative_to(ocimatic.config["contest_root"]):
+    if commonpath.is_relative_to(ocimatic.contest_root):
         relpath = os.path.relpath(path, Path.cwd())
         if not relpath.startswith("."):
             relpath = "." + os.path.sep + relpath

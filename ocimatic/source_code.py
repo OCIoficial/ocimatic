@@ -7,6 +7,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+import ocimatic
 from ocimatic import utils
 from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
 from ocimatic.utils import Stn
@@ -99,7 +100,12 @@ class CppSource(SourceCode):
         self._out = out or Path(file.parent, ".build", f"{file.stem}-cpp")
 
     def build_cmd(self) -> list[str]:
-        cmd = ["g++", "-std=c++17", "-O2", "-o", str(self._out)]
+        cmd = [
+            str(ocimatic.config.cpp.command),
+            *ocimatic.config.cpp.flags,
+            "-o",
+            str(self._out),
+        ]
         if self._include:
             cmd.extend(["-I", str(self._include)])
         cmd.extend(str(s) for s in self.files)
@@ -136,7 +142,13 @@ class RustSource(SourceCode):
         self._out = out or Path(file.parent, ".build", f"{file.stem}-rs")
 
     def build_cmd(self) -> list[str]:
-        cmd = ["rustc", "--edition=2021", "-O", "-o", str(self._out), str(self._file)]
+        cmd = [
+            ocimatic.config.rust.command,
+            *ocimatic.config.rust.flags,
+            "-o",
+            str(self._out),
+            str(self._file),
+        ]
         return cmd
 
     def build(self, *, force: bool = False) -> Binary | BuildError:
@@ -165,7 +177,7 @@ class JavaSource(SourceCode):
         self._out = out or Path(source.parent, ".build", f"{source.stem}-java")
 
     def build_cmd(self) -> list[str]:
-        return ["javac", "-d", str(self._out), str(self._source)]
+        return [ocimatic.config.java.javac, "-d", str(self._out), str(self._source)]
 
     def build(self, *, force: bool = False) -> JavaClasses | BuildError:
         if force or JavaSource.should_build([self._source], self._out):

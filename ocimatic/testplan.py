@@ -13,7 +13,7 @@ from typing import ClassVar, Literal
 from ocimatic import utils
 from ocimatic.runnable import ret_code_to_str
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
-from ocimatic.utils import SortedDict, Stn
+from ocimatic.utils import Error, SortedDict, Stn
 
 # https://en.wikipedia.org/wiki/C0_and_C1_control_codes#Field_separators
 FS = chr(28)
@@ -367,11 +367,11 @@ class _Script(_Command):
     def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
         script = self._load_script()
         if not script:
-            return utils.Result.fail(short_msg="Script file not found")
+            return utils.Result.fail(short_msg="script file not found")
         build_result = script.build()
         if isinstance(build_result, BuildError):
             return utils.Result.fail(
-                short_msg="Failed to build generator",
+                short_msg="failed to build generator",
                 long_msg=build_result.msg,
             )
 
@@ -380,6 +380,11 @@ class _Script(_Command):
         # We seed the script with the first `idx`, this guarantees it will be different next time.
         args = self._args_with_seed(dst_dir, idx)
         process = build_result.spawn(args, cwd=self._cwd)
+        if isinstance(process, Error):
+            return utils.Result.fail(
+                short_msg="error when running script",
+                long_msg=process.msg,
+            )
         current_file = None
         try:
             assert process.stdout

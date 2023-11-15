@@ -3,15 +3,85 @@
 :license: Beer-Ware, see LICENSE.rst for more details.
 """
 
+from __future__ import annotations
+
+from typing import Any, ClassVar, cast
+
+import tomlkit
+
 __version__ = "0.1.0"
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict
+
+contest_root: Path = Path("/")
 
 
-class Config(TypedDict):
-    last_blank_page: bool
-    contest_root: Path
+@dataclass(kw_only=True)
+class CppConfig:
+    command: str
+    flags: list[str]
+
+    @staticmethod
+    def load(config: dict[Any, Any]) -> CppConfig:
+        return CppConfig(command=config["command"], flags=config["flags"])
 
 
-config: Config = {"last_blank_page": True, "contest_root": Path("/")}
+@dataclass(kw_only=True)
+class PythonConfig:
+    command: str
+
+    @staticmethod
+    def load(config: dict[Any, Any]) -> PythonConfig:
+        return PythonConfig(command=config["command"])
+
+
+@dataclass(kw_only=True)
+class JavaConfig:
+    javac: str
+    jre: str
+
+    @staticmethod
+    def load(config: dict[Any, Any]) -> JavaConfig:
+        return JavaConfig(javac=config["javac"], jre=config["jre"])
+
+
+@dataclass(kw_only=True)
+class RustConfig:
+    command: str
+    flags: list[str]
+
+    @staticmethod
+    def load(config: dict[Any, Any]) -> RustConfig:
+        return RustConfig(command=config["command"], flags=config["flags"])
+
+
+class Config:
+    HOME_PATH: ClassVar[Path] = Path.home() / ".ocimatic.toml"
+    DEFAULT_PATH: ClassVar[Path] = Path(__file__).parent / "resources" / "ocimatic.toml"
+
+    _initialized = False
+    cpp: CppConfig
+    python: PythonConfig
+    java: JavaConfig
+    rust: RustConfig
+
+    def initialize(self) -> None:
+        if self._initialized:
+            return
+
+        path = Config.HOME_PATH
+        if not path.exists():
+            path = Config.DEFAULT_PATH
+
+        with path.open() as f:
+            config = cast(dict[Any, Any], tomlkit.load(f))
+
+        self.cpp = CppConfig.load(config["cpp"])
+        self.python = PythonConfig.load(config["python"])
+        self.java = JavaConfig.load(config["java"])
+        self.rust = RustConfig.load(config["rust"])
+        self.initialized = True
+
+
+config = Config()

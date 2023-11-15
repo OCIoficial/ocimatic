@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Literal, NoReturn
@@ -10,6 +12,7 @@ import cloup
 from click.shell_completion import CompletionItem
 from cloup.constraints import If, accept_none, mutually_exclusive
 
+import ocimatic
 from ocimatic import core, server, utils
 from ocimatic.utils import Stn
 
@@ -444,6 +447,63 @@ def completion(shell: Literal["bash", "zsh", "fish"]) -> None:
     cli()
 
 
+@cloup.command(
+    short_help="Check if ocimatic is correctly setup",
+    help="Check ocimatic is correctly setup by running some commands.",
+)
+def check_setup() -> None:
+    utils.writeln("Running commands to check if they are available...", utils.INFO)
+    utils.writeln()
+
+    status = utils.Status.success
+    status &= _test_command(ocimatic.config.python.command)
+    utils.writeln()
+    status &= _test_command(ocimatic.config.cpp.command)
+    utils.writeln()
+    status &= _test_command(ocimatic.config.java.javac)
+    utils.writeln()
+    status &= _test_command(ocimatic.config.java.jre)
+    utils.writeln()
+    status &= _test_command(ocimatic.config.rust.command)
+    utils.writeln()
+
+    if status == utils.Status.success:
+        utils.writeln("All commands ran successfully.", utils.GREEN)
+    else:
+        utils.writeln(
+            "Some commands failed to run. You can still try to use ocimatic\n"
+            "but some solutions or generators may fail to run. You can use\n"
+            "`ocimatic setup` to override the default configuration.",
+            utils.RED,
+        )
+
+    exit_with_status(status)
+
+
+def _test_command(cmd: str) -> utils.Status:
+    try:
+        utils.writeln(f"$ {cmd} --version", utils.INFO)
+        subprocess.run([cmd, "--version"], check=True)
+        return utils.Status.success
+    except Exception as e:
+        utils.writeln(f"command failed: {e}", utils.ERROR)
+        return utils.Status.fail
+
+
+@cloup.command(
+    short_help="Setup ocimatic",
+    help="Generate configuration file for ocimatic that can be used to override default commands.",
+)
+def setup() -> None:
+    shutil.copy2(ocimatic.Config.DEFAULT_PATH, ocimatic.Config.HOME_PATH)
+
+    utils.writeln(
+        f"Configuration file created at '{ocimatic.Config.HOME_PATH}'.\n"
+        "You can configure ocimatic by editing the file.",
+        utils.OK,
+    )
+
+
 SECTIONS = [
     cloup.Section(
         "Contest commands",
@@ -480,6 +540,8 @@ SECTIONS = [
         "Config commands",
         [
             completion,
+            check_setup,
+            setup,
         ],
     ),
 ]
@@ -492,6 +554,10 @@ SECTIONS = [
 @cloup.pass_context
 def cli(ctx: click.Context) -> None:
     ctx.obj = CLI()
+    # Only intialize config if we are not running the `setup` command. This ensures we can
+    # run `ocimatic setup` even if there are problems with the config file.
+    if ctx.invoked_subcommand != "setup":
+        ocimatic.config.initialize()
 
 
 def main() -> None:

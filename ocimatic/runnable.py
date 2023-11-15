@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO, overload
 
+import ocimatic
+from ocimatic.utils import Error
+
 SIGNALS = {
     1: "SIGHUP",
     2: "SIGINT",
@@ -139,6 +142,8 @@ class Runnable(ABC):
                 )
             except subprocess.TimeoutExpired:
                 return RunTLE()
+            except FileNotFoundError as e:
+                return RunError(msg=str(e), stderr="")
             time = pytime.monotonic() - start
             ret = complete.returncode
             status = ret == 0
@@ -161,16 +166,19 @@ class Runnable(ABC):
         self,
         args: list[str] | None = None,
         cwd: Path | None = None,
-    ) -> subprocess.Popen[str]:
+    ) -> subprocess.Popen[str] | Error:
         cmd = self.cmd()
         cmd.extend(args or [])
-        return subprocess.Popen(
-            cmd,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
+        try:
+            return subprocess.Popen(
+                cmd,
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except FileNotFoundError as e:
+            return Error(msg=str(e))
 
 
 def ret_code_to_str(ret: int) -> str:
@@ -198,7 +206,7 @@ class JavaClasses(Runnable):
         self._classes = classes
 
     def cmd(self) -> list[str]:
-        return ["java", "-cp", str(self._classes), self._classname]
+        return [ocimatic.config.java.jre, "-cp", str(self._classes), self._classname]
 
 
 class Python3(Runnable):
@@ -206,4 +214,4 @@ class Python3(Runnable):
         self._script = script
 
     def cmd(self) -> list[str]:
-        return ["python3", str(self._script)]
+        return [ocimatic.config.python.command, str(self._script)]

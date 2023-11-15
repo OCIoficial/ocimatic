@@ -39,7 +39,7 @@ def find_contest_root() -> tuple[Path, Path | None] | None:
         curr_dir = curr_dir.parent
         if curr_dir.samefile(last_dir):
             return None
-    ocimatic.config["contest_root"] = curr_dir
+    ocimatic.contest_root = curr_dir
     return (curr_dir, last_dir)
 
 
@@ -166,9 +166,9 @@ class Contest:
 
         status: utils.Status = utils.Status.success
         for i, task in enumerate(self._tasks):
-            last = i == len(self._tasks) - 1
-            blank_page = last and ocimatic.config["last_blank_page"]
-            status &= task.statement.build(blank_page=blank_page).status
+            # Add blank page after last task to avoid showing the back of the last page.
+            is_last = i == len(self._tasks) - 1
+            status &= task.statement.build(blank_page=is_last).status
 
         if status == utils.Status.fail:  # pyright: ignore [reportUnnecessaryComparison]
             return utils.Status.fail
