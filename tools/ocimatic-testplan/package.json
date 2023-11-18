@@ -1,0 +1,33 @@
+{
+  "name": "ocimatic-testplan",
+  "displayName": "ocimatic-testplan",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "ocimatic-testplan",
+        "aliases": [
+          "ocimatic-testplan"
+        ],
+        "filenamePatterns": [
+          "testplan.txt"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ocimatic-testplan",
+        "scopeName": "source.ocimatic-testplan",
+        "path": "./syntaxes/ocimatic-testplan.tmLanguage.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "ocimatic-testplan",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#subtask"
+    },
+    {
+      "include": "#command"
+    },
+    {
+      "include": "#directive"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "subtask": {
+      "patterns": [
+        {
+          "match": "\\[([^\\]-]*)\\s*(?:-([^\\]]*)\\])?",
+          "captures": {
+            "1": { "name": "support.type.property-name" },
+            "2": { "name": "support.type.property-name" }
+          }
+        }
+      ]
+    },
+    "command": {
+      "patterns": [
+        {
+          "begin": "(.*)(;)\\s*(\\S+)(.*)",
+          "end": "$",
+          "beginCaptures": {
+            "1": { "name": "entity.name.variable" },
+            "3": { "name": "entity.name.variable" },
+            "4": { "name": "entity.name.variable" }
+          }
+        }
+      ]
+    },
+    "directive": {
+      "patterns": [
+        {
+          "name": "entity.name.function",
+          "match": "\\s*@.*$"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.ocimatic-testplan"
+}
