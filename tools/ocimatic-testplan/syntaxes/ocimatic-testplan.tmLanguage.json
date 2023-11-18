@@ -27,7 +27,7 @@
     "subtask": {
       "patterns": [
         {
-          "match": "\\[([^\\]-]*)\\s*(?:-([^\\]]*)\\])?",
+          "match": "\\[(\\s*Subtask\\s*\\d+\\s*)(?:-([^\\]]*)\\])?",
           "captures": {
             "1": { "name": "support.type.property-name" },
             "2": { "name": "support.type.property-name" }
