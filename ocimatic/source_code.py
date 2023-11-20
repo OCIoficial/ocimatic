@@ -237,7 +237,7 @@ class LatexSource:
     def compile(self) -> Path | BuildError:
         name = self._source.name
         parent = self._source.parent
-        cmd = f"pdflatex --shell-escape -interaciton=batchmode {name}"
+        cmd = f"pdflatex --shell-escape -interaction=batchmode {name}"
         complete = subprocess.run(
             cmd,
             cwd=parent,
