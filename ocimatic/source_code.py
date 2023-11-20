@@ -237,19 +237,21 @@ class LatexSource:
     def compile(self) -> Path | BuildError:
         name = self._source.name
         parent = self._source.parent
-        cmd = f"pdflatex --shell-escape -interaction=batchmode {name}"
+        cmd = [ocimatic.config.latex.command, *ocimatic.config.latex.flags, name]
         complete = subprocess.run(
             cmd,
             cwd=parent,
-            shell=True,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
             text=True,
             check=False,
+            capture_output=True,
         )
         if complete.returncode != 0:
-            return BuildError(msg=complete.stderr)
+            msg = complete.stderr
+            if msg:
+                msg += "\n"
+            msg += complete.stdout
+            return BuildError(msg=msg)
         return self._source.with_suffix(".pdf")
 
     @property

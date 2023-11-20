@@ -53,6 +53,16 @@ class RustConfig:
         return RustConfig(command=config["command"], flags=config["flags"])
 
 
+@dataclass(kw_only=True)
+class LatexConfig:
+    command: str
+    flags: list[str]
+
+    @staticmethod
+    def load(config: dict[Any, Any]) -> LatexConfig:
+        return LatexConfig(command=config["command"], flags=config["flags"])
+
+
 class Config:
     HOME_PATH: ClassVar[Path] = Path.home() / ".ocimatic.toml"
     DEFAULT_PATH: ClassVar[Path] = Path(__file__).parent / "resources" / "ocimatic.toml"
@@ -62,6 +72,7 @@ class Config:
     python: PythonConfig
     java: JavaConfig
     rust: RustConfig
+    latex: LatexConfig
 
     def initialize(self) -> None:
         if self._initialized:
@@ -78,6 +89,7 @@ class Config:
         self.python = PythonConfig.load(config["python"])
         self.java = JavaConfig.load(config["java"])
         self.rust = RustConfig.load(config["rust"])
+        self.latex = LatexConfig.load(config["latex"])
         self.initialized = True
 
 

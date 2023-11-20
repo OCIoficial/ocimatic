@@ -466,6 +466,8 @@ def check_setup() -> None:
     utils.writeln()
     status &= _test_command(ocimatic.config.rust.command)
     utils.writeln()
+    status &= _test_command(ocimatic.config.latex.command)
+    utils.writeln()
 
     if status == utils.Status.success:
         utils.writeln("All commands ran successfully.", utils.GREEN)
@@ -486,7 +488,7 @@ def _test_command(cmd: str) -> utils.Status:
         subprocess.run([cmd, "--version"], check=True)
         return utils.Status.success
     except Exception as e:
-        utils.writeln(f"command failed: {e}", utils.ERROR)
+        utils.writeln(f"command failed: {e}", utils.RED)
         return utils.Status.fail
 
 
