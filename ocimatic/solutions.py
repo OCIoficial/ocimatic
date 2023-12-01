@@ -10,11 +10,9 @@ from ocimatic.source_code import (
     BuildError,
     CppSource,
     JavaSource,
-    OcimaticComment,
     PythonSource,
     RustSource,
     ShouldFail,
-    ShouldPass,
     SourceCode,
 )
 from ocimatic.utils import Stn
@@ -23,9 +21,9 @@ from ocimatic.utils import Stn
 class SolutionSpec:
     """Specification of which subtasks should pass or fail."""
 
-    subtasks_spec: ShouldFail | ShouldPass | None
+    subtasks_spec: ShouldFail | None
 
-    def __init__(self, name: str, comments: list[OcimaticComment]) -> None:
+    def __init__(self, name: str, comments: list[ShouldFail]) -> None:
         match len(comments):
             case 0:
                 self.subtasks_spec = None
@@ -33,7 +31,7 @@ class SolutionSpec:
                 self.subtasks_spec = comments[0]
             case _:
                 utils.fatal_error(
-                    f"Only one of should-pass or should-fail must be specified: {name}",
+                    "The should-fail comment can only be specified once",
                 )
 
     def should_fail(self, data: Dataset) -> set[Stn]:
@@ -42,8 +40,6 @@ class SolutionSpec:
         match self.subtasks_spec:
             case ShouldFail(subtasks=subtasks):
                 return all_subtasks.intersection(subtasks)
-            case ShouldPass(subtasks=subtasks):
-                return all_subtasks.difference(subtasks)
             case None:
                 return all_subtasks
 

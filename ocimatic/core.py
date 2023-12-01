@@ -545,11 +545,12 @@ The results don't match the solution's specification.
  - Subtasks expected to fail: {should_fail}
  - Subtasks that failed: {failed}
 
-To specify which subtasks the solution should pass/fail, you must either have a `should-pass`
-or `should-fail` comment at the beginning of the file. For example, to specify that a solution
-should pass subtasks 1 and 2, write the following comment at the beginning of the file:
-// @ocimatic should-pass=[st1, st2]
-If no comment is specified, ocimatic will assume that all subtasks should fail.
+To specify which subtasks the solution should fail, you must have a `should-fail`
+comment at the beginning of the file. For example, to specify that a solution should
+fail subtasks 1 and 2, write the following comment at the beginning of the file:
+// @ocimatic should-fail=[st1, st2]
+Ocimatic will check that the solution fails these subtasks and only these subtasks. If
+no comment is specified, ocimatic will assume that all subtasks should fail.
 """,
                         utils.ERROR,
                     )

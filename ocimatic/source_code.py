@@ -34,25 +34,6 @@ class ShouldFail:
         return ShouldFail(subtasks=subtasks)
 
 
-@dataclass(frozen=True, kw_only=True, slots=True)
-class ShouldPass:
-    REGEX = re.compile(r"\s+should-pass\s*=\s*\[(\s*st\d+\s*(,\s*st\d+\s*)*(,\s*)?)\]")
-    subtasks: set[Stn]
-
-    @staticmethod
-    def parse(comment: str) -> ShouldPass | None:
-        m = ShouldPass.REGEX.match(comment)
-        if not m:
-            return None
-        subtasks = {
-            Stn(int(st.strip().removeprefix("st"))) for st in m.group(1).split(",")
-        }
-        return ShouldPass(subtasks=subtasks)
-
-
-OcimaticComment = ShouldFail | ShouldPass
-
-
 class SourceCode(ABC):
     LINE_COMMENT_START: str
 
@@ -206,13 +187,12 @@ class PythonSource(SourceCode):
         return Python3(self._file)
 
 
-def parse_comments(file: Path, comment_start: str) -> Iterator[OcimaticComment]:
+def parse_comments(file: Path, comment_start: str) -> Iterator[ShouldFail]:
     for m in comment_iter(file, comment_start):
-        for parser in [ShouldFail.parse, ShouldPass.parse]:
-            parsed = parser(m.group(1))
-            if parsed:
-                yield parsed
-                break
+        parsed = ShouldFail.parse(m.group(1))
+        if parsed:
+            yield parsed
+            break
         else:
             path = utils.relative_to_cwd(file)
             utils.fatal_error(f"Invalid comment `{m.group(0)}` in {path}")

@@ -70,11 +70,17 @@ class DiffChecker(Checker):
         with out_path.open() as expected_file, expected_path.open() as output_file:
             expected = expected_file.readlines()
             out = output_file.readlines()
-            if len(expected) != len(out):
+            if len(out) < len(out):
                 return CheckerSuccess(outcome=0.0)
 
-            for a, b in zip(expected, out, strict=True):
-                if a != b:
+            # Lines must be equal up to whitespaces
+            for i, line in enumerate(expected):
+                if line.split() != out[i].split():
+                    return CheckerSuccess(outcome=0.0)
+
+            # We allow trailing lines containing only whitespaces
+            for line in out[len(expected) :]:
+                if len(line.split()) > 0:
                     return CheckerSuccess(outcome=0.0)
             return CheckerSuccess(outcome=1.0)
 
