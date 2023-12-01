@@ -376,9 +376,8 @@ class _Script(_Command):
             )
 
         count = 0
-        idx = _next_idx_in_group(self._group, tests_in_group)
-        # We seed the script with the first `idx`, this guarantees it will be different next time.
-        args = self._args_with_seed(dst_dir, idx)
+        # We seed the script with the next `idx`, this guarantees it will be different next time.
+        args = self._args_with_seed(dst_dir, tests_in_group[self._group] + 1)
         process = build_result.spawn(args, cwd=self._cwd)
         if isinstance(process, Error):
             return utils.Result.fail(
@@ -396,8 +395,8 @@ class _Script(_Command):
                 else:
                     if current_file is None:
                         count += 1
-                        current_file = self.dst_file(dst_dir, idx).open("w")
                         idx = _next_idx_in_group(self._group, tests_in_group)
+                        current_file = self.dst_file(dst_dir, idx).open("w")
                     current_file.write(char)
         finally:
             if current_file:

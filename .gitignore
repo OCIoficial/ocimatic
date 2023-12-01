@@ -95,3 +95,5 @@ auto
 
 # vscode
 .vscode
+
+*.vsix
