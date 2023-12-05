@@ -537,10 +537,12 @@ class Task:
 
             if sol.is_partial:
                 should_fail = _fmt_stn_iter(sol.should_fail(self._dataset))
-                if sol.check_results(results):
+                if stn is not None:
+                    pass
+                elif sol.check_results(results):
                     utils.writeln()
                     utils.writeln(
-                        f"Solution failed the subtasks it was supposed to: should-fail={should_fail}",
+                        f"Solution failed the subtasks it was supposed to fail\n * should-fail={should_fail}",
                         utils.OK,
                     )
                 else:
