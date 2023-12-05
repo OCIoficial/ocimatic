@@ -409,24 +409,30 @@ class Task:
                 return sol
         return None
 
-    def solution_completion(self, incomplete: str) -> list[CompletionItem]:
+    def solution_completion(
+        self,
+        incomplete: str,
+        *,
+        partial: bool,
+    ) -> list[CompletionItem]:
         candidates: dict[str, str] = {
             sol.source.file.name: "correct" for sol in self._correct
         }
-        for sol in self._partial:
-            key = sol.source.file.name
-            if key in candidates:
-                key = "partial" + os.path.sep + key
-            candidates[key] = "partial"
+        if partial:
+            for sol in self._partial:
+                key = sol.source.file.name
+                if key in candidates:
+                    key = "partial" + os.path.sep + key
+                candidates[key] = "partial"
 
-        for kind, sols in [("correct", self._correct), ("partial", self._partial)]:
-            if incomplete.startswith(kind):
-                for sol in sols:
-                    key = kind + os.path.sep + sol.source.file.name
-                    if key not in candidates:
-                        candidates[key] = kind
-            else:
-                candidates[kind + os.path.sep] = "group"
+            for kind, sols in [("correct", self._correct), ("partial", self._partial)]:
+                if incomplete.startswith(kind):
+                    for sol in sols:
+                        key = kind + os.path.sep + sol.source.file.name
+                        if key not in candidates:
+                            candidates[key] = kind
+                else:
+                    candidates[kind + os.path.sep] = "group"
 
         for key in glob.glob(incomplete + "*"):  # noqa: PTH207
             if key in candidates:
@@ -559,7 +565,7 @@ no comment is specified, ocimatic will assume that all subtasks should fail.
                 if results.check_all_correct():
                     utils.writeln("Result: All test passed", utils.OK)
                 else:
-                    utils.writeln("Result: Some test failed", utils.ERROR)
+                    utils.writeln("Result: Some tests failed", utils.ERROR)
 
     @utils.hd1("{0}", "Checking dataset", COLOR)
     def check_dataset(self) -> utils.Status:

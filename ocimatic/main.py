@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, NoReturn
 
@@ -73,30 +74,36 @@ _SOLUTION_HELP = (
 
 
 def _solution_completion(
-    ctx: click.Context,
-    param: click.Parameter,
-    incomplete: str,
-) -> list[CompletionItem]:
-    try:
-        del param
-        data = core.find_contest_root()
-        if not data:
+    *,
+    partial: bool = True,
+) -> Callable[[click.Context, click.Parameter, str], list[CompletionItem]]:
+    def inner(
+        ctx: click.Context,
+        param: click.Parameter,
+        incomplete: str,
+    ) -> list[CompletionItem]:
+        try:
+            del param
+            data = core.find_contest_root()
+            if not data:
+                return []
+
+            task_name: str | None = ctx.params.get("task_name")
+            if task_name is None and data[1] is not None:
+                task_name = data[1].name
+
+            if not task_name:
+                return []
+
+            task = core.Contest.find_task_in(data[0], task_name)
+            if not task:
+                return []
+
+            return task.solution_completion(incomplete, partial=partial)
+        except Exception:
             return []
 
-        task_name: str | None = ctx.params.get("task_name")
-        if task_name is None and data[1] is not None:
-            task_name = data[1].name
-
-        if not task_name:
-            return []
-
-        task = core.Contest.find_task_in(data[0], task_name)
-        if not task:
-            return []
-
-        return task.solution_completion(incomplete)
-    except Exception:
-        return []
+    return inner
 
 
 @cloup.command(help="Initialize a contest in a new directory")
@@ -208,7 +215,7 @@ def check_dataset(cli: CLI) -> None:
     "This option can only be used when running the command on a single task. "
     + _SOLUTION_HELP,
     type=click.Path(),
-    shell_complete=_solution_completion,
+    shell_complete=_solution_completion(partial=False),
 )
 @cloup.option(
     "--sample",
@@ -346,7 +353,7 @@ single_task = cloup.option(
     "solution",
     help="A path to a solution. " + _SOLUTION_HELP,
     type=click.Path(),
-    shell_complete=_solution_completion,
+    shell_complete=_solution_completion(),
 )
 @single_task
 @mutually_exclusive(

@@ -70,19 +70,26 @@ class DiffChecker(Checker):
         with out_path.open() as expected_file, expected_path.open() as output_file:
             expected = expected_file.readlines()
             out = output_file.readlines()
-            if len(out) < len(out):
+
+            _filter_trailing_empty_lines(expected)
+            _filter_trailing_empty_lines(out)
+
+            if len(out) != len(expected):
                 return CheckerSuccess(outcome=0.0)
 
             # Lines must be equal up to whitespaces
             for i, line in enumerate(expected):
                 if line.split() != out[i].split():
                     return CheckerSuccess(outcome=0.0)
-
-            # We allow trailing lines containing only whitespaces
-            for line in out[len(expected) :]:
-                if len(line.split()) > 0:
-                    return CheckerSuccess(outcome=0.0)
             return CheckerSuccess(outcome=1.0)
+
+
+def _filter_trailing_empty_lines(lines: list[str]) -> None:
+    for i in range(len(lines) - 1, -1, -1):
+        if not lines[i].strip():
+            lines.pop(i)
+        else:
+            break
 
 
 class CustomChecker(Checker):
