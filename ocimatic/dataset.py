@@ -425,10 +425,10 @@ class RuntimeStats:
         return RuntimeStats(max=float("-inf"), min=float("inf"))
 
     def set_limit(self) -> float:
-        return math.ceil(self.max * 20) / 10
+        return math.ceil(self.max * 4) / 2
 
     def fmt_limit_calculation(self) -> str:
-        return f"math.ceil({self.max:.3f} * 20) / 10"
+        return f"math.ceil({self.max:.3f} * 4) / 2"
 
     def __add__(self, other: RuntimeStats) -> RuntimeStats:
         return RuntimeStats(max=max(self.max, other.max), min=min(self.min, other.min))
