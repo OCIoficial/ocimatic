@@ -281,13 +281,16 @@ class Test:
     def has_expected(self) -> bool:
         return self._expected_path.exists()
 
+    def __lt__(self, other: Test) -> bool:
+        return str(self) < str(other)
+
 
 class _TestGroup:
     """A collection of test cases."""
 
     def __init__(self, name: str, tests: list[Test]) -> None:
         self._name = name
-        self._tests = tests
+        self._tests = sorted(tests)
 
     def mtime(self) -> float:
         mtime = -1.0
