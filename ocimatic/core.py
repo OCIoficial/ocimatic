@@ -503,7 +503,7 @@ class Task:
         for sol in self._partial:
             should_fail = _fmt_stn_iter(sol.should_fail(self._dataset))
             utils.write(f" * [partial] {sol.source.file.name}", utils.CYAN)
-            utils.writeln(f", should-fail=[{should_fail}]", utils.CYAN)
+            utils.writeln(f", should-fail={should_fail}", utils.CYAN)
 
     @utils.hd1("{0}", "Normalizing", COLOR)
     def normalize(self) -> None:
