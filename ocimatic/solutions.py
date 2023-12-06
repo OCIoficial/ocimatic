@@ -86,18 +86,18 @@ class Solution:
             return None
 
         source: SourceCode
-        if source_path.suffix == ".cpp":
+        if source_path.suffix == CppSource.SUFFIX:
             grader = Path(managers_dir, "grader.cpp")
             source = CppSource(
                 source_path,
                 extra_files=[grader] if grader.exists() else [],
                 include=managers_dir,
             )
-        elif source_path.suffix == ".java":
+        elif source_path.suffix == JavaSource.SUFFIX:
             source = JavaSource(codename, source_path)
-        elif source_path.suffix == ".py":
+        elif source_path.suffix == PythonSource.SUFFIX:
             source = PythonSource(source_path)
-        elif source_path.suffix == ".rs":
+        elif source_path.suffix == RustSource.SUFFIX:
             source = RustSource(source_path)
         else:
             return None

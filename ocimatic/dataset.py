@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import zipfile
 from collections.abc import Iterable, Iterator
+from curses.ascii import isspace
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -170,7 +171,7 @@ class Test:
         self._expected_path = expected_path
 
     def __str__(self) -> str:
-        return str(Path(utils.relative_to_cwd(self._in_path)).stem)
+        return str(Path(utils.relative_to_cwd(self._in_path)).with_suffix(""))
 
     def mtime(self) -> float:
         if self._expected_path.exists():
@@ -181,13 +182,27 @@ class Test:
         return self._in_path.stat().st_mtime
 
     @utils.work("validate", "{0}.in")
-    def validate_input(self, validator: Runnable) -> utils.Result:
-        result = validator.run(in_path=self._in_path)
-        match result:
-            case RunSuccess(_):
-                return utils.Result.success(short_msg="OK")
-            case RunError(msg, stderr):
-                return utils.Result.fail(short_msg=msg, long_msg=stderr)
+    def validate_input(
+        self,
+        validator: Runnable | None,
+        *,
+        check_basic_format: bool,
+    ) -> utils.Result:
+        if check_basic_format:
+            with self.in_path.open() as f:
+                result = _validate_basic_format(f.readlines())
+                if result.is_fail():
+                    return result
+
+        if validator:
+            result = validator.run(in_path=self._in_path)
+            match result:
+                case RunSuccess(_):
+                    return utils.Result.success(short_msg="OK")
+                case RunError(msg, stderr):
+                    return utils.Result.fail(short_msg=msg, long_msg=stderr)
+        else:
+            return utils.Result.success(short_msg="OK")
 
     @utils.work("validate", "{0}.sol")
     def validate_output(self) -> utils.Result:
@@ -373,31 +388,24 @@ class _Subtask(_TestGroup):
     ) -> utils.Status:
         if validator is None:
             utils.writeln(" warning: no validator available", utils.YELLOW)
-            return utils.Status.success
-        source: SourceCode
-        if validator.suffix == ".cpp":
-            source = CppSource(validator)
-        elif validator.suffix == ".py":
-            source = PythonSource(validator)
+            runnable = None
         else:
-            utils.show_message("error", "unsupported file for validator", utils.RED)
-            return utils.Status.fail
-        build = source.build()
-        if isinstance(build, BuildError):
-            utils.show_message(
-                "Error",
-                f"failed to build validator\n{build.msg}",
-                utils.RED,
-            )
-            return utils.Status.fail
+            runnable = _build_validator(validator)
+            if isinstance(runnable, utils.Error):
+                utils.show_message("error", runnable.msg, utils.RED)
+                return utils.Status.fail
 
         status = utils.Status.success
+
         for st in ancestors:
             for test in st.tests():
-                status &= test.validate_input(build).status
+                status &= test.validate_input(
+                    runnable,
+                    check_basic_format=False,
+                ).status
 
         for test in self._tests:
-            status &= test.validate_input(build).status
+            status &= test.validate_input(runnable, check_basic_format=True).status
 
         if not self._tests:
             utils.writeln(" warning: no test cases", utils.YELLOW)
@@ -625,22 +633,17 @@ class Dataset:
         return testplan.ancestors_of(stn)
 
     def validate_input(self, stn: Stn | None) -> utils.Status:
+        validators = [None for _ in self._subtasks]
         if self.testplan is not None:
             validators = self.testplan.validators()
-            zipped = zip(self._subtasks.items(), validators, strict=True)
-            status = utils.Status.success
-            for (sti, subtask), validator in zipped:
-                if stn is None or stn == sti:
-                    ancestors = [self._subtasks[stj] for stj in self.ancestors_of(sti)]
-                    status &= subtask.validate_input(validator, ancestors)
-            return status
-        else:
-            utils.show_message(
-                "Warning",
-                "Task has a static dataset and cannot read validators from testplan.",
-                utils.WARNING,
-            )
-            return utils.Status.success
+
+        zipped = zip(self._subtasks.items(), validators, strict=True)
+        status = utils.Status.success
+        for (sti, subtask), validator in zipped:
+            if stn is None or stn == sti:
+                ancestors = [self._subtasks[stj] for stj in self.ancestors_of(sti)]
+                status &= subtask.validate_input(validator, ancestors)
+        return status
 
     def validate_output(self, stn: Stn | None) -> utils.Status:
         status = utils.Status.success
@@ -718,39 +721,53 @@ def _validate_basic_format(lines: list[str]) -> utils.Result:
                 short_msg=f"error in line {i + 1}",
                 long_msg=err.msg,
             )
-    trailing = _trailing_empty_lines(lines)
-    if len(trailing) != 1:
-        return utils.Result.fail(
-            short_msg="file must have exactly one trailing empty line",
-        )
 
     return utils.Result.success(short_msg="OK")
 
 
-def _trailing_empty_lines(lines: list[str]) -> list[str]:
-    trailing: list[str] = []
-    for line in reversed(lines):
-        if not line.strip():
-            break
-        trailing.append(line)
-    return trailing
-
-
 def _validate_basic_line_format(line: str) -> utils.Error | None:
-    if not line.isascii():
-        return utils.Error("Line must contain only ascii characters")
+    if line[-1] != "\n":
+        return utils.Error(r"Line doesn't end with '\n'")
+    line = line[:-1]
+
+    if not line:
+        return utils.Error("Line cannot be empty")
 
     for c in line:
         if c in "\t\r\f\v":
-            return utils.Error("Invalid whitespace character")
+            return utils.Error(f"Invalid whitespace character: 0x{ord(c):02X}")
+
+    if not line.isascii():
+        return utils.Error("Line must contain only ascii characters")
+
+    if line != line.rstrip():
+        return utils.Error("Line cannot have trailing whitespaces")
+
+    if line != line.lstrip():
+        return utils.Error("Line cannot have leading whitespaces")
 
     if _WS_RE.search(line):
-        return utils.Error("Line contains multiple contiguous whitespaces")
-
-    if line and line[-1] == " ":
-        return utils.Error("Line has trailing whitespaces")
-
-    if line and line[-1] != "\n":
-        return utils.Error(r"Line doesn't end with a '\n'")
+        return utils.Error("Line cannot contains contiguous whitespaces")
 
     return None
+
+
+def _build_validator(path: Path) -> Runnable | utils.Error:
+    source = _load_validator(path)
+    if source is None:
+        return utils.Error("unsupported file for validator")
+
+    build = source.build()
+    if isinstance(build, BuildError):
+        return utils.Error(f"failed to build validator\n{build.msg}")
+
+    return build
+
+
+def _load_validator(path: Path) -> SourceCode | None:
+    if path.suffix == CppSource.SUFFIX:
+        return CppSource(path)
+    elif path.suffix == PythonSource.SUFFIX:
+        return PythonSource(path)
+    else:
+        return None
