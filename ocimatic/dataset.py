@@ -189,9 +189,9 @@ class Test:
     ) -> utils.Result:
         if check_basic_format:
             with self.in_path.open() as f:
-                result = _validate_basic_format(f.readlines())
-                if result.is_fail():
-                    return result
+                fmt_result = _validate_basic_format(f.readlines())
+                if fmt_result.is_fail():
+                    return fmt_result
 
         if validator:
             result = validator.run(in_path=self._in_path)
@@ -389,10 +389,11 @@ class _Subtask(_TestGroup):
             utils.writeln(" warning: no validator available", utils.YELLOW)
             runnable = None
         else:
-            runnable = _build_validator(validator)
-            if isinstance(runnable, utils.Error):
-                utils.show_message("error", runnable.msg, utils.RED)
+            runnable_or_error = _build_validator(validator)
+            if isinstance(runnable_or_error, utils.Error):
+                utils.show_message("error", runnable_or_error.msg, utils.RED)
                 return utils.Status.fail
+            runnable = runnable_or_error
 
         status = utils.Status.success
 
@@ -632,7 +633,7 @@ class Dataset:
         return testplan.ancestors_of(stn)
 
     def validate_input(self, stn: Stn | None) -> utils.Status:
-        validators = [None for _ in self._subtasks]
+        validators: list[Path | None] = [None for _ in self._subtasks]
         if self.testplan is not None:
             validators = self.testplan.validators()
 
