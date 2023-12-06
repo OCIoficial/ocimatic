@@ -85,7 +85,7 @@ class DiffChecker(Checker):
 
 
 def _filter_trailing_empty_lines(lines: list[str]) -> None:
-    for i in range(len(lines) - 1, -1, -1):
+    for i in reversed(range(len(lines))):
         if not lines[i].strip():
             lines.pop(i)
         else:

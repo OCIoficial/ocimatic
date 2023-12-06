@@ -311,6 +311,26 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
     exit_with_status(status)
 
 
+@cloup.command(help="Validate format of expected output files")
+@cloup.option(
+    "--subtask",
+    "-st",
+    type=int,
+    help="Only validate output for this subtask.",
+)
+@cloup.pass_obj
+def validate_output(cli: CLI, subtask: int | None) -> None:
+    tasks = cli.select_tasks()
+    if len(tasks) > 1:
+        utils.set_verbosity(utils.Verbosity.quiet)
+
+    status = utils.Status.success
+    for task in tasks:
+        status &= task.validate_output(stn=Stn(subtask) if subtask else None)
+
+    exit_with_status(status)
+
+
 @cloup.command(help="Print score parameters for cms")
 @cloup.pass_obj
 def score_params(cli: CLI) -> None:
@@ -530,6 +550,7 @@ SECTIONS = [
             run_testplan,
             gen_expected,
             validate_input,
+            validate_output,
             check_dataset,
             build_statement,
             compress_dataset,

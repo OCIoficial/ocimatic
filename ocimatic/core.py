@@ -454,6 +454,10 @@ class Task:
     def validate_input(self, stn: Stn | None) -> utils.Status:
         return self._dataset.validate_input(stn)
 
+    @utils.hd1("{0}", "Validating output files", COLOR)
+    def validate_output(self, stn: Stn | None) -> utils.Status:
+        return self._dataset.validate_output(stn)
+
     @utils.hd1("{0}", "Compressing dataset", COLOR)
     def compress_dataset(self, *, random_sort: bool) -> None:
         """Compress dataset into a single file."""
@@ -593,26 +597,41 @@ no comment is specified, ocimatic will assume that all subtasks should fail.
             )
             return utils.Status.fail
 
-        # Do not early return if there are validate_input errors but still report it at the end
+        # Do not early return if there are validate input/output errors but still report them at the end
         validate_input_status = self._check_dataset_validate_input()
+        validate_output_status = self._check_dataset_validate_output()
 
         stats = self._check_dataset_run_correct_solutions()
         if not stats:
             return utils.Status.fail
 
         return (
-            self._check_dataset_run_partial_solutions(stats) and validate_input_status
+            self._check_dataset_run_partial_solutions(stats)
+            and validate_input_status
+            and validate_output_status
         )
 
     def _check_dataset_validate_input(self) -> utils.Status:
         utils.writeln()
-        utils.writeln("Running validators on input files", utils.INFO)
+        utils.writeln("Validating input files", utils.INFO)
         utils.writeln()
         status = self._dataset.validate_input(stn=None)
         utils.writeln()
         if status == utils.Status.fail:
-            utils.writeln()
             utils.writeln("Some subtasks didn't pass input validation.", utils.ERROR)
+            utils.writeln()
+
+        return status
+
+    def _check_dataset_validate_output(self) -> utils.Status:
+        utils.writeln()
+        utils.writeln("Validating expected output files", utils.INFO)
+        utils.writeln()
+        status = self._dataset.validate_output(stn=None)
+        utils.writeln()
+        if status == utils.Status.fail:
+            utils.writeln("Some subtasks didn't pass output validation.", utils.ERROR)
+            utils.writeln()
 
         return status
 

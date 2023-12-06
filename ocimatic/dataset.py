@@ -3,12 +3,14 @@ from __future__ import annotations
 import itertools
 import math
 import random
+import re
 import shutil
 import string
 import subprocess
 import tempfile
 import zipfile
 from collections.abc import Iterable, Iterator
+from curses.ascii import isspace
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -118,7 +120,7 @@ class TestResult:
             del mode
             return WorkResult(
                 status=utils.Status.fail,
-                short_msg="No expected output file",
+                short_msg="no expected output file",
             )
 
     def into_work_result(self) -> WorkResult:
@@ -169,7 +171,7 @@ class Test:
         self._expected_path = expected_path
 
     def __str__(self) -> str:
-        return str(utils.relative_to_cwd(self._in_path))
+        return str(Path(utils.relative_to_cwd(self._in_path)).stem)
 
     def mtime(self) -> float:
         if self._expected_path.exists():
@@ -179,7 +181,7 @@ class Test:
             )
         return self._in_path.stat().st_mtime
 
-    @utils.work("validate", "{0}")
+    @utils.work("validate", "{0}.in")
     def validate_input(self, validator: Runnable) -> utils.Result:
         result = validator.run(in_path=self._in_path)
         match result:
@@ -187,6 +189,14 @@ class Test:
                 return utils.Result.success(short_msg="OK")
             case RunError(msg, stderr):
                 return utils.Result.fail(short_msg=msg, long_msg=stderr)
+
+    @utils.work("validate", "{0}.sol")
+    def validate_output(self) -> utils.Result:
+        if not self.expected_path.exists():
+            return utils.Result.fail(short_msg="no expected output file")
+
+        with self.expected_path.open() as f:
+            return _validate_basic_format(f.readlines())
 
     @utils.work("gen")
     def gen_expected(self, runnable: Runnable) -> utils.Result:
@@ -389,6 +399,20 @@ class _Subtask(_TestGroup):
 
         for test in self._tests:
             status &= test.validate_input(build).status
+
+        if not self._tests:
+            utils.writeln(" warning: no test cases", utils.YELLOW)
+            return utils.Status.success
+
+        return status
+
+    @utils.hd2("{0}")
+    def validate_output(
+        self,
+    ) -> utils.Status:
+        status = utils.Status.success
+        for test in self._tests:
+            status &= test.validate_output().status
 
         if not self._tests:
             utils.writeln(" warning: no test cases", utils.YELLOW)
@@ -619,6 +643,13 @@ class Dataset:
             )
             return utils.Status.success
 
+    def validate_output(self, stn: Stn | None) -> utils.Status:
+        status = utils.Status.success
+        for sti, subtask in self._subtasks.items():
+            if stn is None or stn == sti:
+                status &= subtask.validate_output()
+        return status
+
     def __str__(self) -> str:
         return f"{self._directory}"
 
@@ -675,3 +706,52 @@ class Dataset:
                 if not test.has_expected():
                     return False
         return True
+
+
+_WS_RE = re.compile(r"\s{2,}")
+
+
+def _validate_basic_format(lines: list[str]) -> utils.Result:
+    for i, line in enumerate(lines):
+        err = _validate_basic_line_format(line)
+        if err is not None:
+            return utils.Result.fail(
+                short_msg=f"error in line {i + 1}",
+                long_msg=err.msg,
+            )
+    trailing = _trailing_empty_lines(lines)
+    if len(trailing) != 1:
+        return utils.Result.fail(
+            short_msg="file must have exactly one trailing empty line",
+        )
+
+    return utils.Result.success(short_msg="OK")
+
+
+def _trailing_empty_lines(lines: list[str]) -> list[str]:
+    trailing: list[str] = []
+    for line in reversed(lines):
+        if not line.strip():
+            break
+        trailing.append(line)
+    return trailing
+
+
+def _validate_basic_line_format(line: str) -> utils.Error | None:
+    if not line.isascii():
+        return utils.Error("Line must contain only ascii characters")
+
+    for c in line:
+        if c in "\t\r\f\v":
+            return utils.Error("Invalid whitespace character")
+
+    if _WS_RE.search(line):
+        return utils.Error("Line contains multiple contiguous whitespaces")
+
+    if line and line[-1] == " ":
+        return utils.Error("Line has trailing whitespaces")
+
+    if line and line[-1] != "\n":
+        return utils.Error(r"Line doesn't end with a '\n'")
+
+    return None
