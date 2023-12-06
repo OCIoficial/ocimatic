@@ -65,6 +65,7 @@ class SourceCode(ABC):
 
 
 class CppSource(SourceCode):
+    SUFFIX = ".cpp"
     LINE_COMMENT_START = "//"
 
     def __init__(
@@ -116,6 +117,7 @@ class CppSource(SourceCode):
 
 
 class RustSource(SourceCode):
+    SUFFIX = ".rs"
     LINE_COMMENT_START = "//"
 
     def __init__(self, file: Path, out: Path | None = None) -> None:
@@ -149,6 +151,7 @@ class RustSource(SourceCode):
 
 
 class JavaSource(SourceCode):
+    SUFFIX = ".java"
     LINE_COMMENT_START = "//"
 
     def __init__(self, classname: str, source: Path, out: Path | None = None) -> None:
@@ -177,6 +180,7 @@ class JavaSource(SourceCode):
 
 
 class PythonSource(SourceCode):
+    SUFFIX = ".py"
     LINE_COMMENT_START = "#"
 
     def __init__(self, file: Path) -> None:

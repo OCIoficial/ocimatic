@@ -48,7 +48,7 @@ def submit() -> Response | str:
     assert contest
     data = request.get_json()
 
-    task = contest.find_task(data["task"])
+    task = contest.find_task_by_name(data["task"])
     if not task:
         return "Task not found"
 
