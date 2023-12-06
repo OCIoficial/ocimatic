@@ -49,15 +49,15 @@ class CLI:
     def select_task(self, name: str | None) -> core.Task | None:
         task = None
         if name is not None:
-            task = self.contest.find_task(name)
+            task = self.contest.find_task_by_name(name)
         elif self.last_dir:
-            task = self.contest.find_task(self.last_dir.name)
+            task = self.contest.find_task_by_dir(self.last_dir)
         return task
 
     def select_tasks(self) -> list[core.Task]:
         task = None
         if self.last_dir:
-            task = self.contest.find_task(self.last_dir.name)
+            task = self.contest.find_task_by_dir(self.last_dir)
         if task is not None:
             return [task]
         else:
@@ -89,13 +89,13 @@ def _solution_completion(
                 return []
 
             task_name: str | None = ctx.params.get("task_name")
-            if task_name is None and data[1] is not None:
-                task_name = data[1].name
 
-            if not task_name:
-                return []
+            task = None
+            if task_name is not None:
+                task = core.Contest.load_task_by_name(data[0], task_name)
+            elif data[1] is not None:
+                task = core.Contest.load_task_by_dir(data[0], data[1])
 
-            task = core.Contest.find_task_in(data[0], task_name)
             if not task:
                 return []
 

@@ -93,7 +93,7 @@ class Contest:
             ContestConfig.init(dest, phase)
 
     @staticmethod
-    def _detect_tasks_in(contest_dir: Path) -> Iterator[tuple[int, TaskConfig, Path]]:
+    def _detect_tasks(contest_dir: Path) -> Iterator[tuple[int, TaskConfig, Path]]:
         tasks: list[tuple[TaskConfig, Path]] = []
         for dir in contest_dir.iterdir():
             config = TaskConfig.load(dir)
@@ -103,12 +103,23 @@ class Contest:
         return ((i, c, d) for i, (c, d) in enumerate(tasks))
 
     @staticmethod
-    def find_task_in(contest_dir: Path, task_name: str) -> Task | None:
+    def load_task_by_name(contest_dir: Path, task_name: str) -> Task | None:
         return next(
             (
                 Task(d, config, i)
-                for i, config, d in Contest._detect_tasks_in(contest_dir)
+                for i, config, d in Contest._detect_tasks(contest_dir)
                 if config.codename == task_name
+            ),
+            None,
+        )
+
+    @staticmethod
+    def load_task_by_dir(contest_dir: Path, task_dir: Path) -> Task | None:
+        return next(
+            (
+                Task(d, config, i)
+                for i, config, d in Contest._detect_tasks(contest_dir)
+                if d == task_dir
             ),
             None,
         )
@@ -117,7 +128,7 @@ class Contest:
         self._directory = directory
         self._config = ContestConfig.load(directory)
         self._tasks = [
-            Task(d, config, i) for i, config, d in Contest._detect_tasks_in(directory)
+            Task(d, config, i) for i, config, d in Contest._detect_tasks(directory)
         ]
 
         os.environ["OCIMATIC_PHASE"] = self._config.phase
@@ -237,7 +248,13 @@ class Contest:
     def __str__(self) -> str:
         return self.name
 
-    def find_task(self, name: str) -> Task | None:
+    def find_task_by_dir(self, dir: Path) -> Task | None:
+        for task in self._tasks:
+            if task.directory == dir:
+                return task
+        return None
+
+    def find_task_by_name(self, name: str) -> Task | None:
         """Find task with the given name."""
         return next((p for p in self._tasks if p.name == name), None)
 
@@ -354,6 +371,10 @@ class Task:
     @property
     def codename(self) -> str:
         return self._config.codename
+
+    @property
+    def directory(self) -> Path:
+        return self._directory
 
     @utils.hd1("{0}", "Copy to archive")
     def copy_to(self, directory: Path) -> bool:
