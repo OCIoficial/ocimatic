@@ -10,7 +10,6 @@ import subprocess
 import tempfile
 import zipfile
 from collections.abc import Iterable, Iterator
-from curses.ascii import isspace
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
