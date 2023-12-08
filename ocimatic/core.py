@@ -207,6 +207,7 @@ class Contest:
             self._build_problemset_oneside()
             shutil.copy2(self._directory / "oneside.pdf", tmpdir)
 
+            Path("archive.zip").unlink(missing_ok=True)
             shutil.make_archive("archive", "zip", tmpdir)
 
     @utils.work("LATEX", "titlepage.tex")
@@ -384,12 +385,14 @@ class Task:
         if self._dataset.compress(random_sort=False).is_fail():
             return False
 
-        dataset = self._directory / "dataset" / "data.zip"
-        dataset_dst = new_dir / "data.zip"
-        shutil.copy2(dataset, dataset_dst)
+        shutil.copy2(self._directory / "dataset" / "data.zip", new_dir / "data.zip")
 
         if self.statement.build(blank_page=False).is_fail():
             return False
+
+        with (new_dir / "data.txt").open("w") as f:
+            for st, regex in self._dataset.regexes().items():
+                f.write(f"Subtask {st}: {regex}\n")
 
         statement = new_dir / "statement.pdf"
         shutil.copy2(self._directory / "statement" / "statement.pdf", statement)
