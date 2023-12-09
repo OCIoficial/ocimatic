@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import glob
+import json
 import os
 import re
 import shutil
@@ -518,7 +519,7 @@ class Task:
             utils.show_message("Sum", str(scores[Stn(1)] / counts[Stn(1)]))
         utils.show_message(
             "GroupMin",
-            str(
+            json.dumps(
                 [
                     [m, f"{regex}"]
                     for (m, regex) in zip(
