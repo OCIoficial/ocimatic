@@ -602,7 +602,7 @@ no comment is specified, ocimatic will assume that all subtasks should fail.
     def check_dataset(self) -> utils.Status:
         """Check input/output correctness.
 
-        First run all correct solutions againt all test cases and sample input. Then use the running
+        First run all correct solutions against all test cases and sample input. Then use the running
         time of correct solutions to set a timeout. Finally, use the timeout to run partial solutions
         and ensure they fail the subtasks they are suppose to fail.
         """
@@ -743,7 +743,7 @@ Solutions with issues:
 Summary
 -------
 Some partial solutions had issues when running or didn't pass/fail the subtasks they were supposed to.
-Run them individually with `ocimatic run` to get more information. Remember to set an appropiate timeout
+Run them individually with `ocimatic run` to get more information. Remember to set an appropriate timeout
 using the `--timeout` flag.
 
 Solutions with issues:
@@ -858,7 +858,7 @@ class Statement:
             return utils.Result.fail("FAILED", long_msg=result.msg)
 
     def io_samples(self) -> list[Test]:
-        """Find sample input data in the satement."""
+        """Find sample input data in the statement."""
         samples: set[str] = set()
         for line in self._source.iter_lines():
             m = re.match(r"[^%]*\\sampleIO(?:\*)?(\[[^\]]*\]){0,2}{([^}]+)}", line)

@@ -225,7 +225,7 @@ class ParseError:
 class _Extends:
     """An extends directive can be used to include all tests from another subtask.
 
-    This is not fully impelemented yet.
+    This is not fully implemented yet.
     """
 
     RE: ClassVar[re.Pattern[str]] = re.compile(

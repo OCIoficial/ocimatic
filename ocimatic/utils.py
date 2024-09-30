@@ -72,7 +72,7 @@ def decolorize(text: str) -> str:
 
 
 class Status(Enum):
-    success = "sucess"
+    success = "success"
     fail = "fail"
 
     @staticmethod

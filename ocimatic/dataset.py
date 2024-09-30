@@ -35,8 +35,8 @@ class RunMode(Enum):
 @dataclass(frozen=True, kw_only=True, slots=True)
 class TestResult:
     @dataclass
-    class CheckerRunned:
-        """The solution run without runtime errors and the checker was succesfully run on the output.
+    class CheckerFinished:
+        """The solution finished without runtime errors and the checker was successfully run on the output.
 
         This could mean a correct answer, a wrong answer, or partial score if the checker returns
         something greater than 0.0 but less than 1.0.
@@ -110,7 +110,7 @@ class TestResult:
 
     @dataclass
     class NoExpectedOutput:
-        """The test didn't have a corresponding expectd output.
+        """The test didn't have a corresponding expected output.
 
         This means `ocimatic gen-expected` hasn't been run.
         """
@@ -127,7 +127,7 @@ class TestResult:
 
     def is_correct(self) -> bool:
         return (
-            isinstance(self.kind, TestResult.CheckerRunned) and self.kind.is_correct()
+            isinstance(self.kind, TestResult.CheckerFinished) and self.kind.is_correct()
         )
 
     def is_proper_fail(self) -> bool:
@@ -140,13 +140,13 @@ class TestResult:
         match self.kind:
             case TestResult.RuntimeError(_) | TestResult.TimeLimitExceeded(_):
                 return True
-            case TestResult.CheckerRunned(_):
+            case TestResult.CheckerFinished(_):
                 return not self.kind.is_correct()
             case _:
                 return False
 
     Kind = (
-        CheckerRunned
+        CheckerFinished
         | TimeLimitExceeded
         | RuntimeError
         | CheckerError
@@ -270,7 +270,7 @@ class Test:
             if isinstance(checker_result, CheckerError):
                 return TestResult.CheckerError(checker_result)
 
-            return TestResult.CheckerRunned(checker_result, run_result)
+            return TestResult.CheckerFinished(checker_result, run_result)
 
     @property
     def in_path(self) -> Path:
@@ -371,7 +371,7 @@ class _TestGroup:
 
 
 class _Subtask(_TestGroup):
-    """Subclass of `TestGroup` to represet a subtask."""
+    """Subclass of `TestGroup` to represent a subtask."""
 
     def __init__(self, directory: Path) -> None:
         super().__init__(
@@ -477,7 +477,7 @@ class DatasetResults:
     def check_all_correct(self) -> bool:
         """Return whether all test cases have a correct answer."""
         for test in self._iter_all(include_sample=True):
-            if not isinstance(test.kind, TestResult.CheckerRunned):
+            if not isinstance(test.kind, TestResult.CheckerFinished):
                 return False
             if not test.kind.is_correct():
                 return False
@@ -520,7 +520,7 @@ class DatasetResults:
     def _running_times(self, *, include_sample: bool = False) -> Iterator[float]:
         """Return running times of all successful runs."""
         for test in self._iter_all(include_sample=include_sample):
-            if isinstance(test.kind, TestResult.CheckerRunned):
+            if isinstance(test.kind, TestResult.CheckerFinished):
                 yield test.kind.running_time()
 
 

@@ -258,7 +258,7 @@ def build_statement(cli: CLI) -> None:
     "-r",
     is_flag=True,
     default=False,
-    help="Add random prefix to output filenames to sort testcases whithin a subtask randomly.",
+    help="Add random prefix to output filenames to sort testcases within a subtask randomly.",
 )
 @cloup.pass_obj
 def compress_dataset(cli: CLI, random_sort: bool) -> None:  # noqa: FBT001
@@ -584,7 +584,7 @@ SECTIONS = [
 @cloup.pass_context
 def cli(ctx: click.Context) -> None:
     ctx.obj = CLI()
-    # Only intialize config if we are not running the `setup` command. This ensures we can
+    # Only initialize config if we are not running the `setup` command. This ensures we can
     # run `ocimatic setup` even if there are problems with the config file.
     if ctx.invoked_subcommand != "setup":
         ocimatic.config.initialize()
