@@ -4,6 +4,7 @@ import re
 import shlex
 import shutil
 import sys
+import typing
 from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
@@ -223,10 +224,7 @@ class ParseError:
 
 @dataclass(kw_only=True, frozen=True, slots=True)
 class _Extends:
-    """An extends directive can be used to include all tests from another subtask.
-
-    This is not fully implemented yet.
-    """
+    """An extends directive can be used to include all tests from another subtask."""
 
     RE: ClassVar[re.Pattern[str]] = re.compile(
         r"\s*@\s*extends\s*subtask\s*(\d+)\s*",
@@ -429,9 +427,7 @@ class _Script(_Command):
 
 
 def _invalid_command_err_msg(cmd: str) -> str:
-    from typing import get_args
-
-    extensions = get_args(_Script.VALID_EXTENSIONS)
+    extensions = typing.get_args(_Script.VALID_EXTENSIONS)
     return (
         f"invalid command `{cmd}`\n"
         f"The command should be either `copy`, `echo` or a generator with one of the following extensions {extensions}"

@@ -450,7 +450,7 @@ def build(cli: CLI, solution: str, task_name: str | None) -> None:
 
     ### Bash
 
-    First, ensure that you install `bash-completion` using your package manager.
+    First, install `bash-completion` using your package manager.
 
     \b
     Then, add this to your `~/.bash_profile`:
