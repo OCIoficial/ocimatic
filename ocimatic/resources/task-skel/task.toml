@@ -9,6 +9,6 @@ priority = 0
 
 [dataset]
 # If true, test cases must be manually placed in the dataset directory.
-# Aditionally, commands that modify the dataset (e.g. `ocimatic testplan`)
+# Additionally, commands that modify the dataset (e.g. `ocimatic testplan`)
 # will be disabled for this task.
 static = false

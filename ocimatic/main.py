@@ -164,10 +164,14 @@ def new_task(cli: CLI, name: str) -> None:
 
 
 @cloup.command(
-    short_help="Check input/output correctness",
-    help="Check input/output correcteness by running all correct solutions against all "
-    "test cases and sample inputs. Also check robustness by checking partial solutions pass/fail "
-    "the subtasks they are suppose to.",
+    short_help="Run dataset validation",
+    help="""
+Runs multiple validations on the dataset:\n
+ - Check input/output correcteness by running all correct solutions against all test cases.\n
+ - Test robustness by running partial solutions and verify they fail the subtasks they are suppose to.\n
+ - Validate input/output formatting ensuring basic rules like lines not ending with spaces.\n
+ - Run all input validators.\n
+""",
 )
 @cloup.pass_obj
 def check_dataset(cli: CLI) -> None:
@@ -578,6 +582,17 @@ SECTIONS = [
 
 
 @cloup.group(
+    help="""
+A contest consists of a set of tasks. Ocimatic provides a set of commands that can work on multiple
+tasks at the same time. We refer to the set of tasks a commands runs on as the list of *targets*.
+To facilitate the selection of targets, Ocimatic is sensitive to the directory where you run it.
+When inside a task's directory (or any subdiretory) that single task is selected as the target. When
+run at the root of the contest, all tasks will be selected as targets.
+
+Some commands are only valid if there's a single target task (Single-task commands). Some commands
+apply to the entire contest (Contest commands) or are used to configure Ocimatic (Config commands)
+and do not have a corresponding set of targets.
+""",
     sections=SECTIONS,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
@@ -585,7 +600,7 @@ SECTIONS = [
 def cli(ctx: click.Context) -> None:
     ctx.obj = CLI()
     # Only initialize config if we are not running the `setup` command. This ensures we can
-    # run `ocimatic setup` even if there are problems with the config file.
+    # run `ocimatic setup` even if there are issues with the config file.
     if ctx.invoked_subcommand != "setup":
         ocimatic.config.initialize()
 

@@ -238,7 +238,6 @@ class LatexSource:
             return BuildError(msg=msg)
         return self._source.with_suffix(".pdf")
 
-    @property
     def pdf(self) -> Path | None:
         pdf = self._source.with_suffix(".pdf")
         return pdf if pdf.exists() else None

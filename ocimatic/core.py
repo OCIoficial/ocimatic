@@ -8,6 +8,7 @@ import shutil
 import tempfile
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import Any, cast
 
@@ -26,12 +27,12 @@ from ocimatic.utils import SortedDict, Stn
 
 
 def find_contest_root() -> tuple[Path, Path | None] | None:
-    """Find the root contest's directory.
+    """Find the root of the contest.
 
     Returns the absolute path to the root of the contest and the last directory
-    before reaching the root, this correspond to the directory of the task in
-    which ocimatic was called. If the function reach system root the program exists
-    with an error.
+    before reaching the root (if there's one), this correspond to the directory
+    of the task in which ocimatic was called. If the function reaches the system
+    root without finding the a contest the program exists with an error.
     """
     last_dir = None
     curr_dir = Path.cwd()
@@ -82,7 +83,7 @@ class Contest:
 
     @staticmethod
     def create_layout(dest: Path, phase: str | None) -> None:
-        """Copy contest skeleton to `dest` and save configuration."""
+        """Copy contest skeleton to `dest`."""
         ocimatic_dir = Path(__file__).parent
         shutil.copytree(
             ocimatic_dir / "resources" / "contest-skel",
@@ -229,6 +230,7 @@ class Contest:
             if titlepage.exists():
                 merger.append(titlepage)
             for task in self._tasks:
+                merger.add_outline_item(task.title, len(merger.pages))
                 if not task.statement.pdf:
                     return utils.Result.fail(
                         short_msg="FAILED",
@@ -367,7 +369,7 @@ class Task:
         self._dataset = Dataset(
             directory / "dataset",
             testplan,
-            self._statement.io_samples(),
+            self._statement.get_io_samples(),
         )
 
     @property
@@ -377,6 +379,10 @@ class Task:
     @property
     def directory(self) -> Path:
         return self._directory
+
+    @cached_property
+    def title(self) -> str:
+        return self._statement.get_title()
 
     @utils.hd1("{0}", "Copy to archive")
     def copy_to(self, directory: Path) -> bool:
@@ -503,7 +509,7 @@ class Task:
     @utils.hd1("{0}", "Score Params", COLOR)
     def score_params(self) -> None:
         counts = self._dataset.counts()
-        scores = self._statement.scores()
+        scores = self._statement.get_scores()
         regexes = self._dataset.regexes()
         assert regexes.keys() == counts.keys()
         if scores.keys() != counts.keys():
@@ -821,6 +827,10 @@ Solutions with issues:
 class Statement:
     """Represents a statement. A statement is composed by a latex source and a pdf file."""
 
+    _SAMPLE_IO_RE = re.compile(r"[^%]*\\sampleIO(?:\*)?(\[[^\]]*\]){0,2}{([^}]+)}")
+    _SUBTASK_RE = re.compile(r"[^%]*\\subtask{([^}]+)}")
+    _TITLE_RE = re.compile(r"\\title{([^}]+)}")
+
     def __init__(
         self,
         directory: Path,
@@ -836,7 +846,7 @@ class Statement:
     @property
     def pdf(self) -> Path | None:
         """Return path to pdf if exists."""
-        return self._source.pdf
+        return self._source.pdf()
 
     def __str__(self) -> str:
         return str(self._source)
@@ -845,7 +855,7 @@ class Statement:
     def build(self, *, blank_page: bool) -> utils.Result:
         """Compile latex statement."""
         if self._num is not None:
-            os.environ["OCIMATIC_PROBLEM_NUMBER"] = chr(ord("A") + self._num)
+            os.environ["OCIMATIC_PROBLEM_NUMBER"] = _number_to_letter(self._num)
         if self._codename:
             os.environ["OCIMATIC_CODENAME"] = self._codename
         if blank_page:
@@ -857,11 +867,27 @@ class Statement:
         else:
             return utils.Result.fail("FAILED", long_msg=result.msg)
 
-    def io_samples(self) -> list[Test]:
+    def get_title(self) -> str:
+        title = (
+            self._get_title_from_statement() or self._codename or self._directory.name
+        )
+        if self._num:
+            return f"Problema {_number_to_letter(self._num)} - {title}"
+        else:
+            return title
+
+    def _get_title_from_statement(self) -> str | None:
+        for line in self._source.iter_lines():
+            m = self._TITLE_RE.match(line)
+            if m:
+                return m.group(1)
+        return None
+
+    def get_io_samples(self) -> list[Test]:
         """Find sample input data in the statement."""
         samples: set[str] = set()
         for line in self._source.iter_lines():
-            m = re.match(r"[^%]*\\sampleIO(?:\*)?(\[[^\]]*\]){0,2}{([^}]+)}", line)
+            m = self._SAMPLE_IO_RE.match(line)
             if m:
                 samples.add(m.group(2))
         return [
@@ -869,12 +895,12 @@ class Statement:
             for s in samples
         ]
 
-    def scores(self) -> SortedDict[Stn, int]:
+    def get_scores(self) -> SortedDict[Stn, int]:
         """Find the scores for each subtask."""
         scores: SortedDict[Stn, int] = SortedDict()
         sti = 1
         for line in self._source.iter_lines():
-            m = re.match(r"[^%]*\\subtask{([^}]+)}", line)
+            m = self._SUBTASK_RE.match(line)
             if m:
                 scores[Stn(sti)] = int(m.group(1))
                 sti += 1
@@ -887,6 +913,10 @@ class Statement:
             scores[Stn(sti)] = 100
 
         return scores
+
+
+def _number_to_letter(num: int) -> str:
+    return chr(ord("A") + num)
 
 
 def _fmt_stn_iter(should_fail: Iterable[Stn]) -> str:
