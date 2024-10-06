@@ -2,7 +2,9 @@
   "name": "ocimatic-testplan",
   "displayName": "ocimatic-testplan",
   "description": "",
-  "version": "0.0.1",
+  "version": "0.0.2",
+  "repository": "https://github.com/OCIoficial/ocimatic",
+  "publisher": "nlehmann",
   "engines": {
     "vscode": "^1.84.0"
   },

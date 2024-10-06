@@ -42,7 +42,18 @@
           "end": "$",
           "beginCaptures": {
             "1": { "name": "entity.name.variable" },
-            "3": { "name": "entity.name.variable" },
+            "3": {
+              "patterns": [
+                {
+                  "name": "entity.name.type",
+                  "match": "(copy|echo)"
+                },
+                {
+                  "name": "entity.name.type",
+                  "match": "\\w+\\.(py|cpp)"
+                }
+              ]
+            },
             "4": { "name": "entity.name.variable" }
           }
         }
