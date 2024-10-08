@@ -199,7 +199,11 @@ def parse_comments(file: Path, comment_start: str) -> Iterator[ShouldFail]:
             break
         else:
             path = utils.relative_to_cwd(file)
-            utils.fatal_error(f"Invalid comment `{m.group(0)}` in {path}")
+            utils.show_message(
+                "Warning",
+                f"Invalid comment `{m.group(0)}` in {path}",
+                utils.WARNING,
+            )
 
 
 def comment_iter(file_path: Path, comment_start: str) -> Iterator[re.Match[str]]:

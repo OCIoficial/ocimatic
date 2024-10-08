@@ -749,8 +749,8 @@ Solutions with issues:
 Summary
 -------
 Some partial solutions had issues when running or didn't pass/fail the subtasks they were supposed to.
-Run them individually with `ocimatic run` to get more information. Remember to set an appropriate timeout
-using the `--timeout` flag.
+Run them individually with `ocimatic run` to get more information. When running a solution individually
+remember to set an appropriate timeout using the `--timeout` flag.
 
 Solutions with issues:
 """,
