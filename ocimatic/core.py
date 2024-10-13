@@ -871,7 +871,7 @@ class Statement:
         title = (
             self._get_title_from_statement() or self._codename or self._directory.name
         )
-        if self._num:
+        if self._num is not None:
             return f"Problema {_number_to_letter(self._num)} - {title}"
         else:
             return title
