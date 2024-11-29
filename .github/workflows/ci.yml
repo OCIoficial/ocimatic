@@ -24,6 +24,9 @@ jobs:
       - name: mypy
         run: |
           mypy .
+      - name: pyright
+        run: |
+          pyright .
       - name: ruff format
         run: |
           ruff format --check .

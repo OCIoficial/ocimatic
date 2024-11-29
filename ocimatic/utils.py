@@ -16,7 +16,7 @@ import ocimatic
 _P = ParamSpec("_P")
 _T = TypeVar("_T")
 
-RESET = Style.RESET_ALL
+RESET: str = Style.RESET_ALL
 BOLD = Style.BRIGHT
 RED = Fore.RED
 GREEN = Fore.GREEN
@@ -32,7 +32,7 @@ ERROR = BOLD + RED
 
 
 def _success_char() -> str:
-    """In windows Windows-1252 encoding ✓ is not available, so we use + instead."""
+    """In Windows-1252 encoding ✓ is not available, so we use + instead."""
     try:
         "✓".encode(sys.stdout.encoding)
         return "✓"
@@ -59,8 +59,7 @@ def set_verbosity(verbosity: Verbosity) -> None:
 
 
 def colorize(text: str, color: str) -> str:
-    # pyright doesn't like the cast here, but it's needed by mypy
-    return cast(str, color + text + RESET)  # pyright: ignore [reportUnnecessaryCast]
+    return color + text + RESET
 
 
 def bold(text: str) -> str:
@@ -91,8 +90,7 @@ class Status(Enum):
 
 
 class IntoWorkResult(Protocol):
-    def into_work_result(self) -> WorkResult:
-        ...
+    def into_work_result(self) -> WorkResult: ...
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -167,7 +165,8 @@ def fatal_error(message: str) -> NoReturn:
 
 
 def show_message(label: str, msg: str, color: str = INFO) -> None:
-    write(" %s \n" % colorize(label + ": " + str(msg), color))
+    # write(" %s \n" % colorize(label + ": " + str(msg), color))
+    write(" {} \n".format(colorize(label + ": " + str(msg), color)))
 
 
 _TIntoWorkResult = TypeVar("_TIntoWorkResult", bound=IntoWorkResult)
@@ -325,8 +324,7 @@ def relative_to_cwd(path: Path) -> str:
 
 
 class Comparable(Protocol):
-    def __lt__(self: _T, __other: _T) -> bool:
-        ...
+    def __lt__(self: _T, other: _T) -> bool: ...
 
 
 _K = TypeVar("_K", bound=Comparable)
@@ -377,6 +375,8 @@ class Stn:
     """A wrapper over an integer used as an identifier for a subtask."""
 
     def __init__(self, stn: int) -> None:
+        if stn < 1:
+            raise ValueError("Subtask number must be greater than or equal to 1")
         self._idx = stn
 
     def __hash__(self) -> int:

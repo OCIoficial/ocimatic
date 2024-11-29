@@ -83,8 +83,7 @@ class Runnable(ABC):
         in_path: Path | None = None,
         out_path: Path | None = None,
         args: list[str] | None = None,
-    ) -> RunSuccess | RunError:
-        ...
+    ) -> RunSuccess | RunError: ...
 
     @overload
     def run(
@@ -94,8 +93,7 @@ class Runnable(ABC):
         out_path: Path | None = None,
         args: list[str] | None = None,
         timeout: float | None = None,
-    ) -> RunResult:
-        ...
+    ) -> RunResult: ...
 
     def run(
         self,
@@ -113,6 +111,7 @@ class Runnable(ABC):
             out_path: File to redirect stdout to. If None output is redirected to a temporary file.
             args: Arguments to pass to the runnable.
             timeout: Timeout for the process. If None, there's no timeout.
+
         """
         assert in_path is None or in_path.exists()
         with contextlib.ExitStack() as stack:
@@ -184,9 +183,9 @@ class Runnable(ABC):
 def ret_code_to_str(ret: int) -> str:
     if ret < 0:
         sig = -ret
-        msg = "Execution killed with signal %d" % sig
+        msg = f"Execution killed with signal {sig}"
         if sig in SIGNALS:
-            msg += ": %s" % SIGNALS[sig]
+            msg += f": {SIGNALS[sig]}"
         return msg
     else:
         return f"Execution ended with error (return code {ret})"

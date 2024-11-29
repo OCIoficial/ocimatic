@@ -156,13 +156,13 @@ class Solution:
             return dataset.gen_expected(build_result, sample=sample)
 
     @utils.work("Build")
-    def build(self) -> utils.WorkResult:
+    def build(self) -> utils.Result:
         """Build solution."""
         result = self._source.build(force=True)
         if isinstance(result, BuildError):
-            return utils.WorkResult.fail(short_msg="Failed", long_msg=result.msg)
+            return utils.Result.fail(short_msg="Failed", long_msg=result.msg)
         else:
-            return utils.WorkResult.success(short_msg="OK")
+            return utils.Result.success(short_msg="OK")
 
     @property
     def name(self) -> str:
