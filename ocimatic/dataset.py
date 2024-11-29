@@ -58,7 +58,7 @@ class TestResult:
         def into_work_result(self, mode: RunMode) -> WorkResult:
             msg = f"{self.outcome} [{self.run_result.time:.3f}s]"
             if self.checker_result.msg is not None:
-                msg += " - %s" % self.checker_result.msg
+                msg += f" - {self.checker_result.msg}"
             if mode is RunMode.check_partial:
                 return WorkResult.info(short_msg=msg)
             else:
@@ -286,10 +286,10 @@ class Test:
             return WorkResult.fail(short_msg="Cannot find dos2unix")
         if not shutil.which("sed"):
             return WorkResult.fail(short_msg="Cannot find sed")
-        tounix_input = 'dos2unix "%s"' % self.in_path
-        tounix_expected = 'dos2unix "%s"' % self.expected_path
-        sed_input = "sed -i -e '$a\\' \"%s\"" % self.in_path
-        sed_expected = "sed -i -e '$a\\' \"%s\"" % self.expected_path
+        tounix_input = f'dos2unix "{self.in_path}"'
+        tounix_expected = f'dos2unix "{self.expected_path}"'
+        sed_input = f"sed -i -e '$a\\' \"{self.in_path}\""
+        sed_expected = "sed -i -e '$a\\' \"{sel.fexpected_path}\""
         null = subprocess.DEVNULL
         st = subprocess.call(tounix_input, stdout=null, stderr=null, shell=True)
         st += subprocess.call(sed_input, stdout=null, stderr=null, shell=True)
@@ -633,14 +633,16 @@ class Dataset:
         return testplan.ancestors_of(stn)
 
     def validate_input(self, stn: Stn | None) -> utils.Status:
-        validators: list[Path | None] = [None for _ in self._subtasks]
+        validators: SortedDict[Stn, Path | None]
         if self.testplan is not None:
             validators = self.testplan.validators()
+        else:
+            validators = SortedDict((sti, None) for sti in self._subtasks)
 
-        zipped = zip(self._subtasks.items(), validators, strict=True)
         status = utils.Status.success
-        for (sti, subtask), validator in zipped:
+        for sti, subtask in self._subtasks.items():
             if stn is None or stn == sti:
+                validator = validators[sti]
                 ancestors = [self._subtasks[stj] for stj in self.ancestors_of(sti)]
                 status &= subtask.validate_input(validator, ancestors)
         return status

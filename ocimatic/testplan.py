@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, cast
 
 from ocimatic import utils
 from ocimatic.runnable import ret_code_to_str
@@ -54,8 +54,8 @@ class Testplan:
     def subtasks(self) -> int:
         return len(self._subtasks)
 
-    def validators(self) -> list[Path | None]:
-        return [st.validator for st in self._subtasks.values()]
+    def validators(self) -> SortedDict[Stn, Path | None]:
+        return SortedDict((sti, st.validator) for sti, st in self._subtasks.items())
 
     def ancestors_of(self, stn: Stn) -> list[Stn]:
         visited: set[Stn] = set()
@@ -169,10 +169,11 @@ class Testplan:
         elif cmd == "echo":
             return _Echo(group, args)
         elif (ext := Path(cmd).suffix) in (".py", ".cpp"):
+            # mypy can't tell `ext` is either `.py` or `.cpp` from the check above
             return _Script(
                 group,
                 Path(self._directory, cmd),
-                ext,  # type: ignore
+                cast(_Script.VALID_EXTENSIONS, ext),  # pyright: ignore [reportUnnecessaryCast]
                 args,
                 self._directory,
             )
@@ -284,6 +285,10 @@ class _Command(ABC):
     def __init__(self, group: _GroupName) -> None:
         self._group = group
 
+    def _next_idx_in_group(self, tests_in_group: Counter[_GroupName]) -> int:
+        tests_in_group[self._group] += 1
+        return tests_in_group[self._group]
+
     def dst_file(self, directory: Path, idx: int) -> Path:
         return Path(directory, f"{self._group}-{idx}.in")
 
@@ -313,7 +318,7 @@ class _Copy(_Command):
             return utils.Result.fail(short_msg=msg)
         try:
             for file in files:
-                idx = _next_idx_in_group(self._group, tests_in_group)
+                idx = self._next_idx_in_group(tests_in_group)
                 shutil.copy(file, self.dst_file(dst_dir, idx))
             return _success_with_count_result(len(files))
         except Exception:  # pylint: disable=broad-except
@@ -333,7 +338,7 @@ class _Echo(_Command):
 
     @utils.work("echo", "{0}")
     def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> utils.Result:
-        idx = _next_idx_in_group(self._group, tests_in_group)
+        idx = self._next_idx_in_group(tests_in_group)
         with self.dst_file(dst_dir, idx).open("w") as test_file:
             test_file.write(" ".join(self._args) + "\n")
             return _success_with_count_result(1)
@@ -341,6 +346,7 @@ class _Echo(_Command):
 
 class _Script(_Command):
     VALID_EXTENSIONS = Literal[".py", ".cpp"]
+    _ext: VALID_EXTENSIONS
 
     def __init__(
         self,
@@ -393,7 +399,7 @@ class _Script(_Command):
                 else:
                     if current_file is None:
                         count += 1
-                        idx = _next_idx_in_group(self._group, tests_in_group)
+                        idx = self._next_idx_in_group(tests_in_group)
                         current_file = self.dst_file(dst_dir, idx).open("w")
                     current_file.write(char)
         finally:
@@ -417,10 +423,11 @@ class _Script(_Command):
     def _load_script(self) -> SourceCode | None:
         if not self._script_path.exists():
             return None
-        if self._ext == ".py":
-            return PythonSource(self._script_path)
-        elif self._ext == ".cpp":
-            return CppSource(self._script_path)
+        match self._ext:
+            case ".py":
+                return PythonSource(self._script_path)
+            case ".cpp":
+                return CppSource(self._script_path)
 
     def _args_with_seed(self, directory: Path, idx: int) -> list[str]:
         return [f"{directory.name}-{self._group}-{idx}", *self._args]
@@ -445,11 +452,6 @@ def _success_with_count_result(count: int) -> utils.Result:
 def _parse_args(args: str) -> list[str]:
     args = args.strip()
     return [a.encode().decode("unicode_escape") for a in shlex.split(args)]
-
-
-def _next_idx_in_group(group: _GroupName, tests_in_group: Counter[_GroupName]) -> int:
-    tests_in_group[group] += 1
-    return tests_in_group[group]
 
 
 def _has_cycles(subtasks: SortedDict[Stn, _Subtask]) -> bool:

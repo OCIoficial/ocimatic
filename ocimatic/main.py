@@ -117,7 +117,7 @@ def init(path: str, phase: str | None) -> None:
         core.Contest.create_layout(contest_path, phase)
         utils.show_message("Info", f"Contest [{path}] created", utils.OK)
     except Exception as exc:
-        utils.fatal_error("Couldn't create contest: %s." % exc)
+        utils.fatal_error(f"Couldn't create contest: {exc}.")
 
 
 @cloup.command(
