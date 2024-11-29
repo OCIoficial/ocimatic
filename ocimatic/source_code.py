@@ -60,8 +60,7 @@ class SourceCode(ABC):
         return btime < mtime
 
     @abstractmethod
-    def build(self, *, force: bool = False) -> Runnable | BuildError:
-        ...
+    def build(self, *, force: bool = False) -> Runnable | BuildError: ...
 
 
 class CppSource(SourceCode):
