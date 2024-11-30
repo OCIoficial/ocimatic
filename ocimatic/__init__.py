@@ -11,6 +11,8 @@ from typing import Any, ClassVar, cast
 
 import tomlkit
 
+from ocimatic.main import cli
+
 contest_root: Path = Path("/")
 
 
@@ -94,3 +96,7 @@ class Config:
 
 
 config = Config()
+
+
+def main() -> None:
+    cli()

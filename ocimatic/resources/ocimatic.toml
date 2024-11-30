@@ -1,11 +1,11 @@
 # This file can be used to configure the commands for compiling (and running) code in the various
 # languages supported by ocimatic. Normally, you should be able to get everything working by
 # installing the compilers/interpreters required for each language and having them in your `PATH`.
-# If you have an unusual environement that doesn't match ocimatic expectations, editing this file
+# If you have an unusual environment that doesn't match ocimatic expectations, editing this file
 # gives you more fine-grained control.
 #
-# Note that some parts of ocimatic will still work even if some of these commands are not working.
-# So you may be fine ignoring some parts of this file depending on how you want to use ocimatic.
+# Note that some parts of ocimatic would work even if some of these commands are not working.
+# So you may be fine ignoring parts of this file depending on how you want to use ocimatic.
 
 
 # Command and flags to compile C++ files. Besides the flags specified in this file, the command is
@@ -45,4 +45,4 @@ flags = ["--edition=2021", "-O"]
 # latex through ocimatic unless you want to generate the final problemset.
 [latex]
 command = "texfot"
-flags = ["pdflatex", "-shell-escape", "-file-line-error"]
+flags = ["-file-line-error", "-shell-escape", "pdflatex"]
