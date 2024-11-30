@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from string import Template
 
 import ocimatic
 from ocimatic import utils
@@ -221,14 +222,17 @@ class LatexSource:
     def iter_lines(self) -> Iterable[str]:
         yield from self._source.open()
 
+    def _cmd(self) -> str:
+        return Template(ocimatic.config.latex.command).substitute(
+            TEXNAME=self._source.name,
+        )
+
     def compile(self) -> Path | BuildError:
-        name = self._source.name
-        parent = self._source.parent
-        cmd = [ocimatic.config.latex.command, *ocimatic.config.latex.flags, name]
         complete = subprocess.run(
-            cmd,
-            cwd=parent,
+            self._cmd(),
+            cwd=self._source.parent,
             stdin=subprocess.DEVNULL,
+            shell=True,
             text=True,
             check=False,
             capture_output=True,

@@ -1,11 +1,11 @@
-# This file can be used to configure the commands for compiling (and running) code in the various
-# languages supported by ocimatic. Normally, you should be able to get everything working by
-# installing the compilers/interpreters required for each language and having them in your `PATH`.
-# If you have an unusual environment that doesn't match ocimatic expectations, editing this file
-# gives you more fine-grained control.
+# This file can be used to configure the commands for compiling and running code in the various
+# languages used  by ocimatic. Normally, you should be able to get everything working by installing
+# the compilers/interpreters required for each language and having them in your `PATH`. If you have
+# an unusual environment that doesn't match ocimatic expectations, editing this file gives you more
+# fine-grained control.
 #
-# Note that some parts of ocimatic would work even if some of these commands are not working.
-# So you may be fine ignoring parts of this file depending on how you want to use ocimatic.
+# Note that some parts of ocimatic would work even if some of these commands are not working. So you
+# may be fine ignoring parts of this file depending on how you want to use ocimatic.
 
 
 # Command and flags to compile C++ files. Besides the flags specified in this file, the command is
@@ -32,17 +32,18 @@ javac = "javac"
 jre = "java"
 
 
-# Command and flags to compile rust files. Rust solutions are rare so you may be good without
-# configuring this. However, we sometime write checkers in rust. If you are working in a solution
-# for a task that has a rust checker, you will need to have this working.
+# Command and flags to compile Rust files. Rust solutions are rare so you may be good without
+# configuring this. However, we sometime write checkers in rust. If you are working on a solution
+# for a task that has a Rust checker, you will need to have this working.
 [rust]
 command = "rustc"
 flags = ["--edition=2021", "-O"]
 
 
-# Command and flags to compile a latex file into a pdf. Typically, you can work on an statement by
+# Command used to compile a latex file into a pdf. Typically, you can work on an statement by
 # compiling the file in isolation using your preferred choice. Thus, one rarely needs to compile
 # latex through ocimatic unless you want to generate the final problemset.
 [latex]
-command = "texfot"
-flags = ["-file-line-error", "-shell-escape", "pdflatex"]
+# Template used to generate the command. The generated string will be interpreted by the shell. The
+# $TEXTNAME placeholder will be substituted by the filename.
+command = 'texfot pdflatex -file-line-error -shell-escape "$TEXNAME"'

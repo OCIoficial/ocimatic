@@ -58,11 +58,10 @@ class RustConfig:
 @dataclass(kw_only=True)
 class LatexConfig:
     command: str
-    flags: list[str]
 
     @staticmethod
     def load(config: dict[Any, Any]) -> LatexConfig:
-        return LatexConfig(command=config["command"], flags=config["flags"])
+        return LatexConfig(command=config["command"])
 
 
 class Config:
