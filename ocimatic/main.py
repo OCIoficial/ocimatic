@@ -603,7 +603,3 @@ def cli(ctx: click.Context) -> None:
     # run `ocimatic setup` even if there are issues with the config file.
     if ctx.invoked_subcommand != "setup":
         ocimatic.config.initialize()
-
-
-def main() -> None:
-    cli()
