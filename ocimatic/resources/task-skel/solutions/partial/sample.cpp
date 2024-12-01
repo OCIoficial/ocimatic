@@ -7,8 +7,8 @@
 // subtasks and only these subtasks. If no comment is present, ocimatic will
 // assume all subtasks should fail.
 //
-// For the sample task, this solution should fail the subtask 2 because it uses
-// `int` instead of `long`. This implies the solution should pass subtask 1.
+// For the sample task, this solution should fail subtask 2 because it uses
+// `int` instead of `long` (this implies the solution should pass subtask 1).
 
 // @ocimatic should-fail=[st2]
 #include <iostream>

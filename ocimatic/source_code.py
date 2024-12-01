@@ -9,7 +9,7 @@ from pathlib import Path
 from string import Template
 
 import ocimatic
-from ocimatic import utils
+from ocimatic import ui, utils
 from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
 from ocimatic.utils import Stn
 
@@ -199,10 +199,10 @@ def parse_comments(file: Path, comment_start: str) -> Iterator[ShouldFail]:
             break
         else:
             path = utils.relative_to_cwd(file)
-            utils.show_message(
+            ui.show_message(
                 "Warning",
                 f"Invalid comment `{m.group(0)}` in {path}",
-                utils.WARNING,
+                ui.WARNING,
             )
 
 

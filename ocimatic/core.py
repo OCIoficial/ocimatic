@@ -17,9 +17,10 @@ import tomlkit
 from click.shell_completion import CompletionItem
 
 import ocimatic
-from ocimatic import utils
+from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
+from ocimatic.result import Result, Status
 from ocimatic.solutions import Solution
 from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
 from ocimatic.testplan import Testplan
@@ -79,7 +80,7 @@ class Contest:
     to a directory in the filesystem.
     """
 
-    COLOR = utils.MAGENTA
+    COLOR = ui.MAGENTA
 
     @staticmethod
     def create_layout(dest: Path, phase: str | None) -> None:
@@ -148,58 +149,58 @@ class Contest:
     def tasks(self) -> list[Task]:
         return self._tasks
 
-    @utils.hd1("Generating problemset", color=COLOR)
-    def build_problemset(self) -> utils.Status:
+    @ui.hd1("Generating problemset", color=COLOR)
+    def build_problemset(self) -> Status:
         """Build titlepage and statement of all tasks. Then merge all pdfs into a single pdf."""
-        status = utils.Status.success
+        status = Status.success
         status &= self._build_problemset_twoside()
         status &= self._build_problemset_oneside()
         return status
 
-    @utils.hd1("oneside")
-    def _build_problemset_oneside(self) -> utils.Status:
+    @ui.hd1("oneside")
+    def _build_problemset_oneside(self) -> Status:
         os.environ["OCIMATIC_SIDENESS"] = "oneside"
         if self._compile_titlepage().is_fail():
-            return utils.Status.fail
+            return Status.fail
 
-        status = utils.Status.success
+        status = Status.success
         for task in self._tasks:
             status &= task.statement.build(blank_page=False).status
 
-        if status == utils.Status.fail:
-            return utils.Status.fail
+        if status == Status.fail:
+            return Status.fail
 
         return self._merge_pdfs("oneside.pdf").status
 
-    @utils.hd1("twoside")
-    def _build_problemset_twoside(self) -> utils.Status:
+    @ui.hd1("twoside")
+    def _build_problemset_twoside(self) -> Status:
         os.environ["OCIMATIC_SIDENESS"] = "twoside"
         if self._compile_titlepage().is_fail():
-            return utils.Status.fail
+            return Status.fail
 
-        status: utils.Status = utils.Status.success
+        status: Status = Status.success
         for i, task in enumerate(self._tasks):
             # Add blank page after last task to avoid showing the back of the last page.
             is_last = i == len(self._tasks) - 1
             status &= task.statement.build(blank_page=is_last).status
 
-        if status == utils.Status.fail:  # pyright: ignore [reportUnnecessaryComparison]
-            return utils.Status.fail
+        if status == Status.fail:  # pyright: ignore [reportUnnecessaryComparison]
+            return Status.fail
 
         return self._merge_pdfs("twoside.pdf").status
 
-    @utils.hd1("Creating archive", color=COLOR)
+    @ui.hd1("Creating archive", color=COLOR)
     def archive(self) -> None:
         """Package statements and datasets of all tasks into a single zip file."""
         with tempfile.TemporaryDirectory() as tmpdir_str:
             tmpdir = Path(tmpdir_str)
             for task in self._tasks:
                 if not task.copy_to(tmpdir):
-                    utils.writeln()
-                    utils.show_message(
+                    ui.writeln()
+                    ui.show_message(
                         "Error",
                         f"Couldn't copy task {task.name} to archive.",
-                        utils.ERROR,
+                        ui.ERROR,
                     )
                     return
 
@@ -212,17 +213,17 @@ class Contest:
             Path("archive.zip").unlink(missing_ok=True)
             shutil.make_archive("archive", "zip", tmpdir)
 
-    @utils.work("LATEX", "titlepage.tex")
-    def _compile_titlepage(self) -> utils.Result:
+    @ui.work("LATEX", "titlepage.tex")
+    def _compile_titlepage(self) -> Result:
         """Compile title page latex."""
         result = self._titlepage.compile()
         if isinstance(result, Path):
-            return utils.Result.success(short_msg="OK")
+            return Result.success(short_msg="OK")
         else:
-            return utils.Result.fail(short_msg="FAILED", long_msg=result.msg)
+            return Result.fail(short_msg="FAILED", long_msg=result.msg)
 
-    @utils.work("MERGE", "{1}")
-    def _merge_pdfs(self, filename: str) -> utils.Result:
+    @ui.work("MERGE", "{1}")
+    def _merge_pdfs(self, filename: str) -> Result:
         """Merge titlepage and statements pdfs into a single file."""
         try:
             merger = pypdf.PdfWriter()
@@ -232,7 +233,7 @@ class Contest:
             for task in self._tasks:
                 merger.add_outline_item(task.title, len(merger.pages))
                 if not task.statement.pdf:
-                    return utils.Result.fail(
+                    return Result.fail(
                         short_msg="FAILED",
                         long_msg="No statement",
                     )
@@ -240,9 +241,9 @@ class Contest:
 
             merger.write(self._directory / filename)  # pyright: ignore [reportUnknownMemberType]
             merger.close()
-            return utils.Result.success(short_msg="OK")
+            return Result.success(short_msg="OK")
         except Exception as exc:
-            return utils.Result.fail(short_msg="FAILED", long_msg=str(exc))
+            return Result.fail(short_msg="FAILED", long_msg=str(exc))
 
     @property
     def name(self) -> str:
@@ -313,7 +314,7 @@ class Task:
     and a dataset. A task is associated to a directory in the filesystem.
     """
 
-    COLOR = utils.MAGENTA + utils.BOLD
+    COLOR = ui.MAGENTA + ui.BOLD
 
     @staticmethod
     def create_layout(task_path: Path) -> None:
@@ -326,8 +327,8 @@ class Task:
         # Init config
         TaskConfig.init(task_path)
 
-        # We put oci.cls and logo.eps in the statement directory to make it easier to work on the
-        # pdf without using ocimatic.
+        # We put `oci.cls` and `logo.eps` in the statement directory to make it easier to work on
+        # the pdf without using ocimatic.
         contest_skel = ocimatic_dir / "resources" / "contest-skel"
         statement_path = task_path / "statement"
         shutil.copy2(contest_skel / "oci.cls", statement_path)
@@ -384,7 +385,7 @@ class Task:
     def title(self) -> str:
         return self._statement.get_title()
 
-    @utils.hd1("{0}", "Copy to archive")
+    @ui.hd1("{0}", "Copy to archive")
     def copy_to(self, directory: Path) -> bool:
         new_dir = directory / self.codename
         new_dir.mkdir()
@@ -405,11 +406,11 @@ class Task:
         shutil.copy2(self._directory / "statement" / "statement.pdf", statement)
         return True
 
-    @utils.hd1("{0}", "Running testplan", COLOR)
-    def run_testplan(self, stn: Stn | None) -> utils.Status:
+    @ui.hd1("{0}", "Running testplan", COLOR)
+    def run_testplan(self, stn: Stn | None) -> Status:
         if self._dataset.testplan is None:
-            utils.writeln(" Skipping: task has static dataset")
-            return utils.Status.success
+            ui.writeln(" Skipping: task has static dataset")
+            return Status.success
         return self._dataset.testplan.run(stn)
 
     def load_solution_from_path(self, path: Path) -> Solution | None:
@@ -481,15 +482,15 @@ class Task:
         ]
         return completions
 
-    @utils.hd1("{0}", "Validating input files", COLOR)
-    def validate_input(self, stn: Stn | None) -> utils.Status:
+    @ui.hd1("{0}", "Validating input files", COLOR)
+    def validate_input(self, stn: Stn | None) -> Status:
         return self._dataset.validate_input(stn)
 
-    @utils.hd1("{0}", "Validating output files", COLOR)
-    def validate_output(self, stn: Stn | None) -> utils.Status:
+    @ui.hd1("{0}", "Validating output files", COLOR)
+    def validate_output(self, stn: Stn | None) -> Status:
         return self._dataset.validate_output(stn)
 
-    @utils.hd1("{0}", "Compressing dataset", COLOR)
+    @ui.hd1("{0}", "Compressing dataset", COLOR)
     def compress_dataset(self, *, random_sort: bool) -> None:
         """Compress dataset into a single file."""
         self._dataset.compress(random_sort=random_sort)
@@ -506,24 +507,24 @@ class Task:
     def statement(self) -> Statement:
         return self._statement
 
-    @utils.hd1("{0}", "Score Params", COLOR)
+    @ui.hd1("{0}", "Score Params", COLOR)
     def score_params(self) -> None:
         counts = self._dataset.counts()
         scores = self._statement.get_scores()
         regexes = self._dataset.regexes()
         assert regexes.keys() == counts.keys()
         if scores.keys() != counts.keys():
-            utils.show_message(
+            ui.show_message(
                 "error",
                 "the number of subtasks in the statement doesn't match the number of "
                 "subtasks in the dataset.",
-                utils.ERROR,
+                ui.ERROR,
             )
             return
 
         if len(counts) == len(scores) == 1:
-            utils.show_message("Sum", str(scores[Stn(1)] / counts[Stn(1)]))
-        utils.show_message(
+            ui.show_message("Sum", str(scores[Stn(1)] / counts[Stn(1)]))
+        ui.show_message(
             "GroupMin",
             json.dumps(
                 [
@@ -537,25 +538,25 @@ class Task:
             ),
         )
 
-    @utils.hd1("{0}", "Solutions", COLOR)
+    @ui.hd1("{0}", "Solutions", COLOR)
     def list_solutions(self) -> None:
         for sol in self._correct:
-            utils.writeln(f" * [correct] {sol.source.file.name}", utils.CYAN)
+            ui.writeln(f" * [correct] {sol.source.file.name}", ui.CYAN)
         for sol in self._partial:
             should_fail = _fmt_stn_iter(sol.should_fail(self._dataset))
-            utils.write(f" * [partial] {sol.source.file.name}", utils.CYAN)
-            utils.writeln(f", should-fail={should_fail}", utils.CYAN)
+            ui.write(f" * [partial] {sol.source.file.name}", ui.CYAN)
+            ui.writeln(f", should-fail={should_fail}", ui.CYAN)
 
-    @utils.hd1("{0}", "Normalizing", COLOR)
+    @ui.hd1("{0}", "Normalizing", COLOR)
     def normalize(self) -> None:
         self._dataset.normalize()
 
-    @utils.hd1("{0}", "Running solution", COLOR)
+    @ui.hd1("{0}", "Running solution", COLOR)
     def run_solution(self, solution: Path, timeout: float, stn: Stn | None) -> None:
         """Run a solution reporting outcome and running time."""
         sol = self.load_solution_from_path(solution)
         if not sol:
-            return utils.show_message("Error", "Solution not found", utils.ERROR)
+            return ui.show_message("Error", "Solution not found", ui.ERROR)
 
         results = sol.run_on_dataset(
             self._dataset,
@@ -565,7 +566,7 @@ class Task:
             stn=stn,
         )
         if results:
-            utils.writeln()
+            ui.writeln()
             stats = results.runtime_stats()
             if stats:
                 _write_stats(stats)
@@ -575,14 +576,14 @@ class Task:
                 if stn is not None:
                     pass
                 elif sol.check_results(results):
-                    utils.writeln()
-                    utils.writeln(
+                    ui.writeln()
+                    ui.writeln(
                         f"Solution failed the subtasks it was supposed to fail\n * should-fail={should_fail}",
-                        utils.OK,
+                        ui.OK,
                     )
                 else:
                     failed = _fmt_stn_iter(results.failed_subtasks())
-                    utils.write(
+                    ui.write(
                         f"""
 The results don't match the solution's specification.
  - Subtasks expected to fail: {should_fail}
@@ -595,17 +596,17 @@ fail subtasks 1 and 2, write the following comment at the beginning of the file:
 Ocimatic will check that the solution fails these subtasks and only these subtasks. If
 no comment is specified, ocimatic will assume that all subtasks should fail.
 """,
-                        utils.ERROR,
+                        ui.ERROR,
                     )
             else:
-                utils.writeln()
+                ui.writeln()
                 if results.check_all_correct():
-                    utils.writeln("Result: All test passed", utils.OK)
+                    ui.writeln("Result: All test passed", ui.OK)
                 else:
-                    utils.writeln("Result: Some tests failed", utils.ERROR)
+                    ui.writeln("Result: Some tests failed", ui.ERROR)
 
-    @utils.hd1("{0}", "Checking dataset", COLOR)
-    def check_dataset(self) -> utils.Status:
+    @ui.hd1("{0}", "Checking dataset", COLOR)
+    def check_dataset(self) -> Status:
         """Check input/output correctness.
 
         First run all correct solutions against all test cases and sample input. Then use the running
@@ -613,28 +614,28 @@ no comment is specified, ocimatic will assume that all subtasks should fail.
         and ensure they fail the subtasks they are suppose to fail.
         """
         if sum(c for c in self._dataset.counts().values()) == 0:
-            utils.show_message(
+            ui.show_message(
                 "Error",
                 "No test cases found. Generate the dataset by running `ocimatic run-testplan && ocimatic gen-expected`.",
-                utils.ERROR,
+                ui.ERROR,
             )
-            return utils.Status.fail
+            return Status.fail
 
         if not self._dataset.check_all_have_expected():
-            utils.show_message(
+            ui.show_message(
                 "Error",
                 "Some test cases don't have expected output, generate them with `ocimatic gen-expected`.",
-                utils.ERROR,
+                ui.ERROR,
             )
-            return utils.Status.fail
+            return Status.fail
 
-        # Do not early return if there are validate input/output errors but still report them at the end
+        # Do not early return if there are input/output validation errors but still report them at the end
         validate_input_status = self._check_dataset_validate_input()
         validate_output_status = self._check_dataset_validate_output()
 
         stats = self._check_dataset_run_correct_solutions()
         if not stats:
-            return utils.Status.fail
+            return Status.fail
 
         return (
             self._check_dataset_run_partial_solutions(stats)
@@ -642,27 +643,27 @@ no comment is specified, ocimatic will assume that all subtasks should fail.
             and validate_output_status
         )
 
-    def _check_dataset_validate_input(self) -> utils.Status:
-        utils.writeln()
-        utils.writeln("Validating input files", utils.INFO)
-        utils.writeln()
+    def _check_dataset_validate_input(self) -> Status:
+        ui.writeln()
+        ui.writeln("Validating input files", ui.INFO)
+        ui.writeln()
         status = self._dataset.validate_input(stn=None)
-        utils.writeln()
-        if status == utils.Status.fail:
-            utils.writeln("Some subtasks didn't pass input validation.", utils.ERROR)
-            utils.writeln()
+        ui.writeln()
+        if status == Status.fail:
+            ui.writeln("Some subtasks didn't pass input validation.", ui.ERROR)
+            ui.writeln()
 
         return status
 
-    def _check_dataset_validate_output(self) -> utils.Status:
-        utils.writeln()
-        utils.writeln("Validating expected output files", utils.INFO)
-        utils.writeln()
+    def _check_dataset_validate_output(self) -> Status:
+        ui.writeln()
+        ui.writeln("Validating expected output files", ui.INFO)
+        ui.writeln()
         status = self._dataset.validate_output(stn=None)
-        utils.writeln()
-        if status == utils.Status.fail:
-            utils.writeln("Some subtasks didn't pass output validation.", utils.ERROR)
-            utils.writeln()
+        ui.writeln()
+        if status == Status.fail:
+            ui.writeln("Some subtasks didn't pass output validation.", ui.ERROR)
+            ui.writeln()
 
         return status
 
@@ -670,15 +671,15 @@ no comment is specified, ocimatic will assume that all subtasks should fail.
         stats = RuntimeStats.unit()
 
         if not self._correct:
-            utils.show_message(
+            ui.show_message(
                 "Error",
                 "at least one correct solution needed",
-                utils.ERROR,
+                ui.ERROR,
             )
             return None
 
         # Run correct solutions
-        utils.writeln("Running correct solutions", utils.INFO)
+        ui.writeln("Running correct solutions", ui.INFO)
         failed: list[Solution] = []
         for sol in self._correct:
             results = sol.run_on_dataset(
@@ -694,7 +695,7 @@ no comment is specified, ocimatic will assume that all subtasks should fail.
             stats += new_stats
 
         if failed:
-            utils.write(
+            ui.write(
                 """
 Summary
 -------
@@ -703,32 +704,32 @@ Some correct solutions failed to run or produced wrong results. Run them individ
 
 Solutions with issues:
 """,
-                utils.RED,
+                ui.RED,
             )
 
             for sol in failed:
-                utils.writeln(" * " + str(sol), utils.RED)
+                ui.writeln(" * " + str(sol), ui.RED)
             return None
 
-        utils.writeln()
+        ui.writeln()
         _write_stats(stats)
-        utils.writeln()
-        utils.writeln("All correct solutions produced correct results", utils.GREEN)
+        ui.writeln()
+        ui.writeln("All correct solutions produced correct results", ui.GREEN)
         return stats
 
-    def _check_dataset_run_partial_solutions(self, stats: RuntimeStats) -> utils.Status:
+    def _check_dataset_run_partial_solutions(self, stats: RuntimeStats) -> Status:
         timeout = stats.set_limit()
 
-        utils.writeln()
-        utils.writeln("Running partial solutions", utils.INFO)
-        utils.writeln()
-        utils.writeln(
+        ui.writeln()
+        ui.writeln("Running partial solutions", ui.INFO)
+        ui.writeln()
+        ui.writeln(
             f"Timeout set to {timeout:.1f}s ({stats.fmt_limit_calculation()})",
         )
         if not self._partial:
-            utils.writeln()
-            utils.writeln("warning: no partial solutions", utils.YELLOW)
-            return utils.Status.success
+            ui.writeln()
+            ui.writeln("warning: no partial solutions", ui.YELLOW)
+            return Status.success
 
         failed: list[Solution] = []
         for sol in self._partial:
@@ -740,48 +741,48 @@ Solutions with issues:
             )
             if results is None or not sol.check_results(results):
                 if len(self._partial) > 1:
-                    utils.writeln("error: issues found", utils.RED)
+                    ui.writeln("error: issues found", ui.RED)
                 failed.append(sol)
 
         if failed:
-            utils.write(
+            ui.write(
                 """
 Summary
 -------
 Some partial solutions had issues when running or didn't pass/fail the subtasks they were supposed to.
-Run them individually with `ocimatic run` to get more information. When running a solution individually
+Run them individually with `ocimatic run` to get more information. When running a solution individually,
 remember to set an appropriate timeout using the `--timeout` flag.
 
 Solutions with issues:
 """,
-                utils.RED,
+                ui.RED,
             )
             for sol in failed:
-                utils.writeln(" * " + str(sol), utils.RED)
-            return utils.Status.fail
+                ui.writeln(" * " + str(sol), ui.RED)
+            return Status.fail
 
-        utils.writeln()
-        utils.writeln(
+        ui.writeln()
+        ui.writeln(
             "All partial solutions passed/failed the subtasks they were supposed to.",
-            utils.GREEN,
+            ui.GREEN,
         )
-        return utils.Status.success
+        return Status.success
 
-    @utils.hd1("{0}", "Building solutions", COLOR)
+    @ui.hd1("{0}", "Building solutions", COLOR)
     def build_solution(self, solution: Path) -> None:
         """Force compilation of solutions."""
         sol = self.load_solution_from_path(solution)
         if not sol:
-            return utils.show_message("Error", "Solution not found", utils.ERROR)
+            return ui.show_message("Error", "Solution not found", ui.ERROR)
         sol.build()
 
-    @utils.hd1("{0}", "Generating expected output", COLOR)
+    @ui.hd1("{0}", "Generating expected output", COLOR)
     def gen_expected(
         self,
         *,
         sample: bool = False,
         solution: Path | None = None,
-    ) -> utils.Status:
+    ) -> Status:
         """Generate expected outputs files for the dataset by running a correct solution.
 
         If `sample` is True, also generate expected output for sample input. If `solution` is
@@ -789,11 +790,11 @@ Solutions with issues:
         prioritizing C++ solutions.
         """
         if self._config.static_dataset:
-            utils.show_message("skipping", "task has a static dataset.")
-            return utils.Status.success
+            ui.show_message("skipping", "task has a static dataset.")
+            return Status.success
         if not self._correct:
-            utils.show_message("error", "no correct solution.", utils.RED)
-            return utils.Status.fail
+            ui.show_message("error", "no correct solution.", ui.RED)
+            return Status.fail
         generator = None
         if solution:
             generator = self.load_solution_from_path(solution)
@@ -809,16 +810,16 @@ Solutions with issues:
             generator = sols[0] if sols else None
 
         if not generator:
-            utils.fatal_error("solution not found")
-        if generator.gen_expected(self._dataset, sample=sample) == utils.Status.fail:
-            return utils.Status.fail
+            ui.fatal_error("solution not found")
+        if generator.gen_expected(self._dataset, sample=sample) == Status.fail:
+            return Status.fail
 
         if sum(c for c in self._dataset.counts().values()) == 0:
-            utils.show_message("warning", "empty dataset", utils.WARNING)
+            ui.show_message("warning", "empty dataset", ui.WARNING)
 
-        return utils.Status.success
+        return Status.success
 
-    @utils.hd1("{0}", "Building statement", COLOR)
+    @ui.hd1("{0}", "Building statement", COLOR)
     def build_statement(self, *, blank_page: bool = False) -> None:
         """Generate pdf for the statement."""
         self._statement.build(blank_page=blank_page)
@@ -851,8 +852,8 @@ class Statement:
     def __str__(self) -> str:
         return str(self._source)
 
-    @utils.work("LATEX")
-    def build(self, *, blank_page: bool) -> utils.Result:
+    @ui.work("LATEX")
+    def build(self, *, blank_page: bool) -> Result:
         """Compile latex statement."""
         if self._num is not None:
             os.environ["OCIMATIC_PROBLEM_NUMBER"] = _number_to_letter(self._num)
@@ -863,9 +864,9 @@ class Statement:
 
         result = self._source.compile()
         if isinstance(result, Path):
-            return utils.Result.success("OK")
+            return Result.success("OK")
         else:
-            return utils.Result.fail("FAILED", long_msg=result.msg)
+            return Result.fail("FAILED", long_msg=result.msg)
 
     def get_title(self) -> str:
         title = (
@@ -905,10 +906,10 @@ class Statement:
                 scores[Stn(sti)] = int(m.group(1))
                 sti += 1
         if not scores:
-            utils.show_message(
+            ui.show_message(
                 "warning",
                 "couldn't infer the score from the statement, assuming a single subtask with 100 points.",
-                utils.WARNING,
+                ui.WARNING,
             )
             scores[Stn(sti)] = 100
 
@@ -925,6 +926,6 @@ def _fmt_stn_iter(should_fail: Iterable[Stn]) -> str:
 
 
 def _write_stats(stats: RuntimeStats) -> None:
-    utils.writeln("Running time")
-    utils.writeln(f"  Max: {stats.max:.3f}s")
-    utils.writeln(f"  Min: {stats.min:.3f}s")
+    ui.writeln("Running time")
+    ui.writeln(f"  Max: {stats.max:.3f}s")
+    ui.writeln(f"  Min: {stats.min:.3f}s")

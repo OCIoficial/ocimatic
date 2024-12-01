@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TextIO, overload
 
 import ocimatic
-from ocimatic.utils import Error
+from ocimatic.result import Error
 
 SIGNALS = {
     1: "SIGHUP",
@@ -152,7 +152,6 @@ class Runnable(ABC):
 
             stdout.seek(0)
             return RunSuccess(time=time, stdout=stdout.read(), stderr=complete.stderr)
-        raise AssertionError()
 
     def run_on_input(self, input: Path | TextIO) -> None:
         with contextlib.ExitStack() as stack:

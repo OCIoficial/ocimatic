@@ -14,7 +14,8 @@ from click.shell_completion import CompletionItem
 from cloup.constraints import If, accept_none, mutually_exclusive
 
 import ocimatic
-from ocimatic import core, server, utils
+from ocimatic import core, server, ui
+from ocimatic.result import Status
 from ocimatic.utils import Stn
 
 
@@ -36,15 +37,15 @@ class CLI:
         if not self._data:
             result = core.find_contest_root()
             if not result:
-                utils.fatal_error("ocimatic was not called inside a contest.")
+                ui.fatal_error("ocimatic was not called inside a contest.")
             self._data = (core.Contest(result[0]), result[1])
         return self._data
 
     def new_task(self, name: str) -> None:
         if Path(self.contest.directory, name).exists():
-            utils.fatal_error("Cannot create task in existing directory.")
+            ui.fatal_error("Cannot create task in existing directory.")
         self.contest.new_task(name)
-        utils.show_message("Info", f"Task [{name}] created", utils.OK)
+        ui.show_message("Info", f"Task [{name}] created", ui.OK)
 
     def select_task(self, name: str | None) -> core.Task | None:
         task = None
@@ -113,11 +114,11 @@ def init(path: str, phase: str | None) -> None:
     try:
         contest_path = Path(Path.cwd(), path)
         if contest_path.exists():
-            utils.fatal_error("Couldn't create contest. Path already exists")
+            ui.fatal_error("Couldn't create contest. Path already exists")
         core.Contest.create_layout(contest_path, phase)
-        utils.show_message("Info", f"Contest [{path}] created", utils.OK)
+        ui.show_message("Info", f"Contest [{path}] created", ui.OK)
     except Exception as exc:
-        utils.fatal_error(f"Couldn't create contest: {exc}.")
+        ui.fatal_error(f"Couldn't create contest: {exc}.")
 
 
 @cloup.command(
@@ -175,35 +176,35 @@ Runs multiple validations on the dataset:\n
 )
 @cloup.pass_obj
 def check_dataset(cli: CLI) -> None:
-    utils.set_verbosity(utils.Verbosity.quiet)
+    ui.set_verbosity(ui.Verbosity.quiet)
     tasks = cli.select_tasks()
-    failed = [task for task in tasks if task.check_dataset() == utils.Status.fail]
+    failed = [task for task in tasks if task.check_dataset() == Status.fail]
     if len(tasks) > 1:
-        utils.writeln()
+        ui.writeln()
         if failed:
-            utils.writeln(
+            ui.writeln(
                 "------------------------------------------------",
-                utils.ERROR,
+                ui.ERROR,
             )
-            utils.writeln(
+            ui.writeln(
                 "Some tasks have issues that need to be resolved.",
-                utils.ERROR,
+                ui.ERROR,
             )
-            utils.writeln()
-            utils.writeln("Tasks with issues:", utils.ERROR)
+            ui.writeln()
+            ui.writeln("Tasks with issues:", ui.ERROR)
             for task in failed:
-                utils.writeln(f" * {task.name}", utils.ERROR)
-            utils.writeln(
+                ui.writeln(f" * {task.name}", ui.ERROR)
+            ui.writeln(
                 "------------------------------------------------",
-                utils.ERROR,
+                ui.ERROR,
             )
         else:
-            utils.writeln("--------------------", utils.OK)
-            utils.writeln("| No issues found! |", utils.OK)
-            utils.writeln("--------------------", utils.OK)
+            ui.writeln("--------------------", ui.OK)
+            ui.writeln("| No issues found! |", ui.OK)
+            ui.writeln("--------------------", ui.OK)
 
     if len(failed) > 0:
-        exit_with_status(utils.Status.fail)
+        exit_with_status(Status.fail)
 
 
 @cloup.command(
@@ -231,16 +232,16 @@ def check_dataset(cli: CLI) -> None:
 def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa: FBT001
     tasks = cli.select_tasks()
     if len(tasks) > 1:
-        utils.set_verbosity(utils.Verbosity.quiet)
+        ui.set_verbosity(ui.Verbosity.quiet)
 
     if solution is not None and len(tasks) > 1:
-        utils.fatal_error(
+        ui.fatal_error(
             "A solution can only be specified when there's a single target task.",
         )
 
     solution_path = Path(solution) if solution else None
 
-    status = utils.Status.success
+    status = Status.success
     for task in tasks:
         status &= task.gen_expected(sample=sample, solution=solution_path)
 
@@ -287,13 +288,13 @@ def normalize(cli: CLI) -> None:
 def run_testplan(cli: CLI, subtask: int | None) -> None:
     tasks = cli.select_tasks()
     if len(tasks) > 1:
-        utils.set_verbosity(utils.Verbosity.quiet)
+        ui.set_verbosity(ui.Verbosity.quiet)
 
     if subtask is not None and len(tasks) > 1:
-        utils.fatal_error(
+        ui.fatal_error(
             "A subtask can only be specified when there's a single target task.",
         )
-    status = utils.Status.success
+    status = Status.success
     for task in tasks:
         status &= task.run_testplan(stn=Stn(subtask) if subtask else None)
 
@@ -306,9 +307,9 @@ def run_testplan(cli: CLI, subtask: int | None) -> None:
 def validate_input(cli: CLI, subtask: int | None) -> None:
     tasks = cli.select_tasks()
     if len(tasks) > 1:
-        utils.set_verbosity(utils.Verbosity.quiet)
+        ui.set_verbosity(ui.Verbosity.quiet)
 
-    status = utils.Status.success
+    status = Status.success
     for task in tasks:
         status &= task.validate_input(stn=Stn(subtask) if subtask else None)
 
@@ -326,9 +327,9 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
 def validate_output(cli: CLI, subtask: int | None) -> None:
     tasks = cli.select_tasks()
     if len(tasks) > 1:
-        utils.set_verbosity(utils.Verbosity.quiet)
+        ui.set_verbosity(ui.Verbosity.quiet)
 
-    status = utils.Status.success
+    status = Status.success
     for task in tasks:
         status &= task.validate_output(stn=Stn(subtask) if subtask else None)
 
@@ -353,11 +354,11 @@ def list_solutions(cli: CLI) -> None:
         task.list_solutions()
 
 
-def exit_with_status(status: utils.Status) -> NoReturn:
+def exit_with_status(status: Status) -> NoReturn:
     match status:
-        case utils.Status.success:
+        case Status.success:
             sys.exit(0)
-        case utils.Status.fail:
+        case Status.fail:
             sys.exit(2)
 
 
@@ -414,11 +415,11 @@ def run_solution(
     timeout = timeout or 3.0
     task = cli.select_task(task_name)
     if not task:
-        utils.fatal_error("You have to be inside a task to run this command.")
+        ui.fatal_error("You have to be inside a task to run this command.")
     if file is not None:
         sol = task.load_solution_from_path(Path(solution))
         if not sol:
-            return utils.show_message("Error", "Solution not found", utils.ERROR)
+            return ui.show_message("Error", "Solution not found", ui.ERROR)
         sol.run_on_input(sys.stdin if file == "-" else Path(file))
     else:
         task.run_solution(
@@ -439,7 +440,7 @@ def run_solution(
 def build(cli: CLI, solution: str, task_name: str | None) -> None:
     task = cli.select_task(task_name)
     if not task:
-        utils.fatal_error("You have to be inside a task to run this command.")
+        ui.fatal_error("You have to be inside a task to run this command.")
     task.build_solution(Path(solution))
 
 
@@ -483,44 +484,44 @@ def completion(shell: Literal["bash", "zsh", "fish"]) -> None:
     help="Check ocimatic is correctly setup by running some commands.",
 )
 def check_setup() -> None:
-    utils.writeln("Running commands to check if they are available...", utils.INFO)
-    utils.writeln()
+    ui.writeln("Running commands to check if they are available...", ui.INFO)
+    ui.writeln()
 
-    status = utils.Status.success
+    status = Status.success
     status &= _test_command(ocimatic.config.python.command)
-    utils.writeln()
+    ui.writeln()
     status &= _test_command(ocimatic.config.cpp.command)
-    utils.writeln()
+    ui.writeln()
     status &= _test_command(ocimatic.config.java.javac)
-    utils.writeln()
+    ui.writeln()
     status &= _test_command(ocimatic.config.java.jre)
-    utils.writeln()
+    ui.writeln()
     status &= _test_command(ocimatic.config.rust.command)
-    utils.writeln()
+    ui.writeln()
     status &= _test_command(ocimatic.config.latex.command)
-    utils.writeln()
+    ui.writeln()
 
-    if status == utils.Status.success:
-        utils.writeln("All commands ran successfully.", utils.GREEN)
+    if status == Status.success:
+        ui.writeln("All commands ran successfully.", ui.GREEN)
     else:
-        utils.writeln(
+        ui.writeln(
             "Some commands failed to run. You can still try to use ocimatic\n"
             "but some solutions or generators may fail to run. You can use\n"
             "`ocimatic setup` to override the default configuration.",
-            utils.RED,
+            ui.RED,
         )
 
     exit_with_status(status)
 
 
-def _test_command(cmd: str) -> utils.Status:
+def _test_command(cmd: str) -> Status:
     try:
-        utils.writeln(f"$ {cmd} --version", utils.INFO)
+        ui.writeln(f"$ {cmd} --version", ui.INFO)
         subprocess.run([cmd, "--version"], check=True)
-        return utils.Status.success
+        return Status.success
     except Exception as e:
-        utils.writeln(f"command failed: {e}", utils.RED)
-        return utils.Status.fail
+        ui.writeln(f"command failed: {e}", ui.RED)
+        return Status.fail
 
 
 @cloup.command(
@@ -530,10 +531,10 @@ def _test_command(cmd: str) -> utils.Status:
 def setup() -> None:
     shutil.copy2(ocimatic.Config.DEFAULT_PATH, ocimatic.Config.HOME_PATH)
 
-    utils.writeln(
+    ui.writeln(
         f"Configuration file created at '{ocimatic.Config.HOME_PATH}'.\n"
         "You can configure ocimatic by editing the file.",
-        utils.OK,
+        ui.OK,
     )
 
 
