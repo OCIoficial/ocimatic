@@ -327,8 +327,8 @@ class Task:
         # Init config
         TaskConfig.init(task_path)
 
-        # We put oci.cls and logo.eps in the statement directory to make it easier to work on the
-        # pdf without using ocimatic.
+        # We put `oci.cls` and `logo.eps` in the statement directory to make it easier to work on
+        # the pdf without using ocimatic.
         contest_skel = ocimatic_dir / "resources" / "contest-skel"
         statement_path = task_path / "statement"
         shutil.copy2(contest_skel / "oci.cls", statement_path)
@@ -629,7 +629,7 @@ no comment is specified, ocimatic will assume that all subtasks should fail.
             )
             return Status.fail
 
-        # Do not early return if there are validate input/output errors but still report them at the end
+        # Do not early return if there are input/output validation errors but still report them at the end
         validate_input_status = self._check_dataset_validate_input()
         validate_output_status = self._check_dataset_validate_output()
 
@@ -750,7 +750,7 @@ Solutions with issues:
 Summary
 -------
 Some partial solutions had issues when running or didn't pass/fail the subtasks they were supposed to.
-Run them individually with `ocimatic run` to get more information. When running a solution individually
+Run them individually with `ocimatic run` to get more information. When running a solution individually,
 remember to set an appropriate timeout using the `--timeout` flag.
 
 Solutions with issues:
