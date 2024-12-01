@@ -15,12 +15,13 @@ from enum import Enum
 from pathlib import Path
 from zipfile import ZipFile
 
-from ocimatic import utils
+from ocimatic import ui, utils
 from ocimatic.checkers import Checker, CheckerError, CheckerSuccess
+from ocimatic.result import Error, Result, Status, WorkResult
 from ocimatic.runnable import RunError, Runnable, RunSuccess, RunTLE
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
 from ocimatic.testplan import Testplan
-from ocimatic.utils import SortedDict, Stn, WorkResult
+from ocimatic.utils import SortedDict, Stn
 
 IN = ".in"
 SOL = ".sol"
@@ -63,7 +64,7 @@ class TestResult:
                 return WorkResult.info(short_msg=msg)
             else:
                 return WorkResult(
-                    status=utils.Status.from_bool(self.is_correct()),
+                    status=Status.from_bool(self.is_correct()),
                     short_msg=msg,
                 )
 
@@ -106,7 +107,7 @@ class TestResult:
         def into_work_result(self, mode: RunMode) -> WorkResult:
             del mode
             msg = f"Failed to run checker: `{self.checker_result.msg}`"
-            return WorkResult(status=utils.Status.fail, short_msg=msg)
+            return WorkResult(status=Status.fail, short_msg=msg)
 
     @dataclass
     class NoExpectedOutput:
@@ -118,7 +119,7 @@ class TestResult:
         def into_work_result(self, mode: RunMode) -> WorkResult:
             del mode
             return WorkResult(
-                status=utils.Status.fail,
+                status=Status.fail,
                 short_msg="no expected output file",
             )
 
@@ -180,13 +181,13 @@ class Test:
             )
         return self._in_path.stat().st_mtime
 
-    @utils.work("validate", "{0}.in")
+    @ui.work("validate", "{0}.in")
     def validate_input(
         self,
         validator: Runnable | None,
         *,
         check_basic_format: bool,
-    ) -> utils.Result:
+    ) -> Result:
         if check_basic_format:
             with self.in_path.open() as f:
                 fmt_result = _validate_basic_format(f.readlines())
@@ -197,31 +198,31 @@ class Test:
             result = validator.run(in_path=self._in_path)
             match result:
                 case RunSuccess(_):
-                    return utils.Result.success(short_msg="OK")
+                    return Result.success(short_msg="OK")
                 case RunError(msg, stderr):
-                    return utils.Result.fail(short_msg=msg, long_msg=stderr)
+                    return Result.fail(short_msg=msg, long_msg=stderr)
         else:
-            return utils.Result.success(short_msg="OK")
+            return Result.success(short_msg="OK")
 
-    @utils.work("validate", "{0}.sol")
-    def validate_output(self) -> utils.Result:
+    @ui.work("validate", "{0}.sol")
+    def validate_output(self) -> Result:
         if not self.expected_path.exists():
-            return utils.Result.fail(short_msg="no expected output file")
+            return Result.fail(short_msg="no expected output file")
 
         with self.expected_path.open() as f:
             return _validate_basic_format(f.readlines())
 
-    @utils.work("gen")
-    def gen_expected(self, runnable: Runnable) -> utils.Result:
+    @ui.work("gen")
+    def gen_expected(self, runnable: Runnable) -> Result:
         """Run binary with this test as input to generate expected output file."""
         result = runnable.run(in_path=self.in_path, out_path=self.expected_path)
         match result:
             case RunSuccess(_):
-                return utils.Result.success(short_msg="OK")
+                return Result.success(short_msg="OK")
             case RunError(msg, stderr):
-                return utils.Result.fail(short_msg=msg, long_msg=stderr)
+                return Result.fail(short_msg=msg, long_msg=stderr)
 
-    @utils.work("run")
+    @ui.work("run")
     def run_on(
         self,
         runnable: Runnable,
@@ -280,7 +281,7 @@ class Test:
     def expected_path(self) -> Path:
         return self._expected_path
 
-    @utils.work("Normalize")
+    @ui.work("Normalize")
     def normalize(self) -> WorkResult:
         if not shutil.which("dos2unix"):
             return WorkResult.fail(short_msg="Cannot find dos2unix")
@@ -297,7 +298,7 @@ class Test:
             st += subprocess.call(tounix_expected, stdout=null, stderr=null, shell=True)
             st += subprocess.call(sed_expected, stdout=null, stderr=null, shell=True)
         return WorkResult(
-            status=utils.Status.from_bool(st == 0),
+            status=Status.from_bool(st == 0),
             short_msg="OK" if st == 0 else "FAILED",
         )
 
@@ -328,7 +329,7 @@ class _TestGroup:
     def count(self) -> int:
         return len(self._tests)
 
-    @utils.hd2("{0}")
+    @ui.hd2("{0}")
     def run_on(
         self,
         runnable: Runnable,
@@ -340,25 +341,25 @@ class _TestGroup:
         skip: bool = False,
     ) -> list[TestResult] | None:
         if skip:
-            utils.show_message("info", "skipping")
+            ui.show_message("info", "skipping")
             return None
 
         if mode == RunMode.run_solution:
             for sti in parents:
-                utils.writeln(f" @extends st{sti}", utils.CYAN)
+                ui.writeln(f" @extends st{sti}", ui.CYAN)
 
         results: list[TestResult] = []
         for test in self._tests:
             result = test.run_on(runnable, checker, mode, timeout)
             results.append(result)
         if not self._tests:
-            utils.writeln(" warning: no test cases", utils.YELLOW)
+            ui.writeln(" warning: no test cases", ui.YELLOW)
 
         return results
 
-    @utils.hd2("{0}")
-    def gen_expected(self, runnable: Runnable) -> utils.Status:
-        status = utils.Status.success
+    @ui.hd2("{0}")
+    def gen_expected(self, runnable: Runnable) -> Status:
+        status = Status.success
         for test in self._tests:
             status &= test.gen_expected(runnable).status
         return status
@@ -379,23 +380,23 @@ class _Subtask(_TestGroup):
             [Test(f, f.with_suffix(SOL)) for f in directory.glob(f"*{IN}")],
         )
 
-    @utils.hd2("{0}")
+    @ui.hd2("{0}")
     def validate_input(
         self,
         validator: Path | None,
         ancestors: list[_Subtask],
-    ) -> utils.Status:
+    ) -> Status:
         if validator is None:
-            utils.writeln(" warning: no validator available", utils.YELLOW)
+            ui.writeln(" warning: no validator available", ui.YELLOW)
             runnable = None
         else:
             runnable_or_error = _build_validator(validator)
-            if isinstance(runnable_or_error, utils.Error):
-                utils.show_message("error", runnable_or_error.msg, utils.RED)
-                return utils.Status.fail
+            if isinstance(runnable_or_error, Error):
+                ui.show_message("error", runnable_or_error.msg, ui.RED)
+                return Status.fail
             runnable = runnable_or_error
 
-        status = utils.Status.success
+        status = Status.success
 
         for st in ancestors:
             for test in st.tests():
@@ -408,22 +409,22 @@ class _Subtask(_TestGroup):
             status &= test.validate_input(runnable, check_basic_format=True).status
 
         if not self._tests:
-            utils.writeln(" warning: no test cases", utils.YELLOW)
-            return utils.Status.success
+            ui.writeln(" warning: no test cases", ui.YELLOW)
+            return Status.success
 
         return status
 
-    @utils.hd2("{0}")
+    @ui.hd2("{0}")
     def validate_output(
         self,
-    ) -> utils.Status:
-        status = utils.Status.success
+    ) -> Status:
+        status = Status.success
         for test in self._tests:
             status &= test.validate_output().status
 
         if not self._tests:
-            utils.writeln(" warning: no test cases", utils.YELLOW)
-            return utils.Status.success
+            ui.writeln(" warning: no test cases", ui.YELLOW)
+            return Status.success
 
         return status
 
@@ -570,8 +571,8 @@ class Dataset:
     def subtasks(self) -> set[Stn]:
         return set(self._subtasks.keys())
 
-    def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> utils.Status:
-        status = utils.Status.success
+    def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> Status:
+        status = Status.success
         for subtask in self._subtasks.values():
             status &= subtask.gen_expected(runnable)
         if sample:
@@ -632,14 +633,14 @@ class Dataset:
 
         return testplan.ancestors_of(stn)
 
-    def validate_input(self, stn: Stn | None) -> utils.Status:
+    def validate_input(self, stn: Stn | None) -> Status:
         validators: SortedDict[Stn, Path | None]
         if self.testplan is not None:
             validators = self.testplan.validators()
         else:
             validators = SortedDict((sti, None) for sti in self._subtasks)
 
-        status = utils.Status.success
+        status = Status.success
         for sti, subtask in self._subtasks.items():
             if stn is None or stn == sti:
                 validator = validators[sti]
@@ -647,8 +648,8 @@ class Dataset:
                 status &= subtask.validate_input(validator, ancestors)
         return status
 
-    def validate_output(self, stn: Stn | None) -> utils.Status:
-        status = utils.Status.success
+    def validate_output(self, stn: Stn | None) -> Status:
+        status = Status.success
         for sti, subtask in self._subtasks.items():
             if stn is None or stn == sti:
                 status &= subtask.validate_output()
@@ -663,8 +664,8 @@ class Dataset:
             mtime = max(mtime, subtask.mtime())
         return mtime
 
-    @utils.work("ZIP")
-    def compress(self, *, random_sort: bool = False) -> utils.Result:
+    @ui.work("ZIP")
+    def compress(self, *, random_sort: bool = False) -> Result:
         """Compress all test cases in the dataset into a single zip file.
 
         The basename of the corresponding subtask subdirectory is prepended to each file.
@@ -678,8 +679,8 @@ class Dataset:
 
             if compressed == 0:
                 path.unlink()
-                return utils.Result.fail("EMPTY DATASET")
-        return utils.Result.success("OK")
+                return Result.fail("EMPTY DATASET")
+        return Result.success("OK")
 
     def counts(self) -> SortedDict[Stn, int]:
         """Return the number of test cases in each subtask."""
@@ -715,53 +716,53 @@ class Dataset:
 _WS_RE = re.compile(r"\s{2,}")
 
 
-def _validate_basic_format(lines: list[str]) -> utils.Result:
+def _validate_basic_format(lines: list[str]) -> Result:
     for i, line in enumerate(lines):
         err = _validate_basic_line_format(line)
         if err is not None:
-            return utils.Result.fail(
+            return Result.fail(
                 short_msg=f"error in line {i + 1}",
                 long_msg=err.msg,
             )
 
-    return utils.Result.success(short_msg="OK")
+    return Result.success(short_msg="OK")
 
 
-def _validate_basic_line_format(line: str) -> utils.Error | None:
+def _validate_basic_line_format(line: str) -> Error | None:
     if line[-1] != "\n":
-        return utils.Error(r"Line doesn't end with '\n'")
+        return Error(r"Line doesn't end with '\n'")
     line = line[:-1]
 
     if not line:
-        return utils.Error("Line cannot be empty")
+        return Error("Line cannot be empty")
 
     for c in line:
         if c in "\t\r\f\v":
-            return utils.Error(f"Invalid whitespace character: 0x{ord(c):02X}")
+            return Error(f"Invalid whitespace character: 0x{ord(c):02X}")
 
     if not line.isascii():
-        return utils.Error("Line must contain only ascii characters")
+        return Error("Line must contain only ascii characters")
 
     if line != line.rstrip():
-        return utils.Error("Line cannot have trailing whitespaces")
+        return Error("Line cannot have trailing whitespaces")
 
     if line != line.lstrip():
-        return utils.Error("Line cannot have leading whitespaces")
+        return Error("Line cannot have leading whitespaces")
 
     if _WS_RE.search(line):
-        return utils.Error("Line cannot contains contiguous whitespaces")
+        return Error("Line cannot contains contiguous whitespaces")
 
     return None
 
 
-def _build_validator(path: Path) -> Runnable | utils.Error:
+def _build_validator(path: Path) -> Runnable | Error:
     source = _load_validator(path)
     if source is None:
-        return utils.Error("unsupported file for validator")
+        return Error("unsupported file for validator")
 
     build = source.build()
     if isinstance(build, BuildError):
-        return utils.Error(f"failed to build validator\n{build.msg}")
+        return Error(f"failed to build validator\n{build.msg}")
 
     return build
 

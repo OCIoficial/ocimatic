@@ -3,9 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TextIO
 
-from ocimatic import utils
+from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, DatasetResults, RunMode
+from ocimatic.result import Result, Status
 from ocimatic.source_code import (
     BuildError,
     CppSource,
@@ -30,7 +31,7 @@ class SolutionSpec:
             case 1:
                 self.subtasks_spec = comments[0]
             case _:
-                utils.fatal_error(
+                ui.fatal_error(
                     "The should-fail comment can only be specified once",
                 )
 
@@ -47,7 +48,7 @@ class SolutionSpec:
 class Solution:
     VALID_EXTENSIONS = (".cpp", ".java", ".py", ".rs")
 
-    COLOR = utils.BLUE
+    COLOR = ui.BLUE
 
     def __init__(self, source: SourceCode) -> None:
         self._source = source
@@ -104,7 +105,7 @@ class Solution:
 
         return Solution(source)
 
-    @utils.workhd("{0}", COLOR)
+    @ui.workhd("{0}", COLOR)
     def run_on_dataset(
         self,
         dataset: Dataset,
@@ -113,14 +114,14 @@ class Solution:
         *,
         timeout: float | None = None,
         stn: Stn | None = None,
-    ) -> utils.WorkHd[DatasetResults | None]:
+    ) -> ui.WorkHd[DatasetResults | None]:
         """Run this solution for all test cases in the given dataset."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
-            yield utils.Result.fail(short_msg="Failed", long_msg=build_result.msg)
+            yield Result.fail(short_msg="Failed", long_msg=build_result.msg)
             return None
         else:
-            yield utils.Result.success(short_msg="OK")
+            yield Result.success(short_msg="OK")
             return dataset.run_on(
                 build_result,
                 checker,
@@ -129,40 +130,40 @@ class Solution:
                 stn=stn,
             )
 
-    @utils.workhd("{0}", COLOR)
-    def run_on_input(self, input: Path | TextIO) -> utils.WorkHd[None]:
+    @ui.workhd("{0}", COLOR)
+    def run_on_input(self, input: Path | TextIO) -> ui.WorkHd[None]:
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
-            yield utils.Result.fail(short_msg="Failed", long_msg=build_result.msg)
+            yield Result.fail(short_msg="Failed", long_msg=build_result.msg)
             return None
         else:
-            yield utils.Result.success(short_msg="OK")
+            yield Result.success(short_msg="OK")
         build_result.run_on_input(input)
 
-    @utils.workhd("{0}", COLOR)
+    @ui.workhd("{0}", COLOR)
     def gen_expected(
         self,
         dataset: Dataset,
         *,
         sample: bool = False,
-    ) -> utils.WorkHd[utils.Status]:
+    ) -> ui.WorkHd[Status]:
         """Generate expected output files for all test cases in the given dataset running this solution."""
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
-            yield utils.Result.fail(short_msg="Failed", long_msg=build_result.msg)
-            return utils.Status.fail
+            yield Result.fail(short_msg="Failed", long_msg=build_result.msg)
+            return Status.fail
         else:
-            yield utils.Result.success(short_msg="OK")
+            yield Result.success(short_msg="OK")
             return dataset.gen_expected(build_result, sample=sample)
 
-    @utils.work("Build")
-    def build(self) -> utils.Result:
+    @ui.work("Build")
+    def build(self) -> Result:
         """Build solution."""
         result = self._source.build(force=True)
         if isinstance(result, BuildError):
-            return utils.Result.fail(short_msg="Failed", long_msg=result.msg)
+            return Result.fail(short_msg="Failed", long_msg=result.msg)
         else:
-            return utils.Result.success(short_msg="OK")
+            return Result.success(short_msg="OK")
 
     @property
     def name(self) -> str:
