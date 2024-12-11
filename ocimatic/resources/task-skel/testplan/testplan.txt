@@ -2,7 +2,7 @@
 # how to write a test plan.
 
 # We define a validator for this subtask. The path is relative to this file
-[Subtask 1 - validators/st1.cpp]
+[Subtask 1 - validation/validator.cpp]
 
   # You can use `copy` to use sample test cases in the test plan. Here we use a glob pattern
   # to copy multiple files in a single command.
