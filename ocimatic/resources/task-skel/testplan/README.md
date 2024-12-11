@@ -13,17 +13,15 @@ Inside a subtask, each line specifies a command to generate one or multiple test
 A command can be either `copy`, `echo`, or a file containing a generator script. Check the sample `testplan.txt` next to this README to see how each command is used.
 
 * `copy`:
-  The copy command takes as a single argument a glob pattern. The command will copy all files matching the pattern, relative to the root of the current task.
+  The copy command takes as a single argument a glob pattern. The command will copy all files matching the pattern, relative to the root of the current task. Useful when writing manual test cases or to copy sample test cases from the statement.
 * `echo`:
   This command takes one or more arguments and prints them in a single line. This can be useful to quickly specify manual test cases for tasks where the input consists of a single line.
 * `script`:
   A generator script is a file in either Python (extension `.py`) or C++ (extension `.cpp`). The file should be placed next to `testplan.txt`. When processing the test plan, `ocimatic` will run the generator with the provided arguments (`sys.argv` or `**argv`). The generator should then write to the standard output to produce the test case.
 
-  A script must be deterministic and generate the same result every time it's executed. This is in conflict with a generator wanting to generate *arbitrary* values. Since the script must be deterministic, true randomness cannot be used. To this end, `ocimatic` passes an additional (hidden) argument to each invocation, which is guaranteed to be different for each invocation. The generator can use this extra argument to seed the random generator. The extra argument is passed as the first argument, meaning that the rest of the arguments are *shifted* by one position.
+## Randomness in Generator Scripts
 
-## Input Validators
-
-An input validator is a script that checks whether the input of a test case satisfies the format and restrictions in the statement. You can specify a validator for a subtask in the subtask's header. See `testplan.txt` for an example. Validators are optional, but their use is highly encouraged.
+A script must be deterministic and generate the same result every time it's executed. This is in conflict with a generator wanting to generate *arbitrary* values. Since the script must be deterministic, true randomness cannot be used. To this end, `ocimatic` passes an additional (hidden) argument to each invocation, which is guaranteed to be different for each invocation. The generator can use this extra argument to seed the random generator. The extra argument is passed as the first argument, meaning that the rest of the arguments are *shifted* by one position.
 
 ## The `@extends` directive
 
@@ -31,11 +29,19 @@ It's common for subtasks to be cumulative, i.e., a solution for a harder subtask
 
 If a subtask `N` extends from `M`, we say `M` is a parent of `N`. The extends relationship is transitive. We call ancestors of `N` to all subtasks reachable from `N` following the extends relationship.
 
-The `@extends` directive *does not duplicate* test cases. Solutions still run once per test case, but the extra information is used for validation. For example, input validators are run on the target subtask and all its ancestors. Similarly, when validating if partial solutions pass/fail the appropriate subtasks, the extends relationship is also considered.
+The `@extends` directive *does not duplicate* test cases. Solutions still run once per test case, but the extra information is used for validation. For example, when validating if partial solutions pass/fail the appropriate subtasks, the extends relationship is also considered.
+
+## Input Validators
+
+An input validator is a script that ensures a test case's input adheres to the format and restrictions outlined in the problem statement. You can specify a validator for a subtask in its header, as demonstrated in `testplan.txt`. While validators are optional, their use is strongly recommended.
+
+The validator is invoked with the subtask it is running on as the first argument, formatted as `stn` (e.g., `st1`, `st2`, etc.). This allows you to use a single script for all subtasks and dynamically adjust its behavior based on the argument.
+
+When validating a subtask that extends another subtask, the behavior is as if all test cases from the ancestors are included in the current subtask. For instance, if Subtask 2 extends Subtask 1, the validator for Subtask 2 will be executed for all test cases in both Subtask 2 and Subtask 1. When validating subtask 2, the validator is always called with `st2` as argument, even when checking tests in the ancestors.
 
 ## Multi-test Script
 
-Normally, a script generates a single test case. Then, it can be used multiple times in the test plan. This is convenient because it lets you focus on the properties of a single test when writing the script and defer to the test plan how to use it coherently to form the dataset. However, sometimes it is convenient to generate a set of test cases *programmatically*. For example, if a subtask has a finite set of possible cases (common for easy subtasks), you may want to include them all. To accommodate this, a script may also generate multiple test cases in a single invocation.
+Normally, a script is used to generate a single test case. Then, it can be used multiple times in the test plan. This is convenient because it lets you focus on the properties of a single test when writing the script and defer to the test plan how to use it coherently to form the dataset. However, sometimes it is convenient to generate a set of test cases *programmatically*. For example, if a subtask has a finite set of possible cases (common for easy subtasks), you may want to include them all. To accommodate this, a script may also generate multiple test cases in a single invocation.
 
 To generate multiple test cases, the script must write the [file separator control code](https://en.wikipedia.org/wiki/C0_and_C1_control_codes#Field_separators) to signal the end of a test case. The file separator control code has a decimal representation of `28`. See `multi.py` as an example of a multi-test script.
 

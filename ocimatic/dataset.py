@@ -184,6 +184,7 @@ class Test:
     @ui.work("validate", "{0}.in")
     def validate_input(
         self,
+        st: Stn,
         validator: Runnable | None,
         *,
         check_basic_format: bool,
@@ -195,7 +196,7 @@ class Test:
                     return fmt_result
 
         if validator:
-            result = validator.run(in_path=self._in_path)
+            result = validator.run(in_path=self._in_path, args=[str(st)])
             match result:
                 case RunSuccess(_):
                     return Result.success(short_msg="OK")
@@ -374,11 +375,12 @@ class _TestGroup:
 class _Subtask(_TestGroup):
     """Subclass of `TestGroup` to represent a subtask."""
 
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, stn: Stn, directory: Path) -> None:
         super().__init__(
             directory.name,
             [Test(f, f.with_suffix(SOL)) for f in directory.glob(f"*{IN}")],
         )
+        self._stn = stn
 
     @ui.hd2("{0}")
     def validate_input(
@@ -401,12 +403,17 @@ class _Subtask(_TestGroup):
         for st in ancestors:
             for test in st.tests():
                 status &= test.validate_input(
+                    self._stn,
                     runnable,
                     check_basic_format=False,
                 ).status
 
         for test in self._tests:
-            status &= test.validate_input(runnable, check_basic_format=True).status
+            status &= test.validate_input(
+                self._stn,
+                runnable,
+                check_basic_format=True,
+            ).status
 
         if not self._tests:
             ui.writeln(" warning: no test cases", ui.YELLOW)
@@ -554,12 +561,12 @@ class Dataset:
         self._subtasks: SortedDict[Stn, _Subtask]
         if testplan is not None:
             self._subtasks = SortedDict(
-                (Stn(stn), _Subtask(directory / f"st{stn}"))
+                (Stn(stn), _Subtask(Stn(stn), directory / f"st{stn}"))
                 for stn in range(1, testplan.subtasks + 1)
             )
         elif directory.exists():
             self._subtasks = SortedDict(
-                (Stn(stn), _Subtask(d))
+                (Stn(stn), _Subtask(Stn(stn), d))
                 for stn, d in enumerate(sorted(directory.iterdir()), 1)
                 if d.is_dir()
             )
@@ -713,9 +720,6 @@ class Dataset:
         return True
 
 
-_WS_RE = re.compile(r"\s{2,}")
-
-
 def _validate_basic_format(lines: list[str]) -> Result:
     for i, line in enumerate(lines):
         err = _validate_basic_line_format(line)
@@ -728,29 +732,32 @@ def _validate_basic_format(lines: list[str]) -> Result:
     return Result.success(short_msg="OK")
 
 
+_WS_RE = re.compile(r"\s{2,}")
+
+
 def _validate_basic_line_format(line: str) -> Error | None:
     if line[-1] != "\n":
-        return Error(r"Line doesn't end with '\n'")
+        return Error(r"line doesn't end with '\n'")
     line = line[:-1]
 
     if not line:
-        return Error("Line cannot be empty")
+        return Error("line cannot be empty")
 
     for c in line:
         if c in "\t\r\f\v":
-            return Error(f"Invalid whitespace character: 0x{ord(c):02X}")
+            return Error(f"invalid whitespace character: 0x{ord(c):02X}")
 
     if not line.isascii():
-        return Error("Line must contain only ascii characters")
+        return Error("line must contain only ascii characters")
 
     if line != line.rstrip():
-        return Error("Line cannot have trailing whitespaces")
+        return Error("line cannot have trailing whitespaces")
 
     if line != line.lstrip():
-        return Error("Line cannot have leading whitespaces")
+        return Error("line cannot have leading whitespaces")
 
     if _WS_RE.search(line):
-        return Error("Line cannot contains contiguous whitespaces")
+        return Error("line cannot contain contiguous whitespaces")
 
     return None
 
