@@ -235,13 +235,16 @@ class Contest:
                     )
                     return
 
-            self._build_problemset()
-
-            shutil.copy2(self._directory / "twoside.pdf", tmpdir)
-            shutil.copy2(self._directory / "oneside.pdf", tmpdir)
+            self._archive_problemset(tmpdir)
 
             Path("archive.zip").unlink(missing_ok=True)
             shutil.make_archive("archive", "zip", tmpdir)
+
+    @ui.hd1("Problemset", "Copy to archive")
+    def _archive_problemset(self, dest: Path) -> None:
+        self._build_problemset()
+        shutil.copy2(self._directory / f"{Sideness.TWOSIDE}.pdf", dest)
+        shutil.copy2(self._directory / f"{Sideness.ONESIDE}.pdf", dest)
 
     @property
     def name(self) -> str:
