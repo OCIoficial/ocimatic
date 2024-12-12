@@ -1,4 +1,3 @@
-%\usepackage[utf8]{inputenc}
 \NeedsTeXFormat{LaTeX2e}
 \ProvidesClass{oci}[2014/09/29 v1.0 Clase LaTeX para estandarizacion de problemas OCI]
 
@@ -32,23 +31,13 @@
 %\headsep        0in
 \parindent      0.0in
 
-%% PAGE NUMBERING
-% \global\let\@pagenumber\@empty
-% \getenv[\@pagenumber]{OCIMATIC_PAGE_NUMBER}
-% \if\@pagenumber\@empty
-% \else
-% \setcounter{page}{\@pagenumber}
-% \fi
-% \setcounter{page}{11}
-
-
 %% EXTRA
 \addtolength{\parskip}{0.4\baselineskip}
 
 %% HEADER
 \getenv[\phase]{OCIMATIC_PHASE}
 
-\setlength\headheight{54.3pt} 
+\setlength\headheight{54.3pt}
 \pagestyle{fancy}
 \lhead{\includegraphics[height=34pt]{logo.eps}}
 \rhead{\phase\ \the\year}
@@ -76,31 +65,6 @@
     \end{center}
 }
 
-%% Sideness
-\getenv[\@sideness]{OCIMATIC_SIDENESS}
-
-\renewcommand*{\cleardoublepage}{
-  \clearpage
-  \ifdefstring{\@sideness}{twoside}{%
-    \ifnumodd{\c@page}{}{%
-      \hbox{}%
-      \thispagestyle{empty}%
-      \newpage%
-    }
-  }{}
-}
-
-\global\let\@useblankpage\@empty
-\getenv[\@useblankpage]{OCIMATIC_BLANK_PAGE}
-\newcommand{\@blankpage}{%
-  \ifdefstring{\@sideness}{twoside}{%
-    \clearpage%
-    \thispagestyle{empty}%
-    \hbox{}
-    \clearpage
-  }{}
-}
-
 %% Secciones de description
 \renewcommand{\subsection}{\@startsection{subsection}{2}{\z@}%
                                      {-1.0ex\@plus -1ex \@minus -.2ex}%
@@ -109,10 +73,6 @@
 \newenvironment{problemDescription}{\mymaketitle}{}
 \newenvironment{inputDescription}{\subsection*{Entrada}}{\par}
 \newenvironment{outputDescription}{\subsection*{Salida}}{\par}
-
-
-\AtEndDocument{\ifdefempty{\@useblankpage}{\cleardoublepage}{\@blankpage}}
-% \AtEndDocument{\cleardoublepage}
 
 %% Ejemplo Input/Output
 
@@ -166,5 +126,3 @@
 \newcommand{\subtask}[1]{\subsubsection*{Subtarea \arabic{subtaskcnt} (#1 puntos)}\vspace{-1em}\stepcounter{subtaskcnt}}
 
 \newenvironment{sampleDescription}{\subsection*{Ejemplos de entrada y salida}}{}
-
-
