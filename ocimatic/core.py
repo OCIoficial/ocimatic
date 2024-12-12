@@ -936,9 +936,9 @@ class Sideness(Enum):
 
     def __str__(self) -> str:
         match self:
-            case self.ONESIDE:
+            case Sideness.ONESIDE:
                 return "oneside"
-            case self.TWOSIDE:
+            case Sideness.TWOSIDE:
                 return "twoside"
 
 
