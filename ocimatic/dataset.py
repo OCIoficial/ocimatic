@@ -196,7 +196,7 @@ class Test:
                     return fmt_result
 
         if validator:
-            result = validator.run(in_path=self._in_path, args=[str(st)])
+            result = validator.run(in_path=self._in_path, args=[repr(st)])
             match result:
                 case RunSuccess(_):
                     return Result.success(short_msg="OK")

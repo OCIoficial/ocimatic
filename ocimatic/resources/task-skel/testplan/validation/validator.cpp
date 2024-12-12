@@ -16,7 +16,7 @@ int main(int argc, char *argv[]) {
   registerValidation();
   auto [a, b] = read();
 
-  if (argv[1] == "st1") {
+  if (!strcmp(argv[1], "st1")) {
     ensure(a >= -1'000'000'000ll && a <= 1'000'000'000ll);
     ensure(b >= -1'000'000'000ll && b <= 1'000'000'000ll);
   }
