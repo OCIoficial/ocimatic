@@ -97,3 +97,7 @@ auto
 .vscode
 
 *.vsix
+
+# latex
+*.fls
+*.fdb_latexmk

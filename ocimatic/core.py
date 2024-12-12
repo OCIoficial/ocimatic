@@ -8,6 +8,7 @@ import shutil
 import tempfile
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from enum import Enum
 from functools import cached_property
 from pathlib import Path
 from typing import Any, cast
@@ -137,6 +138,7 @@ class Contest:
         os.environ["OCIMATIC_PHASE"] = self._config.phase
 
         self._titlepage = LatexSource(directory / "titlepage.tex")
+        self._general = LatexSource(directory / "general.tex")
 
     @property
     def directory(self) -> Path:
@@ -152,42 +154,71 @@ class Contest:
     @ui.hd1("Generating problemset", color=COLOR)
     def build_problemset(self) -> Status:
         """Build titlepage and statement of all tasks. Then merge all pdfs into a single pdf."""
-        status = Status.success
-        status &= self._build_problemset_twoside()
-        status &= self._build_problemset_oneside()
-        return status
+        return self._build_problemset()
 
-    @ui.hd1("oneside")
-    def _build_problemset_oneside(self) -> Status:
-        os.environ["OCIMATIC_SIDENESS"] = "oneside"
+    def _build_problemset(self) -> Status:
         if self._compile_titlepage().is_fail():
+            return Status.fail
+
+        if self._compile_general().is_fail():
             return Status.fail
 
         status = Status.success
         for task in self._tasks:
-            status &= task.statement.build(blank_page=False).status
+            status &= task.statement.build().status
 
-        if status == Status.fail:
-            return Status.fail
+        self._merge_pdfs(Sideness.ONESIDE)
+        self._merge_pdfs(Sideness.TWOSIDE)
 
-        return self._merge_pdfs("oneside.pdf").status
+        return status
 
-    @ui.hd1("twoside")
-    def _build_problemset_twoside(self) -> Status:
-        os.environ["OCIMATIC_SIDENESS"] = "twoside"
-        if self._compile_titlepage().is_fail():
-            return Status.fail
+    @ui.work("LATEX", "titlepage.tex")
+    def _compile_titlepage(self) -> Result:
+        """Compile title page latex."""
+        result = self._titlepage.compile()
+        if isinstance(result, Path):
+            return Result.success(short_msg="OK")
+        else:
+            return Result.fail(short_msg="FAILED", long_msg=result.msg)
 
-        status: Status = Status.success
-        for i, task in enumerate(self._tasks):
-            # Add blank page after last task to avoid showing the back of the last page.
-            is_last = i == len(self._tasks) - 1
-            status &= task.statement.build(blank_page=is_last).status
+    @ui.work("LATEX", "general.tex")
+    def _compile_general(self) -> Result:
+        """Compile title page latex."""
+        result = self._general.compile()
+        if isinstance(result, Path):
+            return Result.success(short_msg="OK")
+        else:
+            return Result.fail(short_msg="FAILED", long_msg=result.msg)
 
-        if status == Status.fail:  # pyright: ignore [reportUnnecessaryComparison]
-            return Status.fail
+    @ui.work("MERGE", "{1}.pdf")
+    def _merge_pdfs(self, sideness: Sideness) -> Result:
+        """Merge titlepage and statements pdfs into a single file."""
+        try:
+            merger = pypdf.PdfWriter()
+            titlepage = self._directory / "titlepage.pdf"
+            general = self._directory / "general.pdf"
+            if titlepage.exists():
+                merger.append(titlepage)
+                _add_blank_page(merger, sideness, Evenness.ODD)
+            if general.exists():
+                merger.append(general)
+                _add_blank_page(merger, sideness, Evenness.ODD)
+            for task in self._tasks:
+                merger.add_outline_item(task.title, len(merger.pages))
+                if not task.statement.pdf:
+                    return Result.fail(
+                        short_msg="FAILED",
+                        long_msg="No statement",
+                    )
+                merger.append(task.statement.pdf)
+                _add_blank_page(merger, sideness, Evenness.ODD)
 
-        return self._merge_pdfs("twoside.pdf").status
+            _add_blank_page(merger, sideness, Evenness.EVEN)
+            merger.write(self._directory / f"{sideness}.pdf")  # pyright: ignore [reportUnknownMemberType]
+            merger.close()
+            return Result.success(short_msg="OK")
+        except Exception as exc:
+            return Result.fail(short_msg="FAILED", long_msg=str(exc))
 
     @ui.hd1("Creating archive", color=COLOR)
     def archive(self) -> None:
@@ -204,46 +235,13 @@ class Contest:
                     )
                     return
 
-            self._build_problemset_twoside()
-            shutil.copy2(self._directory / "twoside.pdf", tmpdir)
+            self._build_problemset()
 
-            self._build_problemset_oneside()
+            shutil.copy2(self._directory / "twoside.pdf", tmpdir)
             shutil.copy2(self._directory / "oneside.pdf", tmpdir)
 
             Path("archive.zip").unlink(missing_ok=True)
             shutil.make_archive("archive", "zip", tmpdir)
-
-    @ui.work("LATEX", "titlepage.tex")
-    def _compile_titlepage(self) -> Result:
-        """Compile title page latex."""
-        result = self._titlepage.compile()
-        if isinstance(result, Path):
-            return Result.success(short_msg="OK")
-        else:
-            return Result.fail(short_msg="FAILED", long_msg=result.msg)
-
-    @ui.work("MERGE", "{1}")
-    def _merge_pdfs(self, filename: str) -> Result:
-        """Merge titlepage and statements pdfs into a single file."""
-        try:
-            merger = pypdf.PdfWriter()
-            titlepage = self._directory / "titlepage.pdf"
-            if titlepage.exists():
-                merger.append(titlepage)
-            for task in self._tasks:
-                merger.add_outline_item(task.title, len(merger.pages))
-                if not task.statement.pdf:
-                    return Result.fail(
-                        short_msg="FAILED",
-                        long_msg="No statement",
-                    )
-                merger.append(task.statement.pdf)
-
-            merger.write(self._directory / filename)  # pyright: ignore [reportUnknownMemberType]
-            merger.close()
-            return Result.success(short_msg="OK")
-        except Exception as exc:
-            return Result.fail(short_msg="FAILED", long_msg=str(exc))
 
     @property
     def name(self) -> str:
@@ -395,7 +393,7 @@ class Task:
 
         shutil.copy2(self._directory / "dataset" / "data.zip", new_dir / "data.zip")
 
-        if self.statement.build(blank_page=False).is_fail():
+        if self.statement.build().is_fail():
             return False
 
         with (new_dir / "data.txt").open("w") as f:
@@ -820,9 +818,9 @@ Solutions with issues:
         return Status.success
 
     @ui.hd1("{0}", "Building statement", COLOR)
-    def build_statement(self, *, blank_page: bool = False) -> None:
+    def build_statement(self) -> None:
         """Generate pdf for the statement."""
-        self._statement.build(blank_page=blank_page)
+        self._statement.build()
 
 
 class Statement:
@@ -853,14 +851,12 @@ class Statement:
         return str(self._source)
 
     @ui.work("LATEX")
-    def build(self, *, blank_page: bool) -> Result:
+    def build(self) -> Result:
         """Compile latex statement."""
         if self._num is not None:
             os.environ["OCIMATIC_PROBLEM_NUMBER"] = _number_to_letter(self._num)
         if self._codename:
             os.environ["OCIMATIC_CODENAME"] = self._codename
-        if blank_page:
-            os.environ["OCIMATIC_BLANK_PAGE"] = "True"
 
         result = self._source.compile()
         if isinstance(result, Path):
@@ -929,3 +925,29 @@ def _write_stats(stats: RuntimeStats) -> None:
     ui.writeln("Running time")
     ui.writeln(f"  Max: {stats.max:.3f}s")
     ui.writeln(f"  Min: {stats.min:.3f}s")
+
+
+class Sideness(Enum):
+    ONESIDE = 0
+    TWOSIDE = 1
+
+    def __str__(self) -> str:
+        match self:
+            case self.ONESIDE:
+                return "oneside"
+            case self.TWOSIDE:
+                return "twoside"
+
+
+class Evenness(Enum):
+    EVEN = 0
+    ODD = 1
+
+
+def _add_blank_page(
+    merger: pypdf.PdfWriter,
+    sideness: Sideness,
+    eveness: Evenness,
+) -> None:
+    if sideness == Sideness.TWOSIDE and len(merger.pages) % 2 == eveness.value:
+        merger.add_blank_page()
