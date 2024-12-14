@@ -15,6 +15,7 @@ from cloup.constraints import If, accept_none, mutually_exclusive
 
 import ocimatic
 from ocimatic import core, server, ui
+from ocimatic._version import __version__
 from ocimatic.result import Status
 from ocimatic.utils import Stn
 
@@ -538,6 +539,13 @@ def setup() -> None:
     )
 
 
+@cloup.command(
+    help="Show version and exit",
+)
+def version() -> None:
+    print(__version__)
+
+
 SECTIONS = [
     cloup.Section(
         "Contest commands",
@@ -574,6 +582,7 @@ SECTIONS = [
     cloup.Section(
         "Config commands",
         [
+            version,
             completion,
             check_setup,
             setup,
