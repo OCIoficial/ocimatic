@@ -946,11 +946,14 @@ class Evenness(Enum):
     EVEN = 0
     ODD = 1
 
+    def check(self, n: int) -> bool:
+        return n % 2 == self.value
+
 
 def _add_blank_page(
     merger: pypdf.PdfWriter,
     sideness: Sideness,
     eveness: Evenness,
 ) -> None:
-    if sideness == Sideness.TWOSIDE and len(merger.pages) % 2 == eveness.value:
+    if sideness == Sideness.TWOSIDE and eveness.check(len(merger.pages)):
         merger.add_blank_page()
