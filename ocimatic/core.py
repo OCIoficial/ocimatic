@@ -11,9 +11,8 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-import pypdf
 import tomlkit
 from click.shell_completion import CompletionItem
 
@@ -26,6 +25,10 @@ from ocimatic.solutions import Solution
 from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
 from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
+
+# This is slow to import so we do it lazily
+if TYPE_CHECKING:
+    import pypdf
 
 
 def find_contest_root() -> tuple[Path, Path | None] | None:
@@ -192,6 +195,8 @@ class Contest:
 
     @ui.work("MERGE", "{1}.pdf")
     def _merge_pdfs(self, sideness: Sideness) -> Result:
+        import pypdf
+
         """Merge titlepage and statements pdfs into a single file."""
         try:
             merger = pypdf.PdfWriter()
@@ -587,8 +592,8 @@ class Task:
                     ui.write(
                         f"""
 The results don't match the solution's specification.
- - Subtasks expected to fail: {should_fail}
- - Subtasks that failed: {failed}
+- Subtasks expected to fail: {should_fail}
+- Subtasks that failed: {failed}
 
 To specify which subtasks the solution should fail, you must have a `should-fail`
 comment at the beginning of the file. For example, to specify that a solution should
