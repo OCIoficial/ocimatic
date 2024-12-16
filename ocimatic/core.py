@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import tomlkit
 from click.shell_completion import CompletionItem
@@ -25,28 +25,82 @@ from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
 from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
 
-# This is slow to import so we do it lazily
-if TYPE_CHECKING:
-    import pypdf
 
+class CLI:
+    def __init__(self) -> None:
+        self._data: tuple[Contest, Path | None] | None = None
 
-def find_contest_root() -> tuple[Path, Path | None] | None:
-    """Find the root of the contest.
+    @staticmethod
+    def find_contest_root() -> tuple[Path, Path | None] | None:
+        """Find the root of the contest.
 
-    Returns the absolute path to the root of the contest and the last directory
-    before reaching the root (if there's one), this correspond to the directory
-    of the task in which ocimatic was called. If the function reaches the system
-    root without finding the a contest the program exists with an error.
-    """
-    last_dir = None
-    curr_dir = Path.cwd()
-    while not Path(curr_dir, ContestConfig.FILE_NAME).exists():
-        last_dir = curr_dir
-        curr_dir = curr_dir.parent
-        if curr_dir.samefile(last_dir):
-            return None
-    config.CONTEST_ROOT = curr_dir
-    return (curr_dir, last_dir)
+        Returns the absolute path to the root of the contest and the last directory
+        before reaching the root (if there's one), this correspond to the directory
+        of the task in which ocimatic was called. If the function reaches the system
+        root without finding the a contest the program exists with an error.
+        """
+        last_dir = None
+        curr_dir = Path.cwd()
+        while not Path(curr_dir, ContestConfig.FILE_NAME).exists():
+            last_dir = curr_dir
+            curr_dir = curr_dir.parent
+            if curr_dir.samefile(last_dir):
+                return None
+        config.CONTEST_ROOT = curr_dir
+        return (curr_dir, last_dir)
+
+    @staticmethod
+    def load_task_by_name(contest_dir: Path, task_name: str) -> Task | None:
+        return Contest.load_task_by_name(contest_dir, task_name)
+
+    @staticmethod
+    def load_task_by_dir(contest_dir: Path, task_dir: Path) -> Task | None:
+        return Contest.load_task_by_dir(contest_dir, task_dir)
+
+    @staticmethod
+    def init_contest(dest: Path, phase: str | None) -> None:
+        Contest.create_layout(dest, phase)
+
+    @property
+    def contest(self) -> Contest:
+        (contest, _) = self._load()
+        return contest
+
+    @property
+    def last_dir(self) -> Path | None:
+        (_, last_dir) = self._load()
+        return last_dir
+
+    def _load(self) -> tuple[Contest, Path | None]:
+        if not self._data:
+            result = CLI.find_contest_root()
+            if not result:
+                ui.fatal_error("ocimatic was not called inside a contest.")
+            self._data = (Contest(result[0]), result[1])
+        return self._data
+
+    def new_task(self, name: str) -> None:
+        if Path(self.contest.directory, name).exists():
+            ui.fatal_error("Cannot create task in existing directory.")
+        self.contest.new_task(name)
+        ui.show_message("Info", f"Task [{name}] created", ui.OK)
+
+    def select_task(self, name: str | None) -> Task | None:
+        task = None
+        if name is not None:
+            task = self.contest.find_task_by_name(name)
+        elif self.last_dir:
+            task = self.contest.find_task_by_dir(self.last_dir)
+        return task
+
+    def select_tasks(self) -> list[Task]:
+        task = None
+        if self.last_dir:
+            task = self.contest.find_task_by_dir(self.last_dir)
+        if task is not None:
+            return [task]
+        else:
+            return self.contest.tasks
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -194,11 +248,16 @@ class Contest:
 
     @ui.work("MERGE", "{1}.pdf")
     def _merge_pdfs(self, sideness: Sideness) -> Result:
-        import pypdf
-
         """Merge titlepage and statements pdfs into a single file."""
+        # This is slow to import so we do it lazily
+        from pypdf import PdfWriter
+
+        def _add_blank_page(merger: PdfWriter, side: Sideness, even: Evenness) -> None:
+            if side == Sideness.TWOSIDE and even.check(len(merger.pages)):
+                merger.add_blank_page()
+
         try:
-            merger = pypdf.PdfWriter()
+            merger = PdfWriter()
             titlepage = self._directory / "titlepage.pdf"
             general = self._directory / "general.pdf"
             if titlepage.exists():
@@ -952,12 +1011,3 @@ class Evenness(Enum):
 
     def check(self, n: int) -> bool:
         return n % 2 == self.value
-
-
-def _add_blank_page(
-    merger: pypdf.PdfWriter,
-    sideness: Sideness,
-    eveness: Evenness,
-) -> None:
-    if sideness == Sideness.TWOSIDE and eveness.check(len(merger.pages)):
-        merger.add_blank_page()
