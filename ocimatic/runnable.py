@@ -204,7 +204,7 @@ class JavaClasses(Runnable):
         self._classes = classes
 
     def cmd(self) -> list[str]:
-        return [ocimatic.config.java.jre, "-cp", str(self._classes), self._classname]
+        return [ocimatic.CONFIG.java.jre, "-cp", str(self._classes), self._classname]
 
 
 class Python3(Runnable):
@@ -212,4 +212,4 @@ class Python3(Runnable):
         self._script = script
 
     def cmd(self) -> list[str]:
-        return [ocimatic.config.python.command, str(self._script)]
+        return [ocimatic.CONFIG.python.command, str(self._script)]

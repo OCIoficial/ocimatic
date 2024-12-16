@@ -11,8 +11,6 @@ from typing import Any, ClassVar, cast
 
 import tomlkit
 
-from ocimatic.main import cli
-
 contest_root: Path = Path("/")
 
 
@@ -91,11 +89,17 @@ class Config:
         self.java = JavaConfig.load(config["java"])
         self.rust = RustConfig.load(config["rust"])
         self.latex = LatexConfig.load(config["latex"])
-        self.initialized = True
+        self._initialized = True
 
 
-config = Config()
+CONFIG = Config()
 
 
 def main() -> None:
+    from ocimatic.main import cli
+
     cli()
+
+
+if __name__ == "__main__":
+    main()

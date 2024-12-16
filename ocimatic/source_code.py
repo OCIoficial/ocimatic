@@ -83,8 +83,8 @@ class CppSource(SourceCode):
 
     def build_cmd(self) -> list[str]:
         cmd = [
-            str(ocimatic.config.cpp.command),
-            *ocimatic.config.cpp.flags,
+            str(ocimatic.CONFIG.cpp.command),
+            *ocimatic.CONFIG.cpp.flags,
             "-o",
             str(self._out),
         ]
@@ -126,8 +126,8 @@ class RustSource(SourceCode):
 
     def build_cmd(self) -> list[str]:
         cmd = [
-            ocimatic.config.rust.command,
-            *ocimatic.config.rust.flags,
+            ocimatic.CONFIG.rust.command,
+            *ocimatic.CONFIG.rust.flags,
             "-o",
             str(self._out),
             str(self._file),
@@ -161,7 +161,7 @@ class JavaSource(SourceCode):
         self._out = out or Path(source.parent, ".build", f"{source.stem}-java")
 
     def build_cmd(self) -> list[str]:
-        return [ocimatic.config.java.javac, "-d", str(self._out), str(self._source)]
+        return [ocimatic.CONFIG.java.javac, "-d", str(self._out), str(self._source)]
 
     def build(self, *, force: bool = False) -> JavaClasses | BuildError:
         if force or JavaSource.should_build([self._source], self._out):
@@ -223,7 +223,7 @@ class LatexSource:
         yield from self._source.open()
 
     def _cmd(self) -> str:
-        return Template(ocimatic.config.latex.command).substitute(
+        return Template(ocimatic.CONFIG.latex.command).substitute(
             TEXNAME=self._source.name,
         )
 

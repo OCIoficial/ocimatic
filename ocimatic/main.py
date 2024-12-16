@@ -14,7 +14,7 @@ from click.shell_completion import CompletionItem
 from cloup.constraints import If, accept_none, mutually_exclusive
 
 import ocimatic
-from ocimatic import core, server, ui
+from ocimatic import core, ui
 from ocimatic._version import __version__
 from ocimatic.result import Status
 from ocimatic.utils import Stn
@@ -30,7 +30,7 @@ class CLI:
         return contest
 
     @property
-    def last_dir(self) -> core.Path | None:
+    def last_dir(self) -> Path | None:
         (_, last_dir) = self._load()
         return last_dir
 
@@ -132,6 +132,8 @@ def init(path: str, phase: str | None) -> None:
 @cloup.option("--port", "-p", default="9999", type=int)
 @cloup.pass_obj
 def run_server(cli: CLI, port: int) -> None:
+    from ocimatic import server
+
     server.run(cli.contest, port)
 
 
@@ -489,17 +491,17 @@ def check_setup() -> None:
     ui.writeln()
 
     status = Status.success
-    status &= _test_command(ocimatic.config.python.command)
+    status &= _test_command(ocimatic.CONFIG.python.command)
     ui.writeln()
-    status &= _test_command(ocimatic.config.cpp.command)
+    status &= _test_command(ocimatic.CONFIG.cpp.command)
     ui.writeln()
-    status &= _test_command(ocimatic.config.java.javac)
+    status &= _test_command(ocimatic.CONFIG.java.javac)
     ui.writeln()
-    status &= _test_command(ocimatic.config.java.jre)
+    status &= _test_command(ocimatic.CONFIG.java.jre)
     ui.writeln()
-    status &= _test_command(ocimatic.config.rust.command)
+    status &= _test_command(ocimatic.CONFIG.rust.command)
     ui.writeln()
-    status &= _test_command(ocimatic.config.latex.command)
+    status &= _test_command(ocimatic.CONFIG.latex.command)
     ui.writeln()
 
     if status == Status.success:
@@ -612,4 +614,4 @@ def cli(ctx: click.Context) -> None:
     # Only initialize config if we are not running the `setup` command. This ensures we can
     # run `ocimatic setup` even if there are issues with the config file.
     if ctx.invoked_subcommand != "setup":
-        ocimatic.config.initialize()
+        ocimatic.CONFIG.initialize()
