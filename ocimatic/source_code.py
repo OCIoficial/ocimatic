@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from string import Template
 
-import ocimatic
 from ocimatic import ui, utils
+from ocimatic.config import CONFIG
 from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
 from ocimatic.utils import Stn
 
@@ -83,8 +83,8 @@ class CppSource(SourceCode):
 
     def build_cmd(self) -> list[str]:
         cmd = [
-            str(ocimatic.CONFIG.cpp.command),
-            *ocimatic.CONFIG.cpp.flags,
+            str(CONFIG.cpp.command),
+            *CONFIG.cpp.flags,
             "-o",
             str(self._out),
         ]
@@ -126,8 +126,8 @@ class RustSource(SourceCode):
 
     def build_cmd(self) -> list[str]:
         cmd = [
-            ocimatic.CONFIG.rust.command,
-            *ocimatic.CONFIG.rust.flags,
+            CONFIG.rust.command,
+            *CONFIG.rust.flags,
             "-o",
             str(self._out),
             str(self._file),
@@ -161,7 +161,7 @@ class JavaSource(SourceCode):
         self._out = out or Path(source.parent, ".build", f"{source.stem}-java")
 
     def build_cmd(self) -> list[str]:
-        return [ocimatic.CONFIG.java.javac, "-d", str(self._out), str(self._source)]
+        return [CONFIG.java.javac, "-d", str(self._out), str(self._source)]
 
     def build(self, *, force: bool = False) -> JavaClasses | BuildError:
         if force or JavaSource.should_build([self._source], self._out):
@@ -223,7 +223,7 @@ class LatexSource:
         yield from self._source.open()
 
     def _cmd(self) -> str:
-        return Template(ocimatic.CONFIG.latex.command).substitute(
+        return Template(CONFIG.latex.command).substitute(
             TEXNAME=self._source.name,
         )
 

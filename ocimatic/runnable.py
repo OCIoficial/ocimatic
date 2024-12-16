@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO, overload
 
-import ocimatic
+from ocimatic.config import CONFIG
 from ocimatic.result import Error
 
 SIGNALS = {
@@ -204,7 +204,7 @@ class JavaClasses(Runnable):
         self._classes = classes
 
     def cmd(self) -> list[str]:
-        return [ocimatic.CONFIG.java.jre, "-cp", str(self._classes), self._classname]
+        return [CONFIG.java.jre, "-cp", str(self._classes), self._classname]
 
 
 class Python3(Runnable):
@@ -212,4 +212,4 @@ class Python3(Runnable):
         self._script = script
 
     def cmd(self) -> list[str]:
-        return [ocimatic.CONFIG.python.command, str(self._script)]
+        return [CONFIG.python.command, str(self._script)]

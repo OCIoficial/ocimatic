@@ -16,8 +16,7 @@ from typing import TYPE_CHECKING, Any, cast
 import tomlkit
 from click.shell_completion import CompletionItem
 
-import ocimatic
-from ocimatic import ui
+from ocimatic import config, ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
 from ocimatic.result import Result, Status
@@ -46,7 +45,7 @@ def find_contest_root() -> tuple[Path, Path | None] | None:
         curr_dir = curr_dir.parent
         if curr_dir.samefile(last_dir):
             return None
-    ocimatic.contest_root = curr_dir
+    config.CONTEST_ROOT = curr_dir
     return (curr_dir, last_dir)
 
 
@@ -58,21 +57,21 @@ class ContestConfig:
 
     @staticmethod
     def init(contest_path: Path, phase: str) -> None:
-        config_path = Path(contest_path, ContestConfig.FILE_NAME)
-        with config_path.open("r+") as f:
-            config = cast(dict[Any, Any], tomlkit.load(f))
-            config["contest"]["phase"] = phase
+        conf_path = Path(contest_path, ContestConfig.FILE_NAME)
+        with conf_path.open("r+") as f:
+            conf = cast(dict[Any, Any], tomlkit.load(f))
+            conf["contest"]["phase"] = phase
 
             f.seek(0)
-            tomlkit.dump(config, f)  # pyright: ignore [reportUnknownMemberType]
+            tomlkit.dump(conf, f)  # pyright: ignore [reportUnknownMemberType]
             f.truncate()
 
     @staticmethod
     def load(contest_path: Path) -> ContestConfig:
-        config_path = Path(contest_path, ContestConfig.FILE_NAME)
-        with config_path.open() as f:
-            config = cast(dict[Any, Any], tomlkit.load(f))
-            contest_table = config.get("contest", {})
+        conf_path = Path(contest_path, ContestConfig.FILE_NAME)
+        with conf_path.open() as f:
+            conf = cast(dict[Any, Any], tomlkit.load(f))
+            contest_table = conf.get("contest", {})
             phase = contest_table.get("phase", "")
             return ContestConfig(phase=phase)
 
@@ -103,9 +102,9 @@ class Contest:
     def _detect_tasks(contest_dir: Path) -> Iterator[tuple[int, TaskConfig, Path]]:
         tasks: list[tuple[TaskConfig, Path]] = []
         for dir in contest_dir.iterdir():
-            config = TaskConfig.load(dir)
-            if config:
-                tasks.append((config, dir))
+            conf = TaskConfig.load(dir)
+            if conf:
+                tasks.append((conf, dir))
         tasks.sort()
         return ((i, c, d) for i, (c, d) in enumerate(tasks))
 
@@ -113,9 +112,9 @@ class Contest:
     def load_task_by_name(contest_dir: Path, task_name: str) -> Task | None:
         return next(
             (
-                Task(d, config, i)
-                for i, config, d in Contest._detect_tasks(contest_dir)
-                if config.codename == task_name
+                Task(d, conf, i)
+                for i, conf, d in Contest._detect_tasks(contest_dir)
+                if conf.codename == task_name
             ),
             None,
         )
@@ -124,8 +123,8 @@ class Contest:
     def load_task_by_dir(contest_dir: Path, task_dir: Path) -> Task | None:
         return next(
             (
-                Task(d, config, i)
-                for i, config, d in Contest._detect_tasks(contest_dir)
+                Task(d, conf, i)
+                for i, conf, d in Contest._detect_tasks(contest_dir)
                 if d == task_dir
             ),
             None,
@@ -133,12 +132,12 @@ class Contest:
 
     def __init__(self, directory: Path) -> None:
         self._directory = directory
-        self._config = ContestConfig.load(directory)
+        self._conf = ContestConfig.load(directory)
         self._tasks = [
-            Task(d, config, i) for i, config, d in Contest._detect_tasks(directory)
+            Task(d, conf, i) for i, conf, d in Contest._detect_tasks(directory)
         ]
 
-        os.environ["OCIMATIC_PHASE"] = self._config.phase
+        os.environ["OCIMATIC_PHASE"] = self._conf.phase
 
         self._titlepage = LatexSource(directory / "titlepage.tex")
         self._general = LatexSource(directory / "general.tex")
@@ -280,28 +279,28 @@ class TaskConfig:
 
     @staticmethod
     def init(task_path: Path) -> None:
-        config_path = Path(task_path, TaskConfig.FILE_NAME)
-        with config_path.open("r+") as f:
-            config = cast(dict[Any, Any], tomlkit.load(f))
-            config["task"]["codename"] = task_path.name
+        conf_path = Path(task_path, TaskConfig.FILE_NAME)
+        with conf_path.open("r+") as f:
+            conf = cast(dict[Any, Any], tomlkit.load(f))
+            conf["task"]["codename"] = task_path.name
 
             f.seek(0)
-            tomlkit.dump(config, f)  # pyright: ignore [reportUnknownMemberType]
+            tomlkit.dump(conf, f)  # pyright: ignore [reportUnknownMemberType]
             f.truncate()
 
     @staticmethod
     def load(task_path: Path) -> TaskConfig | None:
-        config_path = Path(task_path, TaskConfig.FILE_NAME)
-        if not config_path.exists():
+        conf_path = Path(task_path, TaskConfig.FILE_NAME)
+        if not conf_path.exists():
             return None
 
-        with config_path.open() as f:
-            config = cast(dict[Any, Any], tomlkit.load(f))
-            task_table = config.get("task", {})
+        with conf_path.open() as f:
+            conf = cast(dict[Any, Any], tomlkit.load(f))
+            task_table = conf.get("task", {})
             codename = task_table.get("codename", task_path.name)
             priority = task_table.get("priority", 0)
 
-            dataset_table = config.get("dataset", {})
+            dataset_table = conf.get("dataset", {})
             static_dataset = dataset_table.get("static", False)
             return TaskConfig(
                 codename=codename,
@@ -340,9 +339,9 @@ class Task:
         shutil.copy2(contest_skel / "oci.cls", statement_path)
         shutil.copy2(contest_skel / "logo.eps", statement_path)
 
-    def __init__(self, directory: Path, config: TaskConfig, num: int) -> None:
+    def __init__(self, directory: Path, conf: TaskConfig, num: int) -> None:
         self._directory = directory
-        self._config = config
+        self._conf = conf
 
         self._managers_dir = directory / "managers"
 
@@ -366,7 +365,7 @@ class Task:
         )
 
         testplan = None
-        if not self._config.static_dataset:
+        if not self._conf.static_dataset:
             testplan = Testplan(
                 directory / "testplan",
                 directory,
@@ -381,7 +380,7 @@ class Task:
 
     @property
     def codename(self) -> str:
-        return self._config.codename
+        return self._conf.codename
 
     @property
     def directory(self) -> Path:
@@ -504,7 +503,7 @@ class Task:
     @property
     def name(self) -> str:
         """Name of the task."""
-        return self._config.codename
+        return self._conf.codename
 
     def __str__(self) -> str:
         return self.name
@@ -795,7 +794,7 @@ Solutions with issues:
         not `None` use it to generate the expected output, otherwise use any correct one
         prioritizing C++ solutions.
         """
-        if self._config.static_dataset:
+        if self._conf.static_dataset:
             ui.show_message("skipping", "task has a static dataset.")
             return Status.success
         if not self._correct:

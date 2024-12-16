@@ -13,9 +13,8 @@ import cloup
 from click.shell_completion import CompletionItem
 from cloup.constraints import If, accept_none, mutually_exclusive
 
-import ocimatic
 from ocimatic import core, ui
-from ocimatic._version import __version__
+from ocimatic.config import CONFIG, Config
 from ocimatic.result import Status
 from ocimatic.utils import Stn
 
@@ -491,17 +490,17 @@ def check_setup() -> None:
     ui.writeln()
 
     status = Status.success
-    status &= _test_command(ocimatic.CONFIG.python.command)
+    status &= _test_command(CONFIG.python.command)
     ui.writeln()
-    status &= _test_command(ocimatic.CONFIG.cpp.command)
+    status &= _test_command(CONFIG.cpp.command)
     ui.writeln()
-    status &= _test_command(ocimatic.CONFIG.java.javac)
+    status &= _test_command(CONFIG.java.javac)
     ui.writeln()
-    status &= _test_command(ocimatic.CONFIG.java.jre)
+    status &= _test_command(CONFIG.java.jre)
     ui.writeln()
-    status &= _test_command(ocimatic.CONFIG.rust.command)
+    status &= _test_command(CONFIG.rust.command)
     ui.writeln()
-    status &= _test_command(ocimatic.CONFIG.latex.command)
+    status &= _test_command(CONFIG.latex.command)
     ui.writeln()
 
     if status == Status.success:
@@ -532,10 +531,10 @@ def _test_command(cmd: str) -> Status:
     help="Generate configuration file for ocimatic that can be used to override default commands.",
 )
 def setup() -> None:
-    shutil.copy2(ocimatic.Config.DEFAULT_PATH, ocimatic.Config.HOME_PATH)
+    shutil.copy2(Config.DEFAULT_PATH, Config.HOME_PATH)
 
     ui.writeln(
-        f"Configuration file created at '{ocimatic.Config.HOME_PATH}'.\n"
+        f"Configuration file created at '{Config.HOME_PATH}'.\n"
         "You can configure ocimatic by editing the file.",
         ui.OK,
     )
@@ -545,6 +544,8 @@ def setup() -> None:
     help="Show version and exit",
 )
 def version() -> None:
+    from ocimatic._version import __version__
+
     print(__version__)
 
 
@@ -614,4 +615,4 @@ def cli(ctx: click.Context) -> None:
     # Only initialize config if we are not running the `setup` command. This ensures we can
     # run `ocimatic setup` even if there are issues with the config file.
     if ctx.invoked_subcommand != "setup":
-        ocimatic.CONFIG.initialize()
+        CONFIG.initialize()
