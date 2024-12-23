@@ -36,6 +36,7 @@
       overflow: scroll;
       background-color: #000000;
       color: #aaaaaa;
+      padding-bottom: 20px;
     }
     .console {
       display: inline;
@@ -43,33 +44,41 @@
       word-wrap: break-word;
     }
   </style>
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
   <script>
-    $(document).ready(function () {
-      $("#submit").click(function (e) {
-        $(".console").html("");
-        const data = Object.fromEntries(
-          $("form")
-            .serializeArray()
-            .map((x) => [x["name"], x["value"]])
-        );
-        var last_response_len = 0;
-        $.ajax({
-          type: "POST",
-          url: "submit",
-          data: JSON.stringify(data),
-          contentType: "application/json",
-          xhrFields: {
-            onprogress: function (e) {
-              const response = e.currentTarget.response;
-              const this_response = response.substring(last_response_len);
-              last_response_len = response.length;
-              console.log(this_response);
-              $(".console").append(this_response);
-            },
-          },
+    document.addEventListener("DOMContentLoaded", function () {
+      document.getElementById("submit").addEventListener("click", function (e) {
+        e.preventDefault(); // Prevent form submission
+
+        // Clear the console
+        document.querySelectorAll(".console").forEach((consoleElem) => {
+          consoleElem.innerHTML = "";
         });
-        return false;
+
+        // Serialize form data into an object
+        const formData = new FormData(document.querySelector("form"));
+        const data = Object.fromEntries(formData.entries());
+
+        // Initialize variables for progress
+        let lastResponseLength = 0;
+
+        // Create and send an XMLHttpRequest
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "submit", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+
+        // Monitor progress
+        xhr.onprogress = function () {
+          const response = xhr.responseText;
+          const thisResponse = response.substring(lastResponseLength);
+          lastResponseLength = response.length;
+
+          document.querySelectorAll(".console").forEach((consoleElem) => {
+            consoleElem.innerHTML += thisResponse;
+          });
+        };
+
+        // Send the request with serialized data
+        xhr.send(JSON.stringify(data));
       });
     });
   </script>
@@ -79,12 +88,7 @@
         <form action="/" method="post" enctype="multipart/form-data">
           <div class="tasks">
             {% for task in tasks %}
-            <input
-              id="{{ task.name }}"
-              type="radio"
-              name="task"
-              value="{{ task.name }}"
-            />
+            <input id="{{ task.name }}" type="radio" name="task" value="{{ task.name }}" />
             <label for="{{ task.name }}"> {{ task.name }} </label>
             {% endfor %}
           </div>

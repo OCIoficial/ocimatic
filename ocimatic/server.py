@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -17,17 +18,10 @@ def ansi2html(ansi: str) -> str:
     )
 
 
-UPLOAD_FOLDER = Path("/tmp", "ocimatic", "server")
-
 contest: core.Contest | None = None
+ocimatic_script_path = Path("ocimatic")
 app = Flask(__name__)
 app.secret_key = 'M\xf2\xba\xc0\xe3\xe55\xa0"\xff\x96\xba\xb8Jn\xc6#S\xa0t\xda\xb5[\r'
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
-
-def upload_folder() -> Path:
-    UPLOAD_FOLDER.mkdir(exist_ok=True, parents=True)
-    return UPLOAD_FOLDER
 
 
 @app.route("/", methods=["POST", "GET"])
@@ -36,44 +30,47 @@ def server() -> str:
     return render_template("index.html", tasks=contest.tasks)
 
 
-def save_solution(content: str, suffix: str) -> Path:
-    filepath = Path(upload_folder(), f"solution.{suffix}")
-    with filepath.open("w") as f:
-        f.write(content)
-    return filepath
-
-
 @app.route("/submit", methods=["POST"])
 def submit() -> Response | str:
     assert contest
     data = request.get_json()
 
-    task = contest.find_task_by_name(data["task"])
+    task_name: str | None = data.get("task")
+    if task_name is None:
+        return "Select a task"
+
+    task = contest.find_task_by_name(task_name)
     if not task:
         return "Task not found"
 
-    filepath = save_solution(data["solution"], data["lang"])
-
-    ocimatic_path = Path(Path(__file__).parents[1], "bin", "ocimatic").resolve()
-    cmd: list[Path | str] = [
-        "python",
-        ocimatic_path,
-        "run",
-        "--task",
-        task.name,
-        filepath,
-    ]
+    ext = data["lang"]
+    content = data.get("solution", "")
 
     def stream() -> Iterator[str]:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
-        assert proc.stdout
-        for line in proc.stdout:
-            yield ansi2html(line)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filepath = Path(tmpdir, f"solution.{ext}")
+            with filepath.open("w") as f:
+                f.write(content)
+
+            cmd: list[Path | str] = [
+                ocimatic_script_path,
+                "run",
+                "--task",
+                task.name,
+                filepath,
+            ]
+
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+            assert proc.stdout
+            for line in proc.stdout:
+                yield ansi2html(line)
 
     return Response(stream())
 
 
-def run(contest_: core.Contest, port: int = 9999) -> None:
+def run(ocimatic_script_path_: Path, contest_: core.Contest, port: int = 9999) -> None:
     global contest
+    global ocimatic_script_path
     contest = contest_
+    ocimatic_script_path = ocimatic_script_path_
     app.run(port=port, debug=True)

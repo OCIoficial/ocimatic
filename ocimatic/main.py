@@ -89,9 +89,11 @@ def init(path: str, phase: str | None) -> None:
 @cloup.option("--port", "-p", default="9999", type=int)
 @cloup.pass_obj
 def run_server(cli: CLI, port: int) -> None:
+    import sys
+
     from ocimatic import server
 
-    server.run(cli.contest, port)
+    server.run(Path(sys.argv[0]), cli.contest, port)
 
 
 @cloup.command(help="Generate problemset pdf")

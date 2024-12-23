@@ -277,7 +277,7 @@ class Contest:
                 _add_blank_page(merger, sideness, Evenness.ODD)
 
             _add_blank_page(merger, sideness, Evenness.EVEN)
-            merger.write(self._directory / f"{sideness}.pdf")  # pyright: ignore [reportUnknownMemberType]
+            merger.write(self._directory / f"{sideness}.pdf")
             merger.close()
             return Result.success(short_msg="OK")
         except Exception as exc:
