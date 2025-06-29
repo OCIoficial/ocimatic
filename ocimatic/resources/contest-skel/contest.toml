@@ -1,3 +1,5 @@
 [contest]
 # The phase is printed in the final pdf. This is typically either `Final` or `Regional`.
 phase = ""
+# Software used for typesetting documents, either `typst` or `latex`
+typesetting = "typst"

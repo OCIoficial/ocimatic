@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+from abc import ABC, abstractmethod
 import re
 import shutil
 import tempfile
@@ -11,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, get_args, ClassVar
 
 import tomlkit
 from click.shell_completion import CompletionItem
@@ -21,9 +22,16 @@ from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
 from ocimatic.result import Result, Status
 from ocimatic.solutions import Solution
-from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
+from ocimatic.source_code import (
+    CppSource,
+    JavaSource,
+    LatexSource,
+    TypstSource,
+    RustSource,
+)
 from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
+from ocimatic.typesetting import Typesetting
 
 
 class CLI:
@@ -58,8 +66,8 @@ class CLI:
         return Contest.load_task_by_dir(contest_dir, task_dir)
 
     @staticmethod
-    def init_contest(dest: Path, phase: str | None) -> None:
-        Contest.create_layout(dest, phase)
+    def init_contest(dest: Path, phase: str | None, typesetting: Typesetting) -> None:
+        Contest.create_layout(dest, phase, typesetting)
 
     @property
     def contest(self) -> Contest:
@@ -108,13 +116,16 @@ class ContestConfig:
     FILE_NAME = "contest.toml"
 
     phase: str
+    typesetting: Typesetting
 
     @staticmethod
-    def init(contest_path: Path, phase: str) -> None:
+    def init(contest_path: Path, phase: str | None, typesetting: Typesetting) -> None:
         conf_path = Path(contest_path, ContestConfig.FILE_NAME)
         with conf_path.open("r+") as f:
             conf = cast(dict[Any, Any], tomlkit.load(f))
-            conf["contest"]["phase"] = phase
+            if phase is not None:
+                conf["contest"]["phase"] = phase
+            conf["contest"]["typesetting"] = typesetting
 
             f.seek(0)
             tomlkit.dump(conf, f)  # pyright: ignore [reportUnknownMemberType]
@@ -127,7 +138,10 @@ class ContestConfig:
             conf = cast(dict[Any, Any], tomlkit.load(f))
             contest_table = conf.get("contest", {})
             phase = contest_table.get("phase", "")
-            return ContestConfig(phase=phase)
+            typesetting = contest_table.get("typesetting", "typst")
+            if typesetting not in get_args(Typesetting):
+                ui.fatal_error(f"`typesetting` must be one of {get_args(Typesetting)}")
+            return ContestConfig(phase=phase, typesetting=typesetting)
 
 
 class Contest:
@@ -139,18 +153,25 @@ class Contest:
 
     COLOR = ui.MAGENTA
 
+    TYPESETTING_FILES: ClassVar[dict[Typesetting, list[str]]] = {
+        "latex": ["logo.eps", "oci.cls", "titlepage.tex", "general.tex"],
+        "typst": ["logo.png", "oci.typ", "titlepage.typ", "general.typ"],
+    }
+
     @staticmethod
-    def create_layout(dest: Path, phase: str | None) -> None:
+    def create_layout(dest: Path, phase: str | None, typesetting: Typesetting) -> None:
         """Copy contest skeleton to `dest`."""
         ocimatic_dir = Path(__file__).parent
+        resources_dir = ocimatic_dir / "resources"
         shutil.copytree(
-            ocimatic_dir / "resources" / "contest-skel",
+            resources_dir / "contest-skel",
             dest,
             ignore=shutil.ignore_patterns("auto"),
             symlinks=True,
         )
-        if phase is not None:
-            ContestConfig.init(dest, phase)
+        for file in Contest.TYPESETTING_FILES[typesetting]:
+            shutil.copy2(resources_dir / typesetting / file, dest)
+        ContestConfig.init(dest, phase, typesetting)
 
     @staticmethod
     def _detect_tasks(contest_dir: Path) -> Iterator[tuple[int, TaskConfig, Path]]:
@@ -164,9 +185,10 @@ class Contest:
 
     @staticmethod
     def load_task_by_name(contest_dir: Path, task_name: str) -> Task | None:
+        contest_conf = ContestConfig.load(contest_dir)
         return next(
             (
-                Task(d, conf, i)
+                Task(d, contest_conf, conf, i)
                 for i, conf, d in Contest._detect_tasks(contest_dir)
                 if conf.codename == task_name
             ),
@@ -175,9 +197,10 @@ class Contest:
 
     @staticmethod
     def load_task_by_dir(contest_dir: Path, task_dir: Path) -> Task | None:
+        contest_conf = ContestConfig.load(contest_dir)
         return next(
             (
-                Task(d, conf, i)
+                Task(d, contest_conf, conf, i)
                 for i, conf, d in Contest._detect_tasks(contest_dir)
                 if d == task_dir
             ),
@@ -188,20 +211,31 @@ class Contest:
         self._directory = directory
         self._conf = ContestConfig.load(directory)
         self._tasks = [
-            Task(d, conf, i) for i, conf, d in Contest._detect_tasks(directory)
+            Task(d, self._conf, conf, i)
+            for i, conf, d in Contest._detect_tasks(directory)
         ]
 
-        os.environ["OCIMATIC_PHASE"] = self._conf.phase
-
-        self._titlepage = LatexSource(directory / "titlepage.tex")
-        self._general = LatexSource(directory / "general.tex")
+        vars = {"OCIMATIC_PHASE": self._conf.phase}
+        match self._conf.typesetting:
+            case "latex":
+                self._titlepage = LatexSource(directory / "titlepage.tex", env=vars)
+                self._general = LatexSource(directory / "general.tex", env=vars)
+            case "typst":
+                self._titlepage = TypstSource(
+                    directory / "titlepage.typ",
+                    sys_inputs=vars,
+                )
+                self._general = TypstSource(
+                    directory / "general.typ",
+                    sys_inputs=vars,
+                )
 
     @property
     def directory(self) -> Path:
         return self._directory
 
     def new_task(self, name: str) -> None:
-        Task.create_layout(self._directory / name)
+        Task.create_layout(self._directory / name, self._conf.typesetting)
 
     @property
     def tasks(self) -> list[Task]:
@@ -380,25 +414,31 @@ class Task:
 
     COLOR = ui.MAGENTA + ui.BOLD
 
+    TYPESETTING_FILES: ClassVar[dict[Typesetting, list[str]]] = {
+        "latex": ["statement.tex", "logo.eps", "oci.cls"],
+        "typst": ["statement.typ", "logo.png", "oci.typ"],
+    }
+
     @staticmethod
-    def create_layout(task_path: Path) -> None:
+    def create_layout(task_path: Path, typesetting: Typesetting) -> None:
         ocimatic_dir = Path(__file__).parent
+        resources_dir = ocimatic_dir / "resources"
 
         # Copy task skeleton
-        task_skel = ocimatic_dir / "resources" / "task-skel"
-        shutil.copytree(task_skel, task_path, symlinks=True)
+        shutil.copytree(resources_dir / "task-skel", task_path, symlinks=True)
+        for file in Task.TYPESETTING_FILES[typesetting]:
+            shutil.copy2(resources_dir / typesetting / file, task_path / "statement")
 
         # Init config
         TaskConfig.init(task_path)
 
-        # We put `oci.cls` and `logo.eps` in the statement directory to make it easier to work on
-        # the pdf without using ocimatic.
-        contest_skel = ocimatic_dir / "resources" / "contest-skel"
-        statement_path = task_path / "statement"
-        shutil.copy2(contest_skel / "oci.cls", statement_path)
-        shutil.copy2(contest_skel / "logo.eps", statement_path)
-
-    def __init__(self, directory: Path, conf: TaskConfig, num: int) -> None:
+    def __init__(
+        self,
+        directory: Path,
+        contest_conf: ContestConfig,
+        conf: TaskConfig,
+        num: int,
+    ) -> None:
         self._directory = directory
         self._conf = conf
 
@@ -417,8 +457,10 @@ class Task:
             self._managers_dir,
         )
 
-        self._statement = Statement(
+        self._statement = Statement.load(
             directory / "statement",
+            contest_conf.typesetting,
+            phase=contest_conf.phase,
             num=num,
             codename=self.codename,
         )
@@ -889,7 +931,137 @@ Solutions with issues:
         self._statement.build()
 
 
-class Statement:
+class Statement(ABC):
+    @staticmethod
+    def load(
+        directory: Path,
+        typesetting: Typesetting,
+        *,
+        phase: str,
+        num: int,
+        codename: str,
+    ) -> Statement:
+        match typesetting:
+            case "latex":
+                return LatexStatement(
+                    directory,
+                    phase=phase,
+                    num=num,
+                    codename=codename,
+                )
+            case "typst":
+                return TypstStatement(
+                    directory,
+                    phase=phase,
+                    num=num,
+                    codename=codename,
+                )
+
+    def __init__(self, directory: Path, num: int, codename: str) -> None:
+        self._directory = directory
+        self._num = num
+        self._codename = codename
+
+    @property
+    @abstractmethod
+    def pdf(self) -> Path | None: ...
+
+    @abstractmethod
+    def build(self) -> Result: ...
+
+    @abstractmethod
+    def _get_title_from_source(self) -> str | None: ...
+
+    @abstractmethod
+    def _get_io_samples_from_source(self) -> set[str]: ...
+
+    @abstractmethod
+    def _get_scores_from_source(self) -> SortedDict[Stn, int]: ...
+
+    def get_io_samples(self) -> list[Test]:
+        """Find sample input data in the statement."""
+        return [
+            Test(self._directory / f"{s}.in", self._directory / f"{s}.sol")
+            for s in self._get_io_samples_from_source()
+        ]
+
+    def get_title(self) -> str:
+        title = self._get_title_from_source() or self._codename or self._directory.name
+        return f"Problema {_number_to_letter(self._num)} - {title}"
+
+    def get_scores(self) -> SortedDict[Stn, int]:
+        """Find the scores for each subtask."""
+        scores: SortedDict[Stn, int] = self._get_scores_from_source()
+        if not scores:
+            ui.show_message(
+                "warning",
+                "couldn't infer the score from the statement, assuming a single subtask with 100 points.",
+                ui.WARNING,
+            )
+            scores[Stn(1)] = 100
+
+        return scores
+
+
+class TypstStatement(Statement):
+    _TITLE_RE = re.compile(r"\s*title:\s*\"([^\"]+)\"")
+    _SAMPLE_IO_RE: re.Pattern[str] = re.compile(r"\s*#sampleIO\(\"([^\"]+)\"\)")
+    _SUBTASK_RE = re.compile(r"\s*#subtask\(([^\)]+)\)")
+
+    def __init__(
+        self,
+        directory: Path,
+        *,
+        phase: str,
+        num: int,
+        codename: str,
+    ) -> None:
+        assert (directory / "statement.typ").exists()
+        super().__init__(directory, num, codename)
+        sys_inputs: dict[str, str] = {
+            "OCIMATIC_PHASE": phase,
+            "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),
+            "OCIMATIC_CODENAME": codename,
+        }
+        self._source = TypstSource(directory / "statement.typ", sys_inputs=sys_inputs)
+
+    @property
+    def pdf(self) -> Path | None:
+        """Return path to pdf if exists."""
+        return self._source.pdf()
+
+    def __str__(self) -> str:
+        return str(self._source)
+
+    @ui.work("TYPST")
+    def build(self) -> Result:
+        result = self._source.compile()
+        if isinstance(result, Path):
+            return Result.success("OK")
+        else:
+            return Result.fail("FAILED", long_msg=result.msg)
+
+    def _get_title_from_source(self) -> str | None:
+        m = next((_match_lines(self._source.iter_lines(), self._TITLE_RE)), None)
+        return m and m.group(1)
+
+    def _get_io_samples_from_source(self) -> set[str]:
+        return {
+            m.group(1)
+            for m in _match_lines(self._source.iter_lines(), self._SAMPLE_IO_RE)
+        }
+
+    def _get_scores_from_source(self) -> SortedDict[Stn, int]:
+        """Find the scores for each subtask."""
+        scores: SortedDict[Stn, int] = SortedDict()
+        sti = 1
+        for m in _match_lines(self._source.iter_lines(), self._SUBTASK_RE):
+            scores[Stn(sti)] = int(m.group(1))
+            sti += 1
+        return scores
+
+
+class LatexStatement(Statement):
     """Represents a statement. A statement is composed by a latex source and a pdf file."""
 
     _SAMPLE_IO_RE = re.compile(r"[^%]*\\sampleIO(?:\*)?(\[[^\]]*\]){0,2}{([^}]+)}")
@@ -899,14 +1071,19 @@ class Statement:
     def __init__(
         self,
         directory: Path,
-        num: int | None = None,
-        codename: str | None = None,
+        *,
+        phase: str,
+        num: int,
+        codename: str,
     ) -> None:
         assert (directory / "statement.tex").exists()
-        self._source = LatexSource(directory / "statement.tex")
-        self._directory = directory
-        self._num = num
-        self._codename = codename
+        super().__init__(directory, num, codename)
+        env: dict[str, str] = {
+            "OCIMATIC_PHASE": phase,
+            "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),
+            "OCIMATIC_CODENAME": codename,
+        }
+        self._source = LatexSource(directory / "statement.tex", env=env)
 
     @property
     def pdf(self) -> Path | None:
@@ -919,63 +1096,39 @@ class Statement:
     @ui.work("LATEX")
     def build(self) -> Result:
         """Compile latex statement."""
-        if self._num is not None:
-            os.environ["OCIMATIC_PROBLEM_NUMBER"] = _number_to_letter(self._num)
-        if self._codename:
-            os.environ["OCIMATIC_CODENAME"] = self._codename
-
         result = self._source.compile()
         if isinstance(result, Path):
             return Result.success("OK")
         else:
             return Result.fail("FAILED", long_msg=result.msg)
 
-    def get_title(self) -> str:
-        title = (
-            self._get_title_from_statement() or self._codename or self._directory.name
-        )
-        if self._num is not None:
-            return f"Problema {_number_to_letter(self._num)} - {title}"
-        else:
-            return title
+    def _get_title_from_source(self) -> str | None:
+        m = next((_match_lines(self._source.iter_lines(), self._TITLE_RE)), None)
+        return m and m.group(1)
 
-    def _get_title_from_statement(self) -> str | None:
-        for line in self._source.iter_lines():
-            m = self._TITLE_RE.match(line)
-            if m:
-                return m.group(1)
-        return None
+    def _get_io_samples_from_source(self) -> set[str]:
+        return {
+            m.group(2)
+            for m in _match_lines(self._source.iter_lines(), self._SAMPLE_IO_RE)
+        }
 
-    def get_io_samples(self) -> list[Test]:
-        """Find sample input data in the statement."""
-        samples: set[str] = set()
-        for line in self._source.iter_lines():
-            m = self._SAMPLE_IO_RE.match(line)
-            if m:
-                samples.add(m.group(2))
-        return [
-            Test(self._directory / f"{s}.in", self._directory / f"{s}.sol")
-            for s in samples
-        ]
-
-    def get_scores(self) -> SortedDict[Stn, int]:
-        """Find the scores for each subtask."""
+    def _get_scores_from_source(self) -> SortedDict[Stn, int]:
         scores: SortedDict[Stn, int] = SortedDict()
         sti = 1
-        for line in self._source.iter_lines():
-            m = self._SUBTASK_RE.match(line)
-            if m:
-                scores[Stn(sti)] = int(m.group(1))
-                sti += 1
-        if not scores:
-            ui.show_message(
-                "warning",
-                "couldn't infer the score from the statement, assuming a single subtask with 100 points.",
-                ui.WARNING,
-            )
-            scores[Stn(sti)] = 100
-
+        for m in _match_lines(self._source.iter_lines(), self._SUBTASK_RE):
+            scores[Stn(sti)] = int(m.group(1))
+            sti += 1
         return scores
+
+
+def _match_lines(
+    lines: Iterable[str],
+    pattern: re.Pattern[str],
+) -> Iterator[re.Match[str]]:
+    for line in lines:
+        m = pattern.match(line)
+        if m:
+            yield m
 
 
 def _number_to_letter(num: int) -> str:

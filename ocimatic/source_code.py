@@ -7,6 +7,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
+import typst
 
 from ocimatic import ui, utils
 from ocimatic.config import CONFIG
@@ -215,12 +216,28 @@ def comment_iter(file_path: Path, comment_start: str) -> Iterator[re.Match[str]]
                 yield m
 
 
-class LatexSource:
+class PDFSource(ABC):
     def __init__(self, source: Path) -> None:
         self._source = source
 
+    @abstractmethod
+    def compile(self) -> Path | BuildError: ...
+
     def iter_lines(self) -> Iterable[str]:
         yield from self._source.open()
+
+    def pdf(self) -> Path | None:
+        pdf = self._source.with_suffix(".pdf")
+        return pdf if pdf.exists() else None
+
+    def __str__(self) -> str:
+        return str(utils.relative_to_cwd(self._source))
+
+
+class LatexSource(PDFSource):
+    def __init__(self, source: Path, *, env: dict[str, str] | None = None) -> None:
+        super().__init__(source)
+        self._env = env
 
     def _cmd(self) -> str:
         return Template(CONFIG.latex.command).substitute(
@@ -236,6 +253,7 @@ class LatexSource:
             text=True,
             check=False,
             capture_output=True,
+            env=self._env,
         )
         if complete.returncode != 0:
             msg = complete.stderr
@@ -245,9 +263,21 @@ class LatexSource:
             return BuildError(msg=msg)
         return self._source.with_suffix(".pdf")
 
-    def pdf(self) -> Path | None:
-        pdf = self._source.with_suffix(".pdf")
-        return pdf if pdf.exists() else None
 
-    def __str__(self) -> str:
-        return str(utils.relative_to_cwd(self._source))
+class TypstSource(PDFSource):
+    def __init__(
+        self,
+        source: Path,
+        *,
+        sys_inputs: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(source)
+        self._sys_inputs = sys_inputs or {}
+
+    def compile(self) -> Path | BuildError:
+        output = self._source.with_suffix(".pdf")
+        try:
+            typst.compile(self._source, output=output, sys_inputs=self._sys_inputs)
+        except Exception as exc:
+            return BuildError(msg=str(exc))
+        return output

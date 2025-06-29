@@ -13,9 +13,11 @@ import cloup
 from click.shell_completion import CompletionItem
 from cloup.constraints import If, accept_none, mutually_exclusive
 
+
 if TYPE_CHECKING:
     from ocimatic.core import CLI
     from ocimatic.result import Status
+    from ocimatic.typesetting import Typesetting
 
 
 _SOLUTION_HELP = (
@@ -65,7 +67,8 @@ def _solution_completion(
 @cloup.command(help="Initialize a contest in a new directory")
 @cloup.argument("path", help="Path to directory")
 @cloup.option("--phase")
-def init(path: str, phase: str | None) -> None:
+@cloup.option("--typesetting", type=cloup.Choice(["latex", "typst"]), default="typst")
+def init(path: str, phase: str | None, typesetting: Typesetting) -> None:
     from ocimatic import ui
     from ocimatic.core import CLI
 
@@ -73,7 +76,7 @@ def init(path: str, phase: str | None) -> None:
         contest_path = Path(Path.cwd(), path)
         if contest_path.exists():
             ui.fatal_error("Couldn't create contest. Path already exists")
-        CLI.init_contest(contest_path, phase)
+        CLI.init_contest(contest_path, phase, typesetting)
         ui.show_message("Info", f"Contest [{path}] created", ui.OK)
     except Exception as exc:
         ui.fatal_error(f"Couldn't create contest: {exc}.")
