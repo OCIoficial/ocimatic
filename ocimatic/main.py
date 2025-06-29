@@ -496,8 +496,8 @@ def check_setup() -> None:
         ui.writeln("All commands ran successfully.", ui.GREEN)
     else:
         ui.writeln(
-            "Some commands failed to run. You can still try to use ocimatic\n"
-            "but some solutions or generators may fail to run. You can use\n"
+            "Some commands failed. You can still try to use ocimatic\n"
+            "but some solutions or generators may not work. You can use\n"
             "`ocimatic setup` to override the default configuration.",
             ui.RED,
         )
@@ -598,7 +598,7 @@ When inside a task's directory (or any subdiretory) that single task is selected
 run at the root of the contest, all tasks will be selected as targets.
 
 Some commands are only valid if there's a single target task (Single-task commands). Some commands
-apply to the entire contest (Contest commands) or are used to configure Ocimatic (Config commands)
+apply to the entire contest (Contest commands) or are used to configure Ocimatic (Config commands),
 and do not have a corresponding set of targets.
 """,
     sections=SECTIONS,
