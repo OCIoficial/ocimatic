@@ -22,7 +22,7 @@ requires-python = ">= 3.11"
 urls = { Source = "https://github.com/OCIoficial/ocimatic" }
 
 [project.optional-dependencies]
-dev = ["mypy==1.13.0", "pyright==1.1.389", "ruff==0.8.1"]
+dev = ["mypy==1.16.1", "pyright==1.1.402", "ruff==0.12.1"]
 
 [project.scripts]
 ocimatic = "ocimatic:main"

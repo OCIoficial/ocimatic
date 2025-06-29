@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Generic, Protocol, TypeVar
+from typing import Generic, Protocol, TypeVar, Self
 
 from ocimatic.config import CONTEST_ROOT
 
@@ -19,11 +19,8 @@ def relative_to_cwd(path: Path) -> str:
         return str(path)
 
 
-_T = TypeVar("_T")
-
-
 class Comparable(Protocol):
-    def __lt__(self: _T, other: _T) -> bool: ...
+    def __lt__(self, other: Self) -> bool: ...
 
 
 _K = TypeVar("_K", bound=Comparable)
