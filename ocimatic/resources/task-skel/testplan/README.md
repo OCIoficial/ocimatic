@@ -10,7 +10,7 @@ Inside a subtask, each line specifies a command to generate one or multiple test
 
 ## Commands
 
-A command can be either `copy`, `echo`, or a file containing a generator script. Check the sample `testplan.txt` next to this README to see how each command is used.
+A command can be either `copy`, `echo`, or a file containing a generator script. Check the sample `testplan.txt` next to this README to see examples of how each command is used.
 
 * `copy`:
   The copy command takes as a single argument a glob pattern. The command will copy all files matching the pattern, relative to the root of the current task. Useful when writing manual test cases or to copy sample test cases from the statement.
@@ -21,7 +21,7 @@ A command can be either `copy`, `echo`, or a file containing a generator script.
 
 ## Randomness in Generator Scripts
 
-A script must be deterministic and generate the same result every time it's executed. This is in conflict with a generator wanting to generate *arbitrary* values. Since the script must be deterministic, true randomness cannot be used. To this end, `ocimatic` passes an additional (hidden) argument to each invocation, which is guaranteed to be different for each invocation. The generator can use this extra argument to seed the random generator. The extra argument is passed as the first argument, meaning that the rest of the arguments are *shifted* by one position.
+A script must be deterministic and generate the same result every time it's executed. This is in conflict with a generator wanting to generate *arbitrary* values. Since the script must be deterministic, true randomness cannot be used. To this end, `ocimatic` passes an additional (hidden) argument to each invocation, which is guaranteed to be different for each invocation. The generator can use this extra argument to seed the random generator. The extra argument is passed as the first argument, meaning that the rest of the arguments are *shifted* by one position. See the generator scripts used in the `testplan.txt` next to this file for examples of how to seed the random generator.
 
 ## The `@extends` directive
 

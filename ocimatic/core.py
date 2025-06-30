@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import Any, cast, get_args, ClassVar
+from typing import Any, cast, get_args, ClassVar, Literal
 
 import tomlkit
 from click.shell_completion import CompletionItem
@@ -31,7 +31,8 @@ from ocimatic.source_code import (
 )
 from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
-from ocimatic.typesetting import Typesetting
+
+Typesetting = Literal["latex", "typst"]
 
 
 class CLI:
@@ -144,6 +145,26 @@ class ContestConfig:
             return ContestConfig(phase=phase, typesetting=typesetting)
 
 
+class Resource:
+    """A resource is a file in ocimatic that's copied when creating a contest or a task.
+
+    Some resources can be syncronized after the contest or task has been created. This is useful
+    for fixing bugs.
+    """
+
+    path: Path
+    sync: bool = False
+
+    def __init__(self, *args: str, sync: bool = False) -> None:
+        ocimatic_dir = Path(__file__).parent
+        resources_dir = ocimatic_dir / "resources"
+        self.path = resources_dir / Path(*args)
+        self.sync = sync
+
+    def copy_to(self, dest: Path) -> None:
+        shutil.copy2(self.path, dest)
+
+
 class Contest:
     """Represent a contest.
 
@@ -153,9 +174,19 @@ class Contest:
 
     COLOR = ui.MAGENTA
 
-    TYPESETTING_FILES: ClassVar[dict[Typesetting, list[str]]] = {
-        "latex": ["logo.eps", "oci.cls", "titlepage.tex", "general.tex"],
-        "typst": ["logo.png", "oci.typ", "titlepage.typ", "general.typ"],
+    RESOURCES: ClassVar[dict[Typesetting, list[Resource]]] = {
+        "latex": [
+            Resource("latex", "logo.eps", sync=True),
+            Resource("latex", "oci.cls", sync=True),
+            Resource("latex", "titlepage.tex"),
+            Resource("latex", "general.tex"),
+        ],
+        "typst": [
+            Resource("typst", "logo.png", sync=True),
+            Resource("typst", "oci.typ", sync=True),
+            Resource("typst", "titlepage.typ"),
+            Resource("typst", "general.typ"),
+        ],
     }
 
     @staticmethod
@@ -169,8 +200,8 @@ class Contest:
             ignore=shutil.ignore_patterns("auto"),
             symlinks=True,
         )
-        for file in Contest.TYPESETTING_FILES[typesetting]:
-            shutil.copy2(resources_dir / typesetting / file, dest)
+        for resource in Contest.RESOURCES[typesetting]:
+            resource.copy_to(dest)
         ContestConfig.init(dest, phase, typesetting)
 
     @staticmethod
@@ -361,6 +392,15 @@ class Contest:
         """Find task with the given name."""
         return next((p for p in self._tasks if p.name == name), None)
 
+    @ui.hd1("{0}", "Sync", COLOR)
+    def sync_resources(self) -> None:
+        typesetting = self._conf.typesetting
+        for resource in Contest.RESOURCES[typesetting]:
+            if resource.sync:
+                resource.copy_to(self._directory)
+        for task in self._tasks:
+            task.sync_resources(typesetting)
+
 
 @dataclass(kw_only=True, frozen=True)
 class TaskConfig:
@@ -414,9 +454,17 @@ class Task:
 
     COLOR = ui.MAGENTA + ui.BOLD
 
-    TYPESETTING_FILES: ClassVar[dict[Typesetting, list[str]]] = {
-        "latex": ["statement.tex", "logo.eps", "oci.cls"],
-        "typst": ["statement.typ", "logo.png", "oci.typ"],
+    RESOURCES: ClassVar[dict[Typesetting, list[Resource]]] = {
+        "latex": [
+            Resource("latex", "statement.tex"),
+            Resource("latex", "logo.eps", sync=True),
+            Resource("latex", "oci.cls", sync=True),
+        ],
+        "typst": [
+            Resource("typst", "statement.typ"),
+            Resource("typst", "logo.png", sync=True),
+            Resource("typst", "oci.typ", sync=True),
+        ],
     }
 
     @staticmethod
@@ -426,8 +474,8 @@ class Task:
 
         # Copy task skeleton
         shutil.copytree(resources_dir / "task-skel", task_path, symlinks=True)
-        for file in Task.TYPESETTING_FILES[typesetting]:
-            shutil.copy2(resources_dir / typesetting / file, task_path / "statement")
+        for resource in Task.RESOURCES[typesetting]:
+            resource.copy_to(task_path / "statement")
 
         # Init config
         TaskConfig.init(task_path)
@@ -929,6 +977,13 @@ Solutions with issues:
     def build_statement(self) -> None:
         """Generate pdf for the statement."""
         self._statement.build()
+
+    @ui.hd1("{0}", "Sync", COLOR)
+    def sync_resources(self, typesetting: Typesetting) -> None:
+        statement_dir = self._directory / "statement"
+        for resource in Task.RESOURCES[typesetting]:
+            if resource.sync:
+                resource.copy_to(statement_dir)
 
 
 class Statement(ABC):

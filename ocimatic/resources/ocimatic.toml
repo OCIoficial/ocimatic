@@ -1,8 +1,8 @@
 # This file can be used to configure the commands for compiling and running code in the various
-# languages used  by ocimatic. Normally, you should be able to get everything working by installing
+# languages used by ocimatic. Normally, you should be able to get everything working by installing
 # the compilers/interpreters required for each language and having them in your `PATH`. If you have
-# an unusual environment that doesn't match ocimatic expectations, editing this file gives you more
-# fine-grained control.
+# an unusual environment that doesn't match ocimatic's expectations, editing this file gives you more
+# fine-grained control, e.g., you can provide the absolute path for binaries.
 #
 # Note that some parts of ocimatic would work even if some of these commands are not working. So you
 # may be fine ignoring parts of this file depending on how you want to use ocimatic.
@@ -37,7 +37,7 @@ jre = "java"
 # for a task that has a Rust checker, you will need to have this working.
 [rust]
 command = "rustc"
-flags = ["--edition=2021", "-O"]
+flags = ["--edition=2024", "-O"]
 
 
 # Command used to compile a latex file into a pdf. Typically, you can work on an statement by
