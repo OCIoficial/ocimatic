@@ -32,7 +32,7 @@ from ocimatic.source_code import (
 from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
 
-Typesetting = Literal["latex", "typst"]
+type Typesetting = Literal["latex", "typst"]
 
 
 class CLI:

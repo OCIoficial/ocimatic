@@ -4,14 +4,11 @@ import re
 import sys
 from collections.abc import Callable, Generator
 from enum import Enum
-from typing import Literal, NoReturn, ParamSpec, TypeVar, cast
+from typing import Literal, NoReturn, cast
 
 from colorama import Fore, Style
 
 from ocimatic.result import IntoWorkResult, Result, Status, WorkResult
-
-_P = ParamSpec("_P")
-_T = TypeVar("_T")
 
 RESET: str = Style.RESET_ALL
 BOLD = Style.BRIGHT
@@ -91,17 +88,14 @@ def show_message(label: str, msg: str, color: str = INFO) -> None:
     write(" {} \n".format(colorize(label + ": " + str(msg), color)))
 
 
-_TIntoWorkResult = TypeVar("_TIntoWorkResult", bound=IntoWorkResult)
-
-
-def work(
+def work[T: IntoWorkResult, **P](
     action: str,
     formatter: str = "{}",
-) -> Callable[[Callable[_P, _TIntoWorkResult]], Callable[_P, _TIntoWorkResult]]:
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
     def decorator(
-        func: Callable[_P, _TIntoWorkResult],
-    ) -> Callable[_P, _TIntoWorkResult]:
-        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _TIntoWorkResult:
+        func: Callable[P, T],
+    ) -> Callable[P, T]:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             _start_work(action, formatter.format(*args, **kwargs))
             result = func(*args, **kwargs)
             _end_work(result.into_work_result(), _verbosity)
@@ -146,14 +140,14 @@ def _end_work(result: WorkResult, verbosity: Verbosity) -> None:
     flush()
 
 
-def hd(
+def hd[T, **P](
     level: Literal[1, 2],
     label_formatter: str,
     msg: str | None = None,
     color: str | None = None,
-) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
-    def decorator(func: Callable[_P, _T]) -> Callable[_P, _T]:
-        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
+    def decorator(func: Callable[P, T]) -> Callable[P, T]:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             _fmt_header(level, label_formatter.format(*args, **kwargs), msg, color)
             result = func(*args, **kwargs)
             _fmt_footer(level)
@@ -164,31 +158,31 @@ def hd(
     return decorator
 
 
-def hd1(
+def hd1[T, **P](
     label_formatter: str,
     msg: str | None = None,
     color: str = RESET,
-) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
     return hd(1, label_formatter, msg, color)
 
 
-def hd2(
+def hd2[T, **P](
     label_formatter: str,
     msg: str | None = None,
     color: str | None = None,
-) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
     return hd(2, label_formatter, msg, color)
 
 
-WorkHd = Generator[Result, None, _T]
+type WorkHd[T] = Generator[Result, None, T]
 
 
-def workhd(
+def workhd[T, **P](
     formatter: str = "{}",
     color: str | None = None,
-) -> Callable[[Callable[_P, WorkHd[_T]]], Callable[_P, _T]]:
-    def decorator(func: Callable[_P, WorkHd[_T]]) -> Callable[_P, _T]:
-        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _T:
+) -> Callable[[Callable[P, WorkHd[T]]], Callable[P, T]]:
+    def decorator(func: Callable[P, WorkHd[T]]) -> Callable[P, T]:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             _start_workhd(formatter.format(*args, **kwargs), color=color)
             gen = func(*args, **kwargs)
             try:
@@ -197,7 +191,7 @@ def workhd(
                     _end_work(result, Verbosity.verbose)
             except StopIteration as exc:
                 _fmt_footer(1)
-                return cast(_T, exc.value)
+                return cast(T, exc.value)
 
         return wrapper
 

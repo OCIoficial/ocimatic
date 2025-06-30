@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Generic, Protocol, TypeVar, Self
+from typing import Protocol, Self
 
 from ocimatic.config import CONTEST_ROOT
 
@@ -23,23 +23,19 @@ class Comparable(Protocol):
     def __lt__(self, other: Self) -> bool: ...
 
 
-_K = TypeVar("_K", bound=Comparable)
-_V = TypeVar("_V")
-
-
-class SortedDict(Generic[_K, _V]):
+class SortedDict[K: Comparable, V]:
     """A dict that iterates over keys in sorted order."""
 
-    def __init__(self, iter: Iterable[tuple[_K, _V]] | None = None) -> None:
+    def __init__(self, iter: Iterable[tuple[K, V]] | None = None) -> None:
         self._dict = dict(iter or [])
 
-    def __getitem__(self, key: _K) -> _V:
+    def __getitem__(self, key: K) -> V:
         return self._dict[key]
 
-    def __setitem__(self, key: _K, val: _V) -> None:
+    def __setitem__(self, key: K, val: V) -> None:
         self._dict[key] = val
 
-    def __contains__(self, key: _K) -> bool:
+    def __contains__(self, key: K) -> bool:
         return key in self._dict
 
     def __repr__(self) -> str:
@@ -49,21 +45,21 @@ class SortedDict(Generic[_K, _V]):
     def __len__(self) -> int:
         return len(self._dict)
 
-    def setdefault(self, key: _K, default: _V) -> _V:
+    def setdefault(self, key: K, default: V) -> V:
         return self._dict.setdefault(key, default)
 
-    def keys(self) -> list[_K]:
+    def keys(self) -> list[K]:
         return sorted(self._dict.keys())
 
-    def values(self) -> Iterator[_V]:
+    def values(self) -> Iterator[V]:
         for key in self.keys():
             yield self._dict[key]
 
-    def items(self) -> Iterator[tuple[_K, _V]]:
+    def items(self) -> Iterator[tuple[K, V]]:
         for key in self.keys():
             yield (key, self._dict[key])
 
-    def __iter__(self) -> Iterator[_K]:
+    def __iter__(self) -> Iterator[K]:
         yield from self.keys()
 
 

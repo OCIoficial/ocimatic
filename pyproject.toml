@@ -19,7 +19,7 @@ dependencies = [
 description = "Automatize task creation for OCI"
 dynamic = ["version"]
 name = "ocimatic"
-requires-python = ">= 3.11"
+requires-python = ">= 3.12"
 urls = { Source = "https://github.com/OCIoficial/ocimatic" }
 
 [project.optional-dependencies]
@@ -35,11 +35,11 @@ ocimatic = ["resources/**/*", "templates/**/*"]
 
 [tool.pyright]
 pythonPlatform = "All"
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 typeCheckingMode = "strict"
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 ignore = [
