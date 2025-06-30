@@ -131,13 +131,17 @@ def _end_work(result: WorkResult, verbosity: Verbosity) -> None:
         writeln()
 
         if result.long_msg:
-            long_msg = result.long_msg.strip()
-            long_msg = "\n".join(f">>> {line}" for line in long_msg.split("\n"))
-            write(long_msg)
-            writeln()
+            dump_message(result.long_msg)
     else:
         write(colorize(char, color))
     flush()
+
+
+def dump_message(msg: str) -> None:
+    msg = msg.strip()
+    msg = "\n".join(f">>> {line}" for line in msg.split("\n"))
+    write(msg)
+    writeln()
 
 
 def hd[T, **P](

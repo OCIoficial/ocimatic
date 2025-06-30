@@ -66,7 +66,7 @@ class RunTLE:
     pass
 
 
-RunResult = RunSuccess | RunTLE | RunError
+type RunResult = RunSuccess | RunTLE | RunError
 
 
 class Runnable(ABC):

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -489,26 +488,34 @@ def completion(shell: Literal["bash", "zsh", "fish"]) -> None:
     help="Check ocimatic is correctly setup by running some commands.",
 )
 def check_setup() -> None:
+    import tempfile
+
     from ocimatic import ui
-    from ocimatic.config import CONFIG
     from ocimatic.result import Status
+    from ocimatic.source_code import (
+        CppSource,
+        JavaSource,
+        LatexSource,
+        PythonSource,
+        RustSource,
+    )
 
     ui.writeln("Running commands to check if they are available...", ui.INFO)
-    ui.writeln()
+
+    resources = Path(__file__).parent / "resources" / "tests"
 
     status = Status.success
-    status &= _test_command(CONFIG.python.command)
-    ui.writeln()
-    status &= _test_command(CONFIG.cpp.command)
-    ui.writeln()
-    status &= _test_command(CONFIG.java.javac)
-    ui.writeln()
-    status &= _test_command(CONFIG.java.jre)
-    ui.writeln()
-    status &= _test_command(CONFIG.rust.command)
-    ui.writeln()
-    status &= _test_command(CONFIG.latex.command)
-    ui.writeln()
+    with tempfile.TemporaryDirectory() as tmp:
+        status &= JavaSource.test(resources, Path(tmp))
+        ui.writeln()
+        status &= PythonSource.test(resources, Path(tmp))
+        ui.writeln()
+        status &= CppSource.test(resources, Path(tmp))
+        ui.writeln()
+        status &= RustSource.test(resources, Path(tmp))
+        ui.writeln()
+        status &= LatexSource.test(resources, Path(tmp))
+        ui.writeln()
 
     if status == Status.success:
         ui.writeln("All commands ran successfully.", ui.GREEN)
@@ -523,19 +530,6 @@ def check_setup() -> None:
     exit_with_status(status)
 
 
-def _test_command(cmd: str) -> Status:
-    from ocimatic import ui
-    from ocimatic.result import Status
-
-    try:
-        ui.writeln(f"$ {cmd} --version", ui.INFO)
-        subprocess.run([cmd, "--version"], check=True)
-        return Status.success
-    except Exception as e:
-        ui.writeln(f"command failed: {e}", ui.RED)
-        return Status.fail
-
-
 @cloup.command(
     short_help="Setup ocimatic.",
     help="Generate configuration file for ocimatic that can be used to override default commands.",
@@ -544,13 +538,21 @@ def setup() -> None:
     from ocimatic import ui
     from ocimatic.config import Config
 
-    shutil.copy2(Config.DEFAULT_PATH, Config.HOME_PATH)
+    if Config.HOME_PATH.exists():
+        ui.writeln(
+            f"Configuration file already exists at '{Config.HOME_PATH}'.\n"
+            "Modify the file to configure ocimatic. You can regenerate it by\n"
+            "deleting it and then calling `ocimatic setup`.",
+            ui.INFO,
+        )
+    else:
+        shutil.copy2(Config.DEFAULT_PATH, Config.HOME_PATH)
 
-    ui.writeln(
-        f"Configuration file created at '{Config.HOME_PATH}'.\n"
-        "You can configure ocimatic by editing the file.",
-        ui.OK,
-    )
+        ui.writeln(
+            f"Configuration file created at '{Config.HOME_PATH}'.\n"
+            "You can configure ocimatic by editing the file.",
+            ui.INFO,
+        )
 
 
 @cloup.command(

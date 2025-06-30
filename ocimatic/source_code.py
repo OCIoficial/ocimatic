@@ -1,17 +1,28 @@
 from __future__ import annotations
 
 import re
+import shlex
+import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
+
 import typst
 
 from ocimatic import ui, utils
 from ocimatic.config import CONFIG
-from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
+from ocimatic.result import Status
+from ocimatic.runnable import (
+    Binary,
+    JavaClasses,
+    Python3,
+    RunError,
+    Runnable,
+    RunSuccess,
+)
 from ocimatic.utils import Stn
 
 
@@ -43,7 +54,7 @@ class SourceCode(ABC):
         relative_path = utils.relative_to_cwd(file)
         self._file = file
         self.name = str(relative_path)
-        self.comments = list(parse_comments(file, self.__class__.LINE_COMMENT_START))
+        self.comments = list(_parse_comments(file, self.__class__.LINE_COMMENT_START))
 
     def __str__(self) -> str:
         return self.name
@@ -52,52 +63,28 @@ class SourceCode(ABC):
     def file(self) -> Path:
         return self._file
 
-    @staticmethod
-    def should_build(sources: list[Path], out: Path) -> bool:
-        mtime = max(
-            (s.stat().st_mtime for s in sources if s.exists()),
-            default=float("inf"),
-        )
-        btime = out.stat().st_mtime if out.exists() else float("-inf")
-        return btime < mtime
-
     @abstractmethod
     def build(self, *, force: bool = False) -> Runnable | BuildError: ...
 
 
-class CppSource(SourceCode):
-    SUFFIX = ".cpp"
-    LINE_COMMENT_START = "//"
-
-    def __init__(
-        self,
-        file: Path,
-        extra_files: list[Path] | None = None,
-        include: Path | None = None,
-        out: Path | None = None,
-    ) -> None:
+class CompiledSource(SourceCode):
+    def __init__(self, file: Path, out: Path) -> None:
         super().__init__(file)
-        self._source = file
-        self._extra_files = extra_files or []
-        self._include = include
-        self._out = out or Path(file.parent, ".build", f"{file.stem}-cpp")
+        self._out = out
 
-    def build_cmd(self) -> list[str]:
-        cmd = [
-            str(CONFIG.cpp.command),
-            *CONFIG.cpp.flags,
-            "-o",
-            str(self._out),
-        ]
-        if self._include:
-            cmd.extend(["-I", str(self._include)])
-        cmd.extend(str(s) for s in self.files)
-        return cmd
+    @abstractmethod
+    def _build_cmd(self) -> list[str]: ...
 
-    def build(self, *, force: bool = False) -> Binary | BuildError:
-        self._out.parent.mkdir(parents=True, exist_ok=True)
-        if force or CppSource.should_build(self.files, self._out):
-            cmd = self.build_cmd()
+    @abstractmethod
+    def _runnable(self) -> Runnable: ...
+
+    @abstractmethod
+    def _should_build(self) -> bool: ...
+
+    def build(self, *, force: bool = False) -> Runnable | BuildError:
+        if force or self._should_build():
+            self._out.parent.mkdir(parents=True, exist_ok=True)
+            cmd = self._build_cmd()
             try:
                 complete = subprocess.run(
                     cmd,
@@ -110,22 +97,92 @@ class CppSource(SourceCode):
                     return BuildError(msg=complete.stderr)
             except Exception as e:
                 return BuildError(msg=str(e))
+        return self._runnable()
+
+
+class CppSource(CompiledSource):
+    SUFFIX = ".cpp"
+    LINE_COMMENT_START = "//"
+
+    @staticmethod
+    @ui.hd1("C++", color=ui.BLUE)
+    def test(resources: Path, tmp: Path) -> Status:
+        file = _copy_test(resources / "test.cpp", tmp)
+        cpp = CppSource(file)
+        ui.writeln(f"$ {_fmt_cmd(cpp._build_cmd())}")
+
+        bin = cpp.build()
+        if isinstance(bin, BuildError):
+            ui.writeln(bin.msg, ui.ERROR)
+            return Status.fail
+
+        ui.writeln(f"$ {_fmt_cmd(bin.cmd())}")
+        return _check_run_status(bin.run())
+
+    def __init__(
+        self,
+        file: Path,
+        extra_files: list[Path] | None = None,
+        include: Path | None = None,
+        out: Path | None = None,
+    ) -> None:
+        super().__init__(file, out or Path(file.parent, ".build", f"{file.stem}-cpp"))
+        self._source = file
+        self._extra_files = extra_files or []
+        self._include = include
+
+    def _runnable(self) -> Runnable:
         return Binary(self._out)
+
+    def _should_build(self) -> bool:
+        return _should_build(self.files, self._out)
+
+    def _build_cmd(self) -> list[str]:
+        cmd = [
+            str(CONFIG.cpp.command),
+            *CONFIG.cpp.flags,
+            "-o",
+            str(self._out),
+        ]
+        if self._include:
+            cmd.extend(["-I", str(self._include)])
+        cmd.extend(str(s) for s in self.files)
+        return cmd
 
     @property
     def files(self) -> list[Path]:
         return [self._file, *self._extra_files]
 
 
-class RustSource(SourceCode):
+class RustSource(CompiledSource):
     SUFFIX = ".rs"
     LINE_COMMENT_START = "//"
 
-    def __init__(self, file: Path, out: Path | None = None) -> None:
-        super().__init__(file)
-        self._out = out or Path(file.parent, ".build", f"{file.stem}-rs")
+    @staticmethod
+    @ui.hd1("Rust", color=ui.BLUE)
+    def test(resources: Path, tmp: Path) -> Status:
+        file = _copy_test(resources / "test.rs", tmp)
+        rs = RustSource(file)
+        ui.writeln(f"$ {_fmt_cmd(rs._build_cmd())}")
 
-    def build_cmd(self) -> list[str]:
+        bin = rs.build()
+        if isinstance(bin, BuildError):
+            ui.write(bin.msg, ui.ERROR)
+            return Status.fail
+
+        ui.writeln(f"$ {_fmt_cmd(bin.cmd())}")
+        return _check_run_status(bin.run())
+
+    def __init__(self, file: Path, out: Path | None = None) -> None:
+        super().__init__(file, out or Path(file.parent, ".build", f"{file.stem}-rs"))
+
+    def _runnable(self) -> Runnable:
+        return Binary(self._out)
+
+    def _should_build(self) -> bool:
+        return _should_build([self._file], self._out)
+
+    def _build_cmd(self) -> list[str]:
         cmd = [
             CONFIG.rust.command,
             *CONFIG.rust.flags,
@@ -135,54 +192,56 @@ class RustSource(SourceCode):
         ]
         return cmd
 
-    def build(self, *, force: bool = False) -> Binary | BuildError:
-        self._out.parent.mkdir(parents=True, exist_ok=True)
-        if force or RustSource.should_build([self._file], self._out):
-            cmd = self.build_cmd()
-            complete = subprocess.run(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
-            if complete.returncode != 0:
-                return BuildError(msg=complete.stderr)
-        return Binary(self._out)
 
-
-class JavaSource(SourceCode):
+class JavaSource(CompiledSource):
     SUFFIX = ".java"
     LINE_COMMENT_START = "//"
 
+    @staticmethod
+    @ui.hd1("Java", color=ui.BLUE)
+    def test(resources: Path, tmp: Path) -> Status:
+        file = _copy_test(resources / "test.java", tmp)
+
+        java = JavaSource("Test", file)
+        ui.writeln(f"$ {_fmt_cmd(java._build_cmd())}")
+
+        classes = java.build()
+        if isinstance(classes, BuildError):
+            ui.writeln(classes.msg, ui.ERROR)
+            return Status.fail
+
+        ui.writeln(f"$ {_fmt_cmd(classes.cmd())}")
+        return _check_run_status(classes.run())
+
     def __init__(self, classname: str, source: Path, out: Path | None = None) -> None:
-        super().__init__(source)
+        super().__init__(
+            source,
+            out or Path(source.parent, ".build", f"{source.stem}-java"),
+        )
         self._classname = classname
         self._source = source
-        self._out = out or Path(source.parent, ".build", f"{source.stem}-java")
 
-    def build_cmd(self) -> list[str]:
-        return [CONFIG.java.javac, "-d", str(self._out), str(self._source)]
-
-    def build(self, *, force: bool = False) -> JavaClasses | BuildError:
-        if force or JavaSource.should_build([self._source], self._out):
-            self._out.mkdir(parents=True, exist_ok=True)
-            cmd = self.build_cmd()
-            complete = subprocess.run(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
-            if complete.returncode != 0:
-                return BuildError(msg=complete.stderr)
+    def _runnable(self) -> Runnable:
         return JavaClasses(self._classname, self._out)
+
+    def _should_build(self) -> bool:
+        return _should_build([self._source], self._out)
+
+    def _build_cmd(self) -> list[str]:
+        return [CONFIG.java.javac, "-d", str(self._out), str(self._source)]
 
 
 class PythonSource(SourceCode):
     SUFFIX = ".py"
     LINE_COMMENT_START = "#"
+
+    @staticmethod
+    @ui.hd1("Python", color=ui.BLUE)
+    def test(resources: Path, tmp: Path) -> Status:
+        file = _copy_test(resources / "test.py", tmp)
+        py = PythonSource(file).build()
+        ui.writeln(f"$ {_fmt_cmd(py.cmd())}")
+        return _check_run_status(py.run())
 
     def __init__(self, file: Path) -> None:
         super().__init__(file)
@@ -192,8 +251,8 @@ class PythonSource(SourceCode):
         return Python3(self._file)
 
 
-def parse_comments(file: Path, comment_start: str) -> Iterator[ShouldFail]:
-    for m in comment_iter(file, comment_start):
+def _parse_comments(file: Path, comment_start: str) -> Iterator[ShouldFail]:
+    for m in _comment_iter(file, comment_start):
         parsed = ShouldFail.parse(m.group(1))
         if parsed:
             yield parsed
@@ -207,7 +266,7 @@ def parse_comments(file: Path, comment_start: str) -> Iterator[ShouldFail]:
             )
 
 
-def comment_iter(file_path: Path, comment_start: str) -> Iterator[re.Match[str]]:
+def _comment_iter(file_path: Path, comment_start: str) -> Iterator[re.Match[str]]:
     pattern = re.compile(rf"\s*{comment_start}\s*@ocimatic(.*)")
     with file_path.open() as file:
         for line in file:
@@ -235,6 +294,21 @@ class PDFSource(ABC):
 
 
 class LatexSource(PDFSource):
+    @staticmethod
+    @ui.hd1("Latex", color=ui.BLUE)
+    def test(resources: Path, tmp: Path) -> Status:
+        file = _copy_test(resources / "test.tex", tmp)
+        latex = LatexSource(file)
+        ui.writeln(f"$ {latex._cmd()}")
+
+        r = latex.compile()
+        if isinstance(r, BuildError):
+            ui.writeln(r.msg, ui.ERROR)
+            return Status.fail
+        else:
+            ui.writeln("Success!", ui.GREEN)
+            return Status.success
+
     def __init__(self, source: Path, *, env: dict[str, str] | None = None) -> None:
         super().__init__(source)
         self._env = env
@@ -281,3 +355,32 @@ class TypstSource(PDFSource):
         except Exception as exc:
             return BuildError(msg=str(exc))
         return output
+
+
+def _fmt_cmd(cmd: list[str]) -> str:
+    return " ".join(shlex.quote(s) for s in cmd)
+
+
+def _check_run_status(r: RunSuccess | RunError) -> Status:
+    match r:
+        case RunSuccess(_):
+            ui.write(r.stdout, ui.GREEN)
+            return Status.success
+        case RunError(msg, stderr):
+            ui.writeln(msg, ui.ERROR)
+            ui.writeln(stderr, ui.ERROR)
+            return Status.fail
+
+
+def _copy_test(file: Path, tmp: Path) -> Path:
+    ui.writeln(f"$ cp {shlex.quote(str(file))} {shlex.quote(str(tmp))}")
+    return Path(shutil.copy2(file, tmp))
+
+
+def _should_build(sources: list[Path], out: Path) -> bool:
+    mtime = max(
+        (s.stat().st_mtime for s in sources if s.exists()),
+        default=float("inf"),
+    )
+    btime = out.stat().st_mtime if out.exists() else float("-inf")
+    return btime < mtime
