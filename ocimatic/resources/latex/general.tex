@@ -1,0 +1,95 @@
+\documentclass[12pt]{oci}
+\usepackage[utf8]{inputenc}
+
+\begin{document}
+\subsection*{Información General}
+
+Esta página muestra información general que se aplica a todos los problemas.
+
+\subsection*{Envío de una solución}
+
+\begin{enumerate}
+% \itemsep 0em
+\item Los participantes deben enviar {\bf un solo archivo} con el código fuente de su solución.
+\item El nombre del archivo debe tener la extensión \verb+.cpp+ o
+  \verb+.java+ dependiendo de si la solución está escrita en
+  \verb|C++| o \verb|Java| respectivamente.
+Para enviar una solución en Java hay que seguir algunos pasos adicionales. Ver detalles más abajo.
+\end{enumerate}
+
+\subsection*{Casos de prueba, subtareas y puntaje}
+\begin{enumerate}
+  % \itemsep 0em
+\item La solución enviada por los participantes será ejecutada varias veces con
+  distintos casos de prueba.
+\item A menos que se indique lo contrario, cada problema define diferentes
+  subtareas que lo restringen. Se asignará puntaje de acuerdo a la
+  cantidad de subtareas que se logre solucionar de manera correcta.
+\item A menos que se indique lo contrario, para obtener el puntaje en una
+  subtarea se debe tener correctos todos los casos de prueba incluídos en ella.
+\item Una solución puede resolver al mismo tiempo más de una subtarea.
+\item La solución es ejecutada con cada caso de prueba de manera independiente y
+  por tanto puede fallar en algunas subtareas sin influir en la ejecución de
+  otras.
+\end{enumerate}
+
+\subsection*{Entrada}
+\begin{enumerate}
+% \itemsep 0em
+\item Toda lectura debe ser hecha desde la {\bf entrada estándar} usando, por
+  ejemplo, las funciones \verb+scanf+ o \verb+std::cin+ en C++ o la clase
+  \verb+BufferedReader+ en Java.
+\item La entrada corresponde a un solo caso de prueba, el cual está descrito en
+  varias líneas dependiendo del problema.
+\item {\bf Se garantiza que la entrada sigue el formato descrito} en el
+  enunciado de cada problema.
+\end{enumerate}
+
+\newpage
+\subsection*{Salida}
+\begin{enumerate}
+% \itemsep 0em
+\item Toda escritura debe ser hecha hacia la {\bf salida estándar} usando, por
+  ejemplo, las funciones \verb+printf+, \verb+std::cout+ en C++  o
+  \verb+System.out.println+ en Java.
+\item El formato de salida es explicado en el enunciado de cada problema.
+\item {\bf La salida del programa debe cumplir estrictamente con el formato indicado},
+  considerando los espacios, las mayúsculas y minúsculas.
+\item Toda línea, incluyendo la última, debe terminar con un salto de línea.
+\end{enumerate}
+
+% \newpage
+
+\subsection*{Envío de una solución en Java}
+
+\begin{enumerate}
+  \item Cada problema tiene un \emph{nombre clave} que será especificado en el
+    enunciado.
+    Este nombre clave será también utilizado en el sistema de evaluación
+    para identificar al problema.
+  \item Para enviar correctamente una solución en Java, el archivo debe contener
+    una clase llamada igual que el nombre clave del problema.
+    Esta clase debe contener también el método \verb+main+.
+    Por ejemplo, si el nombre clave es \texttt{marraqueta}, el archivo con la
+    solución debe llamarse \texttt{marraqueta.java} y tener la siguiente
+    estructura:
+
+\begin{verbatim}
+public class marraqueta {
+  public static void main (String[] args) {
+    // tu solución va aquí
+  }
+}
+\end{verbatim}
+  \item Si el archivo no contiene la clase con el nombre correcto, el sistema de
+    evaluación reportará un error de compilación.
+
+  \item La clase no debe estar contenida dentro de un \emph{package}.
+      Hay que tener cuidado pues algunos entornos de desarrollo como Eclipse
+    incluyen las clases en un \emph{package} por defecto.
+  \item Si la clase está contenida dentro de un package, el sistema reportará un
+    error de compilación.
+\end{enumerate}
+
+
+\end{document}

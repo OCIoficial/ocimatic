@@ -13,7 +13,6 @@ import cloup
 from click.shell_completion import CompletionItem
 from cloup.constraints import If, accept_none, mutually_exclusive
 
-
 if TYPE_CHECKING:
     from ocimatic.core import CLI, Typesetting
     from ocimatic.result import Status

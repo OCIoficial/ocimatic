@@ -3,16 +3,16 @@ from __future__ import annotations
 import glob
 import json
 import os
-from abc import ABC, abstractmethod
 import re
 import shutil
 import tempfile
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import Any, cast, get_args, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast, get_args
 
 import tomlkit
 from click.shell_completion import CompletionItem
@@ -26,8 +26,8 @@ from ocimatic.source_code import (
     CppSource,
     JavaSource,
     LatexSource,
-    TypstSource,
     RustSource,
+    TypstSource,
 )
 from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
