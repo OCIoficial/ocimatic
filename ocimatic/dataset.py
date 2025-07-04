@@ -784,7 +784,7 @@ class ExpectedOutcome(Enum):
                 for test in tests:
                     if not (test.is_wrong_answer() or test.is_correct()):
                         return Error(
-                            "Expected 'WA', but some tests for a reason different than wrong answer.",
+                            "Expected 'WA', but some tests failed for a reason different than wrong answer.",
                         )
                     found = test.is_wrong_answer()
                 if not found:
