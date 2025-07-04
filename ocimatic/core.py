@@ -20,7 +20,7 @@ from click.shell_completion import CompletionItem
 from ocimatic import config, ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
-from ocimatic.result import Result, Status
+from ocimatic.result import Result, Status, Error
 from ocimatic.solutions import Solution
 from ocimatic.source_code import (
     CppSource,
@@ -32,7 +32,8 @@ from ocimatic.source_code import (
 from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
 
-type Typesetting = Literal["latex", "typst"]
+# Don't use type alias because we use `get_args` to get the values at runtime
+Typesetting = Literal["latex", "typst"]
 
 
 class CLI:
@@ -697,9 +698,7 @@ class Task:
         for sol in self._correct:
             ui.writeln(f" * [correct] {sol.source.file.name}", ui.CYAN)
         for sol in self._partial:
-            should_fail = _fmt_stn_iter(sol.should_fail(self._dataset))
-            ui.write(f" * [partial] {sol.source.file.name}", ui.CYAN)
-            ui.writeln(f", should-fail={should_fail}", ui.CYAN)
+            ui.writeln(f" * [partial] {sol.source.file.name}", ui.CYAN)
 
     @ui.hd1("{0}", "Normalizing", COLOR)
     def normalize(self) -> None:
@@ -712,45 +711,51 @@ class Task:
         if not sol:
             return ui.show_message("Error", "Solution not found", ui.ERROR)
 
-        results = sol.run_on_dataset(
-            self._dataset,
-            self._checker,
-            RunMode.run_solution,
-            timeout=timeout,
-            stn=stn,
-        )
-        if results:
-            ui.writeln()
-            stats = results.runtime_stats()
-            if stats:
+        if stn is not None:
+            results = sol.run_on_subtask(
+                self._dataset,
+                self._checker,
+                timeout=timeout,
+                stn=stn,
+            )
+            if not results:
+                return
+            if stats := results.runtime_stats():
+                ui.writeln()
+                _write_stats(stats)
+        else:
+            results = sol.run_on_dataset(
+                self._dataset,
+                self._checker,
+                RunMode.run_solution,
+                timeout=timeout,
+            )
+            if not results:
+                return
+
+            if stats := results.runtime_stats():
+                ui.writeln()
                 _write_stats(stats)
 
             if sol.is_partial:
-                should_fail = _fmt_stn_iter(sol.should_fail(self._dataset))
-                if stn is not None:
-                    pass
-                elif sol.check_results(results):
+                if results.has_validation_errors():
                     ui.writeln()
                     ui.writeln(
-                        f"Solution failed the subtasks it was supposed to fail\n * should-fail={should_fail}",
-                        ui.OK,
-                    )
-                else:
-                    failed = _fmt_stn_iter(results.failed_subtasks())
-                    ui.write(
-                        f"""
-The results don't match the solution's specification.
-- Subtasks expected to fail: {should_fail}
-- Subtasks that failed: {failed}
-
-To specify which subtasks the solution should fail, you must have a `should-fail`
-comment at the beginning of the file. For example, to specify that a solution should
-fail subtasks 1 and 2, write the following comment at the beginning of the file:
-// @ocimatic should-fail=[st1, st2]
-Ocimatic will check that the solution fails these subtasks and only these subtasks. If
-no comment is specified, ocimatic will assume that all subtasks should fail.
-""",
+                        "The results don't match the solution's expected outcome.\n",
                         ui.ERROR,
+                    )
+                    ui.writeln(
+                        "Subtasks with issues:",
+                        ui.ERROR,
+                    )
+                    for sti, err in results.validation.items():
+                        if isinstance(err, Error):
+                            ui.writeln(f" * {sti!r}: {err.msg}", ui.ERROR)
+                else:
+                    ui.writeln()
+                    ui.writeln(
+                        "Solution produced the expected results",
+                        ui.OK,
                     )
             else:
                 ui.writeln()
@@ -893,7 +898,7 @@ Solutions with issues:
                 RunMode.check_partial,
                 timeout=timeout,
             )
-            if results is None or not sol.check_results(results):
+            if results is None or results.has_validation_errors():
                 if len(self._partial) > 1:
                     ui.writeln("error: issues found", ui.RED)
                 failed.append(sol)
@@ -1188,11 +1193,6 @@ def _match_lines(
 
 def _number_to_letter(num: int) -> str:
     return chr(ord("A") + num)
-
-
-def _fmt_stn_iter(should_fail: Iterable[Stn]) -> str:
-    joined = ", ".join(f"st{st}" for st in sorted(should_fail))
-    return f"[{joined}]"
 
 
 def _write_stats(stats: RuntimeStats) -> None:

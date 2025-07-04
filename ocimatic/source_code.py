@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import shlex
 import shutil
 import subprocess
@@ -23,28 +22,11 @@ from ocimatic.runnable import (
     Runnable,
     RunSuccess,
 )
-from ocimatic.utils import Stn
 
 
 @dataclass
 class BuildError:
     msg: str
-
-
-@dataclass(frozen=True, kw_only=True, slots=True)
-class ShouldFail:
-    REGEX = re.compile(r"\s+should-fail\s*=\s*\[(\s*st\d+\s*(,\s*st\d+\s*)*(,\s*)?)\]")
-    subtasks: set[Stn]
-
-    @staticmethod
-    def parse(comment: str) -> ShouldFail | None:
-        m = ShouldFail.REGEX.match(comment)
-        if not m:
-            return None
-        subtasks = {
-            Stn(int(st.strip().removeprefix("st"))) for st in m.group(1).split(",")
-        }
-        return ShouldFail(subtasks=subtasks)
 
 
 class SourceCode(ABC):
@@ -54,7 +36,6 @@ class SourceCode(ABC):
         relative_path = utils.relative_to_cwd(file)
         self._file = file
         self.name = str(relative_path)
-        self.comments = list(_parse_comments(file, self.__class__.LINE_COMMENT_START))
 
     def __str__(self) -> str:
         return self.name
@@ -65,6 +46,13 @@ class SourceCode(ABC):
 
     @abstractmethod
     def build(self, *, force: bool = False) -> Runnable | BuildError: ...
+
+    def comments_iter(self) -> Iterator[str]:
+        comment_start = self.__class__.LINE_COMMENT_START
+        with self._file.open() as file:
+            for line in file:
+                if line.startswith(comment_start):
+                    yield line.removeprefix(comment_start)
 
 
 class CompiledSource(SourceCode):
@@ -249,30 +237,6 @@ class PythonSource(SourceCode):
     def build(self, *, force: bool = False) -> Python3:
         del force
         return Python3(self._file)
-
-
-def _parse_comments(file: Path, comment_start: str) -> Iterator[ShouldFail]:
-    for m in _comment_iter(file, comment_start):
-        parsed = ShouldFail.parse(m.group(1))
-        if parsed:
-            yield parsed
-            break
-        else:
-            path = utils.relative_to_cwd(file)
-            ui.show_message(
-                "Warning",
-                f"Invalid comment `{m.group(0)}` in {path}",
-                ui.WARNING,
-            )
-
-
-def _comment_iter(file_path: Path, comment_start: str) -> Iterator[re.Match[str]]:
-    pattern = re.compile(rf"\s*{comment_start}\s*@ocimatic(.*)")
-    with file_path.open() as file:
-        for line in file:
-            m = pattern.match(line)
-            if m:
-                yield m
 
 
 class PDFSource(ABC):

@@ -22,7 +22,7 @@ _SOLUTION_HELP = (
     "If the path is relative, try finding the solution relative to the following locations "
     "until a match is found (or we fail to find one): '<task>/solutions/correct', "
     "'<task>/solutions/partial', '<task>/solutions/', and '<cwd>'. "
-    "Here <task> refers to the path of the current task and <cwd> to the current working directory."
+    "Here, <task> refers to the path of the current task and <cwd> to the current working directory."
 )
 
 
