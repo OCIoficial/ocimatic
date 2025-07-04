@@ -23,7 +23,7 @@ from ocimatic.source_code import (
     RustSource,
     SourceCode,
 )
-from ocimatic.utils import Stn
+from ocimatic.utils import SortedDict, Stn
 
 
 class Solution:
@@ -101,12 +101,12 @@ class Solution:
             timeout=timeout,
         )
 
-    def _load_expected_outcome(
+    def load_expected_outcome(
         self,
         dataset: Dataset,
-    ) -> dict[Stn, ExpectedOutcome] | Error:
+    ) -> SortedDict[Stn, ExpectedOutcome] | Error:
         if not self.is_partial:
-            return dict.fromkeys(dataset.subtasks(), ExpectedOutcome.OK)
+            return SortedDict((sti, ExpectedOutcome.OK) for sti in dataset.subtasks())
 
         if isinstance(comments := _parse_comments(self.source), Error):
             return comments
@@ -136,7 +136,7 @@ class Solution:
         timeout: float | None = None,
     ) -> ui.WorkHd[DatasetResults | None]:
         """Run this solution for all test cases in the given dataset."""
-        if isinstance(expected := self._load_expected_outcome(dataset), Error):
+        if isinstance(expected := self.load_expected_outcome(dataset), Error):
             yield Result.fail(short_msg="Failed", long_msg=expected.msg)
             return None
 
@@ -222,7 +222,7 @@ def _parse_comments(source: SourceCode) -> list[ExpectedComment] | Error:
 class ExpectedComment:
     ITEM_RE = re.compile(r"\s*st(\d+)\s*=\s*(\w+)\s*")
 
-    subtasks: dict[Stn, ExpectedOutcome]
+    subtasks: SortedDict[Stn, ExpectedOutcome]
 
     @staticmethod
     def parse(s: str) -> ExpectedComment | Error:
@@ -231,7 +231,7 @@ class ExpectedComment:
             return Error("Content must be delimited by square brackets")
         s = s[1:-1]
 
-        subtasks: dict[Stn, ExpectedOutcome] = {}
+        subtasks: SortedDict[Stn, ExpectedOutcome] = SortedDict()
         for item in s.split(","):
             m = ExpectedComment.ITEM_RE.match(item)
             if not m:

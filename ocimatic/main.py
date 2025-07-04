@@ -414,7 +414,6 @@ def run_solution(
     from ocimatic import ui
     from ocimatic.utils import Stn
 
-    timeout = timeout or 3.0
     task = cli.select_task(task_name)
     if not task:
         ui.fatal_error("You have to be inside a task to run this command.")
@@ -426,7 +425,7 @@ def run_solution(
     else:
         task.run_solution(
             Path(solution),
-            timeout,
+            timeout=timeout or 3.0,
             stn=Stn(stn) if stn else None,
         )
 

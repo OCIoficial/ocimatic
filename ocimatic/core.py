@@ -149,8 +149,8 @@ class ContestConfig:
 class Resource:
     """A resource is a file in ocimatic that's copied when creating a contest or a task.
 
-    Some resources can be syncronized after the contest or task has been created. This is useful
-    for fixing bugs.
+    Some resources can be synchronized after the contest or task has been created. This is useful
+    for fixing bugs in ocimatic after a contest has been initialized.
     """
 
     path: Path
@@ -180,13 +180,13 @@ class Contest:
             Resource("latex", "logo.eps", sync=True),
             Resource("latex", "oci.cls", sync=True),
             Resource("latex", "titlepage.tex"),
-            Resource("latex", "general.tex"),
+            Resource("latex", "general.tex", sync=True),
         ],
         "typst": [
             Resource("typst", "logo.png", sync=True),
             Resource("typst", "oci.typ", sync=True),
             Resource("typst", "titlepage.typ"),
-            Resource("typst", "general.typ"),
+            Resource("typst", "general.typ", sync=True),
         ],
     }
 
@@ -275,7 +275,7 @@ class Contest:
 
     @ui.hd1("Generating problemset", color=COLOR)
     def build_problemset(self) -> Status:
-        """Build titlepage and statement of all tasks. Then merge all pdfs into a single pdf."""
+        """Build titlepage and statement for all tasks. Then merge all pdfs into a single pdf."""
         return self._build_problemset()
 
     def _build_problemset(self) -> Status:
@@ -289,8 +289,8 @@ class Contest:
         for task in self._tasks:
             status &= task.statement.build().status
 
-        self._merge_pdfs(Sideness.ONESIDE)
-        self._merge_pdfs(Sideness.TWOSIDE)
+        status &= self._merge_pdfs(Sideness.ONESIDE).status
+        status &= self._merge_pdfs(Sideness.TWOSIDE).status
 
         return status
 
@@ -698,7 +698,12 @@ class Task:
         for sol in self._correct:
             ui.writeln(f" * [correct] {sol.source.file.name}", ui.CYAN)
         for sol in self._partial:
-            ui.writeln(f" * [partial] {sol.source.file.name}", ui.CYAN)
+            ui.write(f" * [partial] {sol.source.file.name}", ui.CYAN)
+            if isinstance(expected := sol.load_expected_outcome(self._dataset), Error):
+                ui.writeln("  error in expected outcome comment", ui.ERROR)
+            else:
+                fmt = ", ".join(f"{k!r}={v}" for k, v in expected.items())
+                ui.writeln(f" [{fmt}]", ui.CYAN)
 
     @ui.hd1("{0}", "Normalizing", COLOR)
     def normalize(self) -> None:
@@ -945,7 +950,7 @@ Solutions with issues:
         """Generate expected outputs files for the dataset by running a correct solution.
 
         If `sample` is True, also generate expected output for sample input. If `solution` is
-        not `None` use it to generate the expected output, otherwise use any correct one
+        not `None` use it to generate the expected output, otherwise use any correct one,
         prioritizing C++ solutions.
         """
         if self._conf.static_dataset:

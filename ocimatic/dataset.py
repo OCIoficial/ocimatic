@@ -589,7 +589,7 @@ class Dataset:
         runnable: Runnable,
         checker: Checker,
         mode: RunMode,
-        expected: dict[Stn, ExpectedOutcome],
+        expected: SortedDict[Stn, ExpectedOutcome],
         *,
         timeout: float | None = None,
     ) -> DatasetResults:
@@ -737,6 +737,9 @@ class ExpectedOutcome(Enum):
     FAIL = "FAIL"
     TLE = "TLE"
     WA = "WA"
+
+    def __str__(self) -> str:
+        return self.value
 
     @staticmethod
     def parse(s: str) -> ExpectedOutcome | Error:
