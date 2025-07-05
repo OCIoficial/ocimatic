@@ -41,7 +41,7 @@ class RunMode(Enum):
 class TestResult:
     @dataclass
     class CheckerFinished:
-        """The solution finished without runtime errors and the checker was successfully run on the output.
+        """The solution finished without runtime errors and the checker successfully ran on the output.
 
         This could mean a correct answer, a wrong answer, or partial score if the checker returns
         something greater than 0.0 but less than 1.0.
@@ -159,12 +159,12 @@ class TestResult:
             case _:
                 return False
 
-    Kind = (
-        CheckerFinished
-        | TimeLimitExceeded
-        | RuntimeError
-        | CheckerError
-        | NoExpectedOutput
+    type Kind = (
+        TestResult.CheckerFinished
+        | TestResult.TimeLimitExceeded
+        | TestResult.RuntimeError
+        | TestResult.CheckerError
+        | TestResult.NoExpectedOutput
     )
     test: Test
     kind: Kind
@@ -329,12 +329,6 @@ class _TestGroup:
     def __init__(self, name: str, tests: list[Test]) -> None:
         self._name = name
         self._tests = sorted(tests)
-
-    def mtime(self) -> float:
-        mtime = -1.0
-        for test in self._tests:
-            mtime = max(mtime, test.mtime())
-        return mtime
 
     def normalize(self) -> None:
         for test in self._tests:
@@ -589,7 +583,7 @@ class Dataset:
         runnable: Runnable,
         checker: Checker,
         mode: RunMode,
-        expected: SortedDict[Stn, ExpectedOutcome],
+        expected: SortedDict[Stn, Outcome],
         *,
         timeout: float | None = None,
     ) -> DatasetResults:
@@ -677,12 +671,6 @@ class Dataset:
     def __str__(self) -> str:
         return f"{self._directory}"
 
-    def mtime(self) -> float:
-        mtime = -1.0
-        for subtask in self._subtasks.values():
-            mtime = max(mtime, subtask.mtime())
-        return mtime
-
     @ui.work("ZIP")
     def compress(self, *, random_sort: bool = False) -> Result:
         """Compress all test cases in the dataset into a single zip file.
@@ -732,54 +720,44 @@ class Dataset:
         return True
 
 
-class ExpectedOutcome(Enum):
+class Outcome(Enum):
     OK = "OK"
-    FAIL = "FAIL"
     TLE = "TLE"
     WA = "WA"
+    FAIL = "FAIL"
 
     def __str__(self) -> str:
         return self.value
 
     @staticmethod
-    def parse(s: str) -> ExpectedOutcome | Error:
+    def parse(s: str) -> Outcome | Error:
         try:
-            return ExpectedOutcome[s]
+            return Outcome[s]
         except KeyError:
             return Error(
-                f"Value must be one of `{[it.value for it in ExpectedOutcome]}`",
+                f"Value must be one of `{[it.value for it in Outcome]}`",
             )
 
     def validate_results(self, tests: Iterator[TestResult]) -> Error | None:
         match self:
-            case ExpectedOutcome.OK:
+            case Outcome.OK:
                 if not all(test.is_correct() for test in tests):
                     return Error(
-                        "Expected 'OK', but some tests do not produce a correct result.",
+                        "Expected 'OK', but some tests didn't produce a correct result.",
                     )
-                else:
-                    return None
-            case ExpectedOutcome.FAIL:
-                if not any(test.is_proper_fail() for test in tests):
-                    return Error(
-                        "Expected 'FAIL', but no test produced an incorrect result.",
-                    )
-                else:
-                    return None
-            case ExpectedOutcome.TLE:
+            case Outcome.TLE:
                 found = False
                 for test in tests:
                     if not (test.is_tle() or test.is_correct()):
                         return Error(
-                            "Expected 'TLE', but some tests fail for a reason different than time limit exceeded.",
+                            "Expected 'TLE', but some tests failed for a reason different than time limit exceeded.",
                         )
                     found = test.is_tle()
                 if not found:
                     return Error(
                         "Expected 'TLE', but no test gave time limit exceeded.",
                     )
-                return None
-            case ExpectedOutcome.WA:
+            case Outcome.WA:
                 found = False
                 for test in tests:
                     if not (test.is_wrong_answer() or test.is_correct()):
@@ -789,7 +767,12 @@ class ExpectedOutcome(Enum):
                     found = test.is_wrong_answer()
                 if not found:
                     return Error("Expected 'WA', but no test resulted in wrong answer.")
-                return None
+            case Outcome.FAIL:
+                if not any(test.is_proper_fail() for test in tests):
+                    return Error(
+                        "Expected 'FAIL', but no test produced an incorrect result.",
+                    )
+        return None
 
 
 def _validate_basic_format(lines: list[str]) -> Result:

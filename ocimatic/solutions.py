@@ -9,7 +9,7 @@ from ocimatic import ui, utils
 from ocimatic.checkers import Checker
 from ocimatic.dataset import (
     Dataset,
-    ExpectedOutcome,
+    Outcome,
     DatasetResults,
     GroupResults,
     RunMode,
@@ -104,9 +104,9 @@ class Solution:
     def load_expected_outcome(
         self,
         dataset: Dataset,
-    ) -> SortedDict[Stn, ExpectedOutcome] | Error:
+    ) -> SortedDict[Stn, Outcome] | Error:
         if not self.is_partial:
-            return SortedDict((sti, ExpectedOutcome.OK) for sti in dataset.subtasks())
+            return SortedDict((sti, Outcome.OK) for sti in dataset.subtasks())
 
         if isinstance(comments := _parse_comments(self.source), Error):
             return comments
@@ -222,7 +222,7 @@ def _parse_comments(source: SourceCode) -> list[ExpectedComment] | Error:
 class ExpectedComment:
     ITEM_RE = re.compile(r"\s*st(\d+)\s*=\s*(\w+)\s*")
 
-    subtasks: SortedDict[Stn, ExpectedOutcome]
+    subtasks: SortedDict[Stn, Outcome]
 
     @staticmethod
     def parse(s: str) -> ExpectedComment | Error:
@@ -231,7 +231,7 @@ class ExpectedComment:
             return Error("Content must be delimited by square brackets")
         s = s[1:-1]
 
-        subtasks: SortedDict[Stn, ExpectedOutcome] = SortedDict()
+        subtasks: SortedDict[Stn, Outcome] = SortedDict()
         for item in s.split(","):
             m = ExpectedComment.ITEM_RE.match(item)
             if not m:
@@ -244,7 +244,7 @@ class ExpectedComment:
                     f"Subtask number must be greater than or equal to 1: `st{n}`",
                 )
             stn = Stn(n)
-            verdict = ExpectedOutcome.parse(m.group(2))
+            verdict = Outcome.parse(m.group(2))
             if isinstance(verdict, Error):
                 return verdict
             if stn in subtasks:

@@ -19,7 +19,7 @@ class CheckerError:
     msg: str
 
 
-CheckerResult = CheckerSuccess | CheckerError
+type CheckerResult = CheckerSuccess | CheckerError
 
 
 class Checker(ABC):
