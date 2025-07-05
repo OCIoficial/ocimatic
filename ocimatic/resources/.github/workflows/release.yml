@@ -17,16 +17,11 @@ jobs:
       # For typst contests, run action directly in Ubuntu
       - if: steps.read-typesetting.outputs.typesetting == 'typst'
         run: |
-          # Setup ocimatic inside virtual env
-          source .github/scripts/setup-ocimatic.sh --with-langs
+          .github/scripts/setup-ocimatic.sh --with-langs
 
-          # Run ocimatic
           ocimatic run-testplan
           ocimatic gen-expected
           ocimatic archive
-
-          # Deactivate the virtual env
-          deactivate
 
       # For latex contests, run action in container
       - uses: xu-cheng/texlive-action@v2
@@ -34,16 +29,11 @@ jobs:
         with:
           scheme: full
           run: |
-            # Setup ocimatic inside virtual env
-            source .github/scripts/setup-ocimatic.sh --with-langs
+            .github/scripts/setup-ocimatic.sh --with-langs
 
-            # Run ocimatic
             ocimatic run-testplan
             ocimatic gen-expected
             ocimatic archive
-
-            # Deactivate the virtual env
-            deactivate
 
       - run: mv archive.zip ${{ github.event.repository.name }}.zip
 

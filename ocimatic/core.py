@@ -148,23 +148,42 @@ class ContestConfig:
 
 
 class Resource:
-    """A resource is a file in ocimatic that's copied when creating a contest or a task.
+    """A resource is a file or directory in ocimatic that's copied when creating a contest or a task.
 
     Some resources can be synchronized after the contest or task has been created. This is useful
-    for fixing bugs in ocimatic after a contest has been initialized.
+    when developing or fixing bugs in ocimatic if a contest has already been initialized.
     """
 
-    path: Path
-    sync: bool = False
-
-    def __init__(self, *args: str, sync: bool = False) -> None:
+    def __init__(self, *args: str, root: bool = False, sync: bool = False) -> None:
+        assert not (root and sync), "A root resource cannot be sync"
         ocimatic_dir = Path(__file__).parent
         resources_dir = ocimatic_dir / "resources"
-        self.path = resources_dir / Path(*args)
-        self.sync = sync
+        self._path = resources_dir / Path(*args)
+        self._sync = sync
+        self._root = root
 
     def copy_to(self, dest: Path) -> None:
-        shutil.copy2(self.path, dest)
+        if self._path.is_dir():
+            dest = dest if self._root else dest / self._path.name
+            shutil.copytree(
+                self._path,
+                dest,
+                dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns("auto"),
+                symlinks=True,
+            )
+        else:
+            shutil.copy2(self._path, dest)
+
+    @ui.work("SYNC")
+    def sync(self, dest: Path) -> Result:
+        if not self._sync:
+            return Result.success("Skip")
+        self.copy_to(dest)
+        return Result.success("OK")
+
+    def __str__(self) -> str:
+        return str(self._path)
 
 
 class Contest:
@@ -176,7 +195,11 @@ class Contest:
 
     COLOR = ui.MAGENTA
 
-    RESOURCES: ClassVar[dict[Typesetting, list[Resource]]] = {
+    SKEL = Resource("contest-skel", root=True)
+
+    RESOURCES: ClassVar[list[Resource]] = [Resource(".github", sync=True)]
+
+    TYPESETTING_RESOURCES: ClassVar[dict[Typesetting, list[Resource]]] = {
         "latex": [
             Resource("latex", "logo.eps", sync=True),
             Resource("latex", "oci.cls", sync=True),
@@ -194,15 +217,10 @@ class Contest:
     @staticmethod
     def create_layout(dest: Path, phase: str, typesetting: Typesetting) -> None:
         """Copy contest skeleton to `dest`."""
-        ocimatic_dir = Path(__file__).parent
-        resources_dir = ocimatic_dir / "resources"
-        shutil.copytree(
-            resources_dir / "contest-skel",
-            dest,
-            ignore=shutil.ignore_patterns("auto"),
-            symlinks=True,
-        )
-        for resource in Contest.RESOURCES[typesetting]:
+        Contest.SKEL.copy_to(dest)
+        for resource in Contest.RESOURCES:
+            resource.copy_to(dest)
+        for resource in Contest.TYPESETTING_RESOURCES[typesetting]:
             resource.copy_to(dest)
         ContestConfig.init(dest, phase, typesetting)
 
@@ -381,9 +399,10 @@ class Contest:
     @ui.hd1("{0}", "Sync", COLOR)
     def sync_resources(self) -> None:
         typesetting = self._conf.typesetting
-        for resource in Contest.RESOURCES[typesetting]:
-            if resource.sync:
-                resource.copy_to(self._directory)
+        for resource in Contest.RESOURCES:
+            resource.sync(self._directory)
+        for resource in Contest.TYPESETTING_RESOURCES[typesetting]:
+            resource.sync(self._directory)
         for task in self._tasks:
             task.sync_resources(typesetting)
 
@@ -440,7 +459,9 @@ class Task:
 
     COLOR = ui.MAGENTA + ui.BOLD
 
-    RESOURCES: ClassVar[dict[Typesetting, list[Resource]]] = {
+    SKEL = Resource("task-skel", root=True)
+
+    STATEMENT_RESOURCES: ClassVar[dict[Typesetting, list[Resource]]] = {
         "latex": [
             Resource("latex", "statement.tex"),
             Resource("latex", "logo.eps", sync=True),
@@ -455,12 +476,9 @@ class Task:
 
     @staticmethod
     def create_layout(task_path: Path, typesetting: Typesetting) -> None:
-        ocimatic_dir = Path(__file__).parent
-        resources_dir = ocimatic_dir / "resources"
-
-        # Copy task skeleton
-        shutil.copytree(resources_dir / "task-skel", task_path, symlinks=True)
-        for resource in Task.RESOURCES[typesetting]:
+        # Copy resources
+        Task.SKEL.copy_to(task_path)
+        for resource in Task.STATEMENT_RESOURCES[typesetting]:
             resource.copy_to(task_path / "statement")
 
         # Init config
@@ -976,9 +994,8 @@ Solutions with issues:
     @ui.hd1("{0}", "Sync", COLOR)
     def sync_resources(self, typesetting: Typesetting) -> None:
         statement_dir = self._directory / "statement"
-        for resource in Task.RESOURCES[typesetting]:
-            if resource.sync:
-                resource.copy_to(statement_dir)
+        for resource in Task.STATEMENT_RESOURCES[typesetting]:
+            resource.sync(statement_dir)
 
 
 class Statement(ABC):
