@@ -26,6 +26,7 @@ from ocimatic.source_code import (
     CppSource,
     JavaSource,
     LatexSource,
+    PDFSource,
     RustSource,
     TypstSource,
 )
@@ -33,7 +34,7 @@ from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
 
 # Don't use type alias because we use `get_args` to get the values at runtime
-Typesetting = Literal["latex", "typst"]
+Typesetting = Literal["typst", "latex"]
 
 
 class CLI:
@@ -279,10 +280,10 @@ class Contest:
         return self._build_problemset()
 
     def _build_problemset(self) -> Status:
-        if self._compile_titlepage().is_fail():
+        if self._titlepage.build().is_fail():
             return Status.fail
 
-        if self._compile_general().is_fail():
+        if self._general.build().is_fail():
             return Status.fail
 
         status = Status.success
@@ -293,24 +294,6 @@ class Contest:
         status &= self._merge_pdfs(Sideness.TWOSIDE).status
 
         return status
-
-    @ui.work("LATEX", "titlepage.tex")
-    def _compile_titlepage(self) -> Result:
-        """Compile title page latex."""
-        result = self._titlepage.compile()
-        if isinstance(result, Path):
-            return Result.success(short_msg="OK")
-        else:
-            return Result.fail(short_msg="FAILED", long_msg=result.msg)
-
-    @ui.work("LATEX", "general.tex")
-    def _compile_general(self) -> Result:
-        """Compile title page latex."""
-        result = self._general.compile()
-        if isinstance(result, Path):
-            return Result.success(short_msg="OK")
-        else:
-            return Result.fail(short_msg="FAILED", long_msg=result.msg)
 
     @ui.work("MERGE", "{1}.pdf")
     def _merge_pdfs(self, sideness: Sideness) -> Result:
@@ -1022,17 +1005,17 @@ class Statement(ABC):
                     codename=codename,
                 )
 
-    def __init__(self, directory: Path, num: int, codename: str) -> None:
+    def __init__(
+        self,
+        directory: Path,
+        source: PDFSource,
+        num: int,
+        codename: str,
+    ) -> None:
         self._directory = directory
+        self._source = source
         self._num = num
         self._codename = codename
-
-    @property
-    @abstractmethod
-    def pdf(self) -> Path | None: ...
-
-    @abstractmethod
-    def build(self) -> Result: ...
 
     @abstractmethod
     def _get_title_from_source(self) -> str | None: ...
@@ -1067,6 +1050,17 @@ class Statement(ABC):
 
         return scores
 
+    def build(self) -> Result:
+        return self._source.build()
+
+    def __str__(self) -> str:
+        return str(self._source)
+
+    @property
+    def pdf(self) -> Path | None:
+        """Return path to pdf if exists."""
+        return self._source.pdf()
+
 
 class TypstStatement(Statement):
     _TITLE_RE = re.compile(r"\s*title:\s*\"([^\"]+)\"")
@@ -1082,29 +1076,13 @@ class TypstStatement(Statement):
         codename: str,
     ) -> None:
         assert (directory / "statement.typ").exists()
-        super().__init__(directory, num, codename)
         sys_inputs: dict[str, str] = {
             "OCIMATIC_PHASE": phase,
             "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),
             "OCIMATIC_CODENAME": codename,
         }
-        self._source = TypstSource(directory / "statement.typ", sys_inputs=sys_inputs)
-
-    @property
-    def pdf(self) -> Path | None:
-        """Return path to pdf if exists."""
-        return self._source.pdf()
-
-    def __str__(self) -> str:
-        return str(self._source)
-
-    @ui.work("TYPST")
-    def build(self) -> Result:
-        result = self._source.compile()
-        if isinstance(result, Path):
-            return Result.success("OK")
-        else:
-            return Result.fail("FAILED", long_msg=result.msg)
+        source = TypstSource(directory / "statement.typ", sys_inputs=sys_inputs)
+        super().__init__(directory, source, num, codename)
 
     def _get_title_from_source(self) -> str | None:
         m = next((_match_lines(self._source.iter_lines(), self._TITLE_RE)), None)
@@ -1142,30 +1120,13 @@ class LatexStatement(Statement):
         codename: str,
     ) -> None:
         assert (directory / "statement.tex").exists()
-        super().__init__(directory, num, codename)
         env: dict[str, str] = {
             "OCIMATIC_PHASE": phase,
             "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),
             "OCIMATIC_CODENAME": codename,
         }
-        self._source = LatexSource(directory / "statement.tex", env=env)
-
-    @property
-    def pdf(self) -> Path | None:
-        """Return path to pdf if exists."""
-        return self._source.pdf()
-
-    def __str__(self) -> str:
-        return str(self._source)
-
-    @ui.work("LATEX")
-    def build(self) -> Result:
-        """Compile latex statement."""
-        result = self._source.compile()
-        if isinstance(result, Path):
-            return Result.success("OK")
-        else:
-            return Result.fail("FAILED", long_msg=result.msg)
+        source = LatexSource(directory / "statement.tex", env=env)
+        super().__init__(directory, source, num, codename)
 
     def _get_title_from_source(self) -> str | None:
         m = next((_match_lines(self._source.iter_lines(), self._TITLE_RE)), None)

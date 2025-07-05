@@ -63,10 +63,10 @@ def _solution_completion(
 
 @cloup.command(help="Initialize a contest in a new directory.")
 @cloup.argument("path", help="Path to directory.")
-@cloup.option("--phase")
+@cloup.option("--phase", help="The contest phase used in the generated pdfs.")
 @cloup.option(
     "--typesetting",
-    type=cloup.Choice(["latex", "typst"]),
+    type=cloup.Choice(["typst", "latex"]),
     help="Software used for typesetting documents.",
 )
 def init(path: str, phase: str | None, typesetting: Typesetting | None) -> None:
@@ -94,7 +94,7 @@ def init(path: str, phase: str | None, typesetting: Typesetting | None) -> None:
     if not typesetting:
         typesetting = questionary.select(
             "Select typesetting software:",
-            choices=["latex", "typst"],
+            choices=["typst", "latex"],
         ).ask()
         if typesetting is None:
             return

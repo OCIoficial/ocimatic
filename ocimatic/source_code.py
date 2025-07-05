@@ -13,7 +13,7 @@ import typst
 
 from ocimatic import ui, utils
 from ocimatic.config import CONFIG
-from ocimatic.result import Status
+from ocimatic.result import Status, Result
 from ocimatic.runnable import (
     Binary,
     JavaClasses,
@@ -246,6 +246,17 @@ class PDFSource(ABC):
     @abstractmethod
     def compile(self) -> Path | BuildError: ...
 
+    @ui.work("BUILD")
+    def build(self) -> Result:
+        result = self.compile()
+        if isinstance(result, Path):
+            return Result.success("OK")
+        else:
+            return Result.fail("FAILED", long_msg=result.msg)
+
+    @abstractmethod
+    def label(self) -> str: ...
+
     def iter_lines(self) -> Iterable[str]:
         yield from self._source.open()
 
@@ -301,6 +312,9 @@ class LatexSource(PDFSource):
             return BuildError(msg=msg)
         return self._source.with_suffix(".pdf")
 
+    def label(self) -> str:
+        return "LATEX"
+
 
 class TypstSource(PDFSource):
     def __init__(
@@ -319,6 +333,9 @@ class TypstSource(PDFSource):
         except Exception as exc:
             return BuildError(msg=str(exc))
         return output
+
+    def label(self) -> str:
+        return "TYPST"
 
 
 def _fmt_cmd(cmd: list[str]) -> str:

@@ -4,7 +4,7 @@ import re
 import sys
 from collections.abc import Callable, Generator
 from enum import Enum
-from typing import Literal, NoReturn, cast
+from typing import Literal, NoReturn, cast, overload
 
 from colorama import Fore, Style
 
@@ -89,13 +89,14 @@ def show_message(label: str, msg: str, color: str = INFO) -> None:
 
 
 def work[T: IntoWorkResult, **P](
-    action: str,
+    action_fmt: str,
     formatter: str = "{}",
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     def decorator(
         func: Callable[P, T],
     ) -> Callable[P, T]:
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            action = action_fmt.format(*args, **kwargs)
             _start_work(action, formatter.format(*args, **kwargs))
             result = func(*args, **kwargs)
             _end_work(result.into_work_result(), _verbosity)
