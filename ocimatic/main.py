@@ -67,14 +67,40 @@ def _solution_completion(
 @cloup.option(
     "--typesetting",
     type=cloup.Choice(["latex", "typst"]),
-    required=True,
     help="Software used for typesetting documents.",
 )
-def init(path: str, phase: str | None, typesetting: Typesetting) -> None:
+def init(path: str, phase: str | None, typesetting: Typesetting | None) -> None:
     from ocimatic import ui
     from ocimatic.core import CLI
+    import questionary
+
+    # Ask for phase if not provided
+    if not phase:
+        phase = questionary.select(
+            "Select contest phase:",
+            choices=[
+                "Regional",
+                "Final Nacional",
+                "Other (enter manually)",
+            ],
+        ).ask()
+        if phase == "Other (enter manually)":
+            phase = questionary.text("Enter contest phase:").ask()
+
+        if phase is None:
+            return
+
+    # Ask for typesetting if not provided
+    if not typesetting:
+        typesetting = questionary.select(
+            "Select typesetting software:",
+            choices=["latex", "typst"],
+        ).ask()
+        if typesetting is None:
+            return
 
     try:
+        ui.writeln()
         contest_path = Path(Path.cwd(), path)
         if contest_path.exists():
             ui.fatal_error("Couldn't create contest. Path already exists")

@@ -68,7 +68,7 @@ class CLI:
         return Contest.load_task_by_dir(contest_dir, task_dir)
 
     @staticmethod
-    def init_contest(dest: Path, phase: str | None, typesetting: Typesetting) -> None:
+    def init_contest(dest: Path, phase: str, typesetting: Typesetting) -> None:
         Contest.create_layout(dest, phase, typesetting)
 
     @property
@@ -191,7 +191,7 @@ class Contest:
     }
 
     @staticmethod
-    def create_layout(dest: Path, phase: str | None, typesetting: Typesetting) -> None:
+    def create_layout(dest: Path, phase: str, typesetting: Typesetting) -> None:
         """Copy contest skeleton to `dest`."""
         ocimatic_dir = Path(__file__).parent
         resources_dir = ocimatic_dir / "resources"

@@ -1,5 +1,7 @@
 [contest]
 # The phase is printed in the final pdf. This is typically either `Final` or `Regional`.
+# It is safe to change this value after the contest has been created.
 phase = ""
-# Software used for typesetting documents, either `typst` or `latex`
+# Software used for typesetting documents, either `typst` or `latex`. Do not change
+# this value after creating the contest.
 typesetting = "typst"
