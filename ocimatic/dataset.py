@@ -621,7 +621,7 @@ class Dataset:
             dataset=self,
             subtasks=subtasks,
             validation=validation,
-            sample=sample and sample.tests,
+            sample=sample.tests if sample else None,
         )
 
     def _transitive_results(

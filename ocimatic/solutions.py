@@ -92,7 +92,7 @@ class Solution:
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
             yield Result.fail(short_msg="Failed", long_msg=build_result.msg)
-            return
+            return None
         yield Result.success(short_msg="OK")
         return dataset.subtask(stn).run_on(
             build_result,

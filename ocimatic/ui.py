@@ -4,7 +4,7 @@ import re
 import sys
 from collections.abc import Callable, Generator
 from enum import Enum
-from typing import Literal, NoReturn, cast, overload
+from typing import Literal, NoReturn, cast
 
 from colorama import Fore, Style
 

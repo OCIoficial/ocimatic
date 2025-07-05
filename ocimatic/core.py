@@ -249,6 +249,8 @@ class Contest:
         ]
 
         vars = {"OCIMATIC_PHASE": self._conf.phase}
+        self._titlepage: PDFSource
+        self._general: PDFSource
         match self._conf.typesetting:
             case "latex":
                 self._titlepage = LatexSource(directory / "titlepage.tex", env=vars)
@@ -700,33 +702,33 @@ class Task:
             return ui.show_message("Error", "Solution not found", ui.ERROR)
 
         if stn is not None:
-            results = sol.run_on_subtask(
+            subtask_results = sol.run_on_subtask(
                 self._dataset,
                 self._checker,
                 timeout=timeout,
                 stn=stn,
             )
-            if not results:
+            if not subtask_results:
                 return
-            if stats := results.runtime_stats():
+            if stats := subtask_results.runtime_stats():
                 ui.writeln()
                 _write_stats(stats)
         else:
-            results = sol.run_on_dataset(
+            dataset_results = sol.run_on_dataset(
                 self._dataset,
                 self._checker,
                 RunMode.run_solution,
                 timeout=timeout,
             )
-            if not results:
+            if not dataset_results:
                 return
 
-            if stats := results.runtime_stats():
+            if stats := dataset_results.runtime_stats():
                 ui.writeln()
                 _write_stats(stats)
 
             if sol.is_partial:
-                if results.has_validation_errors():
+                if dataset_results.has_validation_errors():
                     ui.writeln()
                     ui.writeln(
                         "The results don't match the solution's expected outcome.\n",
@@ -736,7 +738,7 @@ class Task:
                         "Subtasks with issues:",
                         ui.ERROR,
                     )
-                    for sti, err in results.validation.items():
+                    for sti, err in dataset_results.validation.items():
                         if isinstance(err, Error):
                             ui.writeln(f" * {sti!r}: {err.msg}", ui.ERROR)
                 else:
@@ -747,7 +749,7 @@ class Task:
                     )
             else:
                 ui.writeln()
-                if results.check_all_correct():
+                if dataset_results.check_all_correct():
                     ui.writeln("Result: All test passed", ui.OK)
                 else:
                     ui.writeln("Result: Some tests failed", ui.ERROR)
