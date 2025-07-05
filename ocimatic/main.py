@@ -67,7 +67,7 @@ def _solution_completion(
 @cloup.option(
     "--typesetting",
     type=cloup.Choice(["latex", "typst"]),
-    default="typst",
+    required=True,
     help="Software used for typesetting documents.",
 )
 def init(path: str, phase: str | None, typesetting: Typesetting) -> None:
