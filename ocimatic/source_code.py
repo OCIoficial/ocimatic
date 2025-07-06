@@ -57,10 +57,6 @@ class SourceCode(ABC):
 
 
 class CompiledSource(SourceCode):
-    def __init__(self, file: Path, out: Path) -> None:
-        super().__init__(file)
-        self._out = out
-
     @abstractmethod
     def _build_cmd(self) -> list[str]: ...
 
@@ -70,15 +66,15 @@ class CompiledSource(SourceCode):
     @abstractmethod
     def _should_build(self) -> bool: ...
 
+    @abstractmethod
+    def _ensure_out_dir(self) -> None: ...
+
     def build(self, *, force: bool = False) -> Runnable | BuildError:
         if force or self._should_build():
-            print(self._out.parent)
-            self._out.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run(["ls", self._out.parent])
-            cmd = self._build_cmd()
+            self._ensure_out_dir()
             try:
                 complete = subprocess.run(
-                    cmd,
+                    self._build_cmd(),
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -117,10 +113,14 @@ class CppSource(CompiledSource):
         include: Path | None = None,
         out: Path | None = None,
     ) -> None:
-        super().__init__(file, out or Path(file.parent, ".build", f"{file.stem}-cpp"))
+        super().__init__(file)
         self._source = file
         self._extra_files = extra_files or []
         self._include = include
+        self._out = out or Path(file.parent, ".build", f"{file.stem}-cpp")
+
+    def _ensure_out_dir(self) -> None:
+        self._out.parent.mkdir(parents=True, exist_ok=True)
 
     def _runnable(self) -> Runnable:
         return Binary(self._out)
@@ -165,7 +165,11 @@ class RustSource(CompiledSource):
         return _check_run_status(bin.run())
 
     def __init__(self, file: Path, out: Path | None = None) -> None:
-        super().__init__(file, out or Path(file.parent, ".build", f"{file.stem}-rs"))
+        super().__init__(file)
+        self._out = out or Path(file.parent, ".build", f"{file.stem}-rs")
+
+    def _ensure_out_dir(self) -> None:
+        self._out.parent.mkdir(parents=True, exist_ok=True)
 
     def _runnable(self) -> Runnable:
         return Binary(self._out)
@@ -204,22 +208,28 @@ class JavaSource(CompiledSource):
         ui.writeln(f"$ {_fmt_cmd(classes.cmd())}")
         return _check_run_status(classes.run())
 
-    def __init__(self, classname: str, source: Path, out: Path | None = None) -> None:
-        super().__init__(
-            source,
-            out or Path(source.parent, ".build", f"{source.stem}-java"),
-        )
+    def __init__(
+        self,
+        classname: str,
+        source: Path,
+        outdir: Path | None = None,
+    ) -> None:
+        super().__init__(source)
         self._classname = classname
         self._source = source
+        self._outdir = outdir or Path(source.parent, ".build", f"{source.stem}-java")
+
+    def _ensure_out_dir(self) -> None:
+        self._outdir.mkdir(parents=True, exist_ok=True)
 
     def _runnable(self) -> Runnable:
-        return JavaClasses(self._classname, self._out)
+        return JavaClasses(self._classname, self._outdir)
 
     def _should_build(self) -> bool:
-        return _should_build([self._source], self._out)
+        return _should_build([self._source], self._outdir)
 
     def _build_cmd(self) -> list[str]:
-        return [CONFIG.java.javac, "-d", str(self._out), str(self._source)]
+        return [CONFIG.java.javac, "-d", str(self._outdir), str(self._source)]
 
 
 class PythonSource(SourceCode):
@@ -356,5 +366,13 @@ def _should_build(sources: list[Path], out: Path) -> bool:
         (s.stat().st_mtime for s in sources if s.exists()),
         default=float("inf"),
     )
-    btime = out.stat().st_mtime if out.exists() else float("-inf")
+    if out.is_dir():
+        btime = min(
+            (s.stat().st_mtime for s in out.iterdir() if s.exists()),
+            default=float("-inf"),
+        )
+    elif out.is_file():
+        btime = out.stat().st_mtime
+    else:
+        btime = float("-inf")
     return btime < mtime
