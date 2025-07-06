@@ -56,7 +56,7 @@ jobs:
 
       - name: Test ocimatic
         run: |
-          ocimatic init contest
+          ocimatic init contest --phase Test --typesetting typst
           cd contest
           ocimatic new-task task
           cp ../tests/sample.java task/solutions/correct/
