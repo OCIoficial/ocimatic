@@ -72,7 +72,9 @@ class CompiledSource(SourceCode):
 
     def build(self, *, force: bool = False) -> Runnable | BuildError:
         if force or self._should_build():
+            print(self._out.parent)
             self._out.parent.mkdir(parents=True, exist_ok=True)
+            subprocess.run(["ls", self._out.parent])
             cmd = self._build_cmd()
             try:
                 complete = subprocess.run(
