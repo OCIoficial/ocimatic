@@ -244,10 +244,10 @@ class ExpectedComment:
                     f"Subtask number must be greater than or equal to 1: `st{n}`",
                 )
             stn = Stn(n)
-            verdict = Outcome.parse(m.group(2))
-            if isinstance(verdict, Error):
-                return verdict
+            outcome = Outcome.parse(m.group(2))
+            if isinstance(outcome, Error):
+                return outcome
             if stn in subtasks:
-                return Error("A subtask must appear only once")
-            subtasks[stn] = verdict
+                return Error("Each subtask must appear only once")
+            subtasks[stn] = outcome
         return ExpectedComment(subtasks=subtasks)

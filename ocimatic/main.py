@@ -252,11 +252,33 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa:
 
     solution_path = Path(solution) if solution else None
 
-    status = Status.success
-    for task in tasks:
-        status &= task.gen_expected(sample=sample, solution=solution_path)
+    failed = [
+        task
+        for task in tasks
+        if task.gen_expected(sample=sample, solution=solution_path) == Status.success
+    ]
 
-    exit_with_status(status)
+    if len(tasks) > 1 and len(failed) > 0:
+        ui.writeln(
+            """
+--------------------------------------------------------
+Failed to generate expeted output for some of the tasks.
+
+Tasks with issues:""",
+            ui.ERROR,
+        )
+        for t in failed:
+            ui.writeln(f" * {t}", ui.ERROR)
+        ui.writeln(
+            """
+To investigate further, run `ocimatic gen-expected`
+inside the corresponding task directory to get detailed
+information about the failures.
+--------------------------------------------------------
+""",
+            ui.ERROR,
+        )
+        exit_with_status(Status.fail)
 
 
 @cloup.command(help="Build statement's pdf.")
@@ -309,11 +331,34 @@ def run_testplan(cli: CLI, subtask: int | None) -> None:
         ui.fatal_error(
             "A subtask can only be specified when there's a single target task.",
         )
-    status = Status.success
-    for task in tasks:
-        status &= task.run_testplan(stn=Stn(subtask) if subtask else None)
 
-    exit_with_status(status)
+    failed = [
+        task
+        for task in tasks
+        if task.run_testplan(stn=Stn(subtask) if subtask else None) == Status.fail
+    ]
+
+    if len(tasks) > 1 and len(failed) > 0:
+        ui.writeln(
+            """
+----------------------------------------------------
+Testplan failed for some of the tasks.
+
+Tasks with issues:""",
+            ui.ERROR,
+        )
+        for t in failed:
+            ui.writeln(f" * {t}", ui.ERROR)
+        ui.writeln(
+            """
+To investigate further, run `ocimatic run-testplan`
+inside the corresponding task directory to get
+detailed information about the failures.
+----------------------------------------------------
+""",
+            ui.ERROR,
+        )
+        exit_with_status(Status.fail)
 
 
 @cloup.command(help="Run input validators.")
@@ -327,6 +372,11 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
     tasks = cli.select_tasks()
     if len(tasks) > 1:
         ui.set_verbosity(ui.Verbosity.quiet)
+
+    if subtask is not None and len(tasks) > 1:
+        ui.fatal_error(
+            "A subtask can only be specified when there's a single target task.",
+        )
 
     status = Status.success
     for task in tasks:
@@ -546,10 +596,18 @@ def check_setup() -> None:
         ui.writeln("All commands ran successfully.", ui.GREEN)
     else:
         ui.writeln(
+            "----------------------------------------------------------",
+            ui.ERROR,
+        )
+        ui.writeln(
             "Some commands failed. You can still try to use ocimatic\n"
             "but some solutions or generators may not work. You can use\n"
             "`ocimatic setup` to override the default configuration.",
             ui.RED,
+        )
+        ui.writeln(
+            "----------------------------------------------------------",
+            ui.ERROR,
         )
 
     exit_with_status(status)
