@@ -754,7 +754,7 @@ class Outcome(Enum):
                         return Error(
                             "Expected 'TLE', but some tests failed for a reason different than time limit exceeded.",
                         )
-                    found = test.is_tle()
+                    found |= test.is_tle()
                 if not found:
                     return Error(
                         "Expected 'TLE', but no test gave time limit exceeded.",
@@ -766,7 +766,7 @@ class Outcome(Enum):
                         return Error(
                             "Expected 'WA', but some tests failed for a reason different than wrong answer.",
                         )
-                    found = test.is_wrong_answer()
+                    found |= test.is_wrong_answer()
                 if not found:
                     return Error("Expected 'WA', but no test resulted in wrong answer.")
             case Outcome.FAIL:
