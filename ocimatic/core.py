@@ -178,7 +178,7 @@ class Resource:
     @ui.work("SYNC")
     def sync(self, dest: Path) -> Result:
         if not self._sync:
-            return Result.success("Skip")
+            return Result.success("SKIPPED")
         self.copy_to(dest)
         return Result.success("OK")
 
@@ -300,10 +300,10 @@ class Contest:
         return self._build_problemset()
 
     def _build_problemset(self) -> Status:
-        if self._titlepage.build().is_fail():
+        if self._titlepage.compile_work().is_fail():
             return Status.fail
 
-        if self._general.build().is_fail():
+        if self._general.compile_work().is_fail():
             return Status.fail
 
         status = Status.success
@@ -1070,7 +1070,7 @@ class Statement(ABC):
         return scores
 
     def build(self) -> Result:
-        return self._source.build()
+        return self._source.compile_work()
 
     def __str__(self) -> str:
         return str(self._source)

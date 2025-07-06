@@ -80,4 +80,5 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"ocimatic/resources/.github/scripts/read_typesetting.py" = ["ALL"]
 "setup.py" = ["PTH"]

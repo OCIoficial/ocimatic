@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shlex
 import shutil
 import subprocess
@@ -246,16 +247,13 @@ class PDFSource(ABC):
     @abstractmethod
     def compile(self) -> Path | BuildError: ...
 
-    @ui.work("BUILD")
-    def build(self) -> Result:
+    @ui.work("COMPILE")
+    def compile_work(self) -> Result:
         result = self.compile()
         if isinstance(result, Path):
             return Result.success("OK")
         else:
             return Result.fail("FAILED", long_msg=result.msg)
-
-    @abstractmethod
-    def label(self) -> str: ...
 
     def iter_lines(self) -> Iterable[str]:
         yield from self._source.open()
@@ -276,13 +274,12 @@ class LatexSource(PDFSource):
         latex = LatexSource(file)
         ui.writeln(f"$ {latex._cmd()}")
 
-        r = latex.compile()
-        if isinstance(r, BuildError):
+        if isinstance(r := latex.compile(), BuildError):
             ui.writeln(r.msg, ui.ERROR)
             return Status.fail
-        else:
-            ui.writeln("Success!", ui.GREEN)
-            return Status.success
+
+        ui.writeln("Success!", ui.GREEN)
+        return Status.success
 
     def __init__(self, source: Path, *, env: dict[str, str] | None = None) -> None:
         super().__init__(source)
@@ -302,7 +299,7 @@ class LatexSource(PDFSource):
             text=True,
             check=False,
             capture_output=True,
-            env=self._env,
+            env=dict(os.environ, **(self._env or {})),
         )
         if complete.returncode != 0:
             msg = complete.stderr
@@ -311,9 +308,6 @@ class LatexSource(PDFSource):
             msg += complete.stdout
             return BuildError(msg=msg)
         return self._source.with_suffix(".pdf")
-
-    def label(self) -> str:
-        return "LATEX"
 
 
 class TypstSource(PDFSource):
@@ -333,9 +327,6 @@ class TypstSource(PDFSource):
         except Exception as exc:
             return BuildError(msg=str(exc))
         return output
-
-    def label(self) -> str:
-        return "TYPST"
 
 
 def _fmt_cmd(cmd: list[str]) -> str:
