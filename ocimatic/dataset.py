@@ -391,7 +391,6 @@ class Subtask(_TestGroup):
         ancestors: list[Subtask],
     ) -> Status:
         if validator is None:
-            ui.writeln(" warning: no validator available", ui.YELLOW)
             runnable = None
         else:
             runnable_or_error = _build_validator(validator)
@@ -416,6 +415,9 @@ class Subtask(_TestGroup):
                 runnable,
                 check_basic_format=True,
             ).status
+
+        if validator is None:
+            ui.writeln(" warning: no validator available", ui.YELLOW)
 
         if not self._tests:
             ui.writeln(" warning: no test cases", ui.YELLOW)

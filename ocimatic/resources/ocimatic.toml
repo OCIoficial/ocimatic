@@ -19,6 +19,9 @@ flags = ["-O2", "-std=c++20"]
 # Command to interpret python files. Generator scripts are typically written in python so you may
 # want to configure this or otherwise testplans will fail to run.
 [python]
+# If `true`, detect the current interpreter running ocimatic from `sys.executable`
+detect = true
+# Command used if detect is `false` or detecting the interpreter fails
 command = "python3"
 
 

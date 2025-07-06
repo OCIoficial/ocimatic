@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import sys
 import subprocess
 import tempfile
 import time as pytime
@@ -212,4 +213,9 @@ class Python3(Runnable):
         self._script = script
 
     def cmd(self) -> list[str]:
-        return [CONFIG.python.command, str(self._script)]
+        py = None
+        if CONFIG.python.detect:
+            py = sys.executable
+        if py is None:
+            py = CONFIG.python.command
+        return [py, str(self._script)]
