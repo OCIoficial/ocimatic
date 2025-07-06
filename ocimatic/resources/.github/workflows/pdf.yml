@@ -1,4 +1,4 @@
-name: Build problemset
+name: Build Problemset
 on:
   # Triggers the workflow on push events but only for the main branch
   push:
@@ -6,6 +6,9 @@ on:
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+
+env:
+  OCIMATIC_REPO: "https://github.com/OCIoficial/ocimatic"
 
 jobs:
   problemset:
@@ -16,25 +19,31 @@ jobs:
       - name: Read typesetting
         id: read-typesetting
         run: |
-          pip install toml
           python3 .github/scripts/read_typesetting.py
 
       # For typst contests, run action directly in Ubuntu
       - if: steps.read-typesetting.outputs.typesetting == 'typst'
+        name: "Build problemset (typst)"
         run: |
-          source .github/scripts/setup-ocimatic.sh
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv tool install git+${{ env.OCIMATIC_REPO }}
+
           ocimatic problemset
 
       # For latex contests, run action in container
       - uses: xu-cheng/texlive-action@v2
+        name: "Build problemset (latex)"
         if: steps.read-typesetting.outputs.typesetting == 'latex'
         with:
           scheme: debian
           run: |
-            source .github/scripts/setup-ocimatic.sh
+            export PATH="$HOME/.local/bin:$PATH"
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            uv tool install git+${{ env.OCIMATIC_REPO }}
+
             ocimatic problemset
 
-      # Move the generated pdf to a folder and deploy that folder to branch 'pdf'.
+      # Move the generated pdf to a folder and deploy that folder to 'pdf' branch.
       - run: mkdir pdf
       - run: mv -t pdf/ oneside.pdf twoside.pdf
       - name: Deploy to branch

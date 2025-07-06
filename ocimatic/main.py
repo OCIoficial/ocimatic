@@ -80,7 +80,7 @@ def init(path: str, phase: str | None, typesetting: Typesetting | None) -> None:
             "Select contest phase:",
             choices=[
                 "Regional",
-                "Final",
+                "Final Nacional",
                 "Other (enter manually)",
             ],
         ).ask()

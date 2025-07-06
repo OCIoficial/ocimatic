@@ -2,6 +2,9 @@ name: Release
 on:
   workflow_dispatch:
 
+env:
+  OCIMATIC_REPO: "https://github.com/OCIoficial/ocimatic"
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -11,13 +14,15 @@ jobs:
       - name: Read typesetting
         id: read-typesetting
         run: |
-          pip install toml
           python3 .github/scripts/read_typesetting.py
 
       # For typst contests, run action directly in Ubuntu
       - if: steps.read-typesetting.outputs.typesetting == 'typst'
         run: |
-          .github/scripts/setup-ocimatic.sh --with-langs
+          sudo .github/scripts/setup-languages.sh
+
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv tool install git+${{ env.OCIMATIC_REPO }}
 
           ocimatic run-testplan
           ocimatic gen-expected
@@ -29,7 +34,11 @@ jobs:
         with:
           scheme: full
           run: |
-            .github/scripts/setup-ocimatic.sh --with-langs
+            .github/scripts/setup-languages.sh
+
+            export PATH="$HOME/.local/bin:$PATH"
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            uv tool install git+${{ env.OCIMATIC_REPO }}
 
             ocimatic run-testplan
             ocimatic gen-expected

@@ -1,11 +1,10 @@
-# Read typeseting fom contest.toml, the toml library should be installed before executing this action
-import toml
+import tomllib
 import os
 
-data = toml.load("contest.toml")
+with open("contest.toml", "rb") as f:
+    data = tomllib.load(f)
 typesetting = data.get("contest", {}).get("typesetting", "")
 print(f"typesetting: {data['contest'].get('typesetting', '')}")
-# Use environment file for GitHub Actions output
 if "GITHUB_OUTPUT" in os.environ:
     with open(os.environ["GITHUB_OUTPUT"], "a") as f:
         f.write(f"typesetting={typesetting}\n")
