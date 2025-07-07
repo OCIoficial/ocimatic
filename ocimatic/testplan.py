@@ -17,12 +17,14 @@ from ocimatic.runnable import ret_code_to_str
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
 from ocimatic.utils import SortedDict, Stn
 
-# https://en.wikipedia.org/wiki/C0_and_C1_control_codes#Field_separators
+# <https://en.wikipedia.org/wiki/C0_and_C1_control_codes#FS>
 FS = chr(28)
 
 
 class Testplan:
     """Functionality to read and run a plan for generating dataset."""
+
+    COMMENT_RE = re.compile(r"([^#]*)(#.*)?", re.RegexFlag.DOTALL)
 
     def __init__(
         self,
@@ -56,7 +58,10 @@ class Testplan:
         return len(self._subtasks)
 
     def validators(self) -> SortedDict[Stn, Path | None]:
-        return SortedDict((sti, st.validator) for sti, st in self._subtasks.items())
+        return SortedDict(
+            (sti, st.validator.path if st.validator else None)
+            for sti, st in self._subtasks.items()
+        )
 
     def ancestors_of(self, stn: Stn) -> list[Stn]:
         visited: set[Stn] = set()
@@ -92,50 +97,42 @@ class Testplan:
         return status
 
     def _parse_file(self) -> SortedDict[Stn, _Subtask] | ParseError:
-        comment_re = re.compile(r"\s*#.*")
         subtasks: SortedDict[Stn, _Subtask] = SortedDict()
         sti = 0
         for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
-            line = line.strip()
-
-            if not line:
+            # Remove comments
+            m = Testplan.COMMENT_RE.fullmatch(line)
+            if m is None:
                 continue
-            if comment_re.fullmatch(line):
+            line = m.group(1)
+
+            # Skip empty lines
+            line = line.strip()
+            if not line:
                 continue
 
             if m := _Subtask.RE.fullmatch(line):
                 found_st = int(m.group(1))
-                validator = Path(self._directory, m.group(2)) if m.group(2) else None
                 sti += 1
                 if sti != found_st:
                     return ParseError(
                         lineno=lineno,
                         msg=f"found [Subtask {found_st}], but [Subtask {sti}] was expected",
                     )
-                subtasks[Stn(sti)] = _Subtask(self._dataset_dir, sti, validator)
+                subtasks[Stn(sti)] = _Subtask(self._dataset_dir, sti)
             elif m := _Command.RE.fullmatch(line):
                 if sti == 0:
                     return ParseError(
                         lineno=lineno,
                         msg="found command before declaring a subtask.",
                     )
-                group_str = m.group(1)
-                group = _GroupName.parse(group_str)
-                if not group:
-                    return ParseError(
-                        lineno=lineno,
-                        msg="invalid group name `{group_str}`. The group name should "
-                        f"match the regex `{_GroupName.RE.pattern}`.",
-                    )
+                group = _GroupName.parse(m.group(1))
+                if isinstance(group, Error):
+                    return ParseError(lineno=lineno, msg=group.msg)
                 cmd = m.group(2)
                 args = _parse_args(m.group(3) or "")
 
-                command = self._parse_command(
-                    group,
-                    cmd,
-                    args,
-                    lineno,
-                )
+                command = self._parse_command(group, cmd, args, lineno)
                 if isinstance(command, ParseError):
                     return command
                 subtasks[Stn(sti)].commands.append(command)
@@ -145,6 +142,16 @@ class Testplan:
                         stn=Stn(int(m.group(1))),
                         lineno=lineno,
                     ),
+                )
+            elif m := _Validator.RE.fullmatch(line):
+                if subtasks[Stn(sti)].validator is not None:
+                    return ParseError(
+                        lineno=lineno,
+                        msg="multiple @validator directives found for the same subtask.",
+                    )
+                subtasks[Stn(sti)].validator = _Validator(
+                    path=Path(self._directory, m.group(1)),
+                    lineno=lineno,
                 )
             else:
                 return ParseError(lineno=lineno, msg=f"invalid line `{line}`")
@@ -225,6 +232,21 @@ class ParseError:
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
+class _Validator:
+    """A validator directive can be used to define an input validator for a subtask."""
+
+    RE: ClassVar[re.Pattern[str]] = re.compile(
+        r"\s*@\s*validator\s*(\S+)\s*",
+    )
+
+    path: Path
+    lineno: int
+
+    def __str__(self) -> str:
+        return f"@validator {self.path}"
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
 class _Extends:
     """An extends directive can be used to include all tests from another subtask."""
 
@@ -246,9 +268,12 @@ class _GroupName:
     name: str
 
     @staticmethod
-    def parse(name: str) -> _GroupName | None:
+    def parse(name: str) -> _GroupName | Error:
         if not _GroupName.RE.fullmatch(name):
-            return None
+            return Error(
+                msg="invalid group name `{group_str}`. The group name should "
+                f"match the regex `{_GroupName.RE.pattern}`.",
+            )
         return _GroupName(name=name)
 
     def __str__(self) -> str:
@@ -256,13 +281,13 @@ class _GroupName:
 
 
 class _Subtask:
-    RE = re.compile(r"\s*\[\s*Subtask\s*(\d+)\s*(?:-\s*([^\]\s]+))?\s*\]\s*")
+    RE = re.compile(r"\s*\[\s*Subtask\s+(\d+)\s*\]\s*")
 
-    def __init__(self, dataset_dir: Path, stn: int, validator: Path | None) -> None:
+    def __init__(self, dataset_dir: Path, stn: int) -> None:
         self._dir = Path(dataset_dir, f"st{stn}")
         self.commands: list[_Command] = []
         self.extends: list[_Extends] = []
-        self.validator = validator
+        self.validator: _Validator | None = None
         self.parents: set[Stn] = set()
 
     def __str__(self) -> str:

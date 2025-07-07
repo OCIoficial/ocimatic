@@ -36,7 +36,7 @@ jre = "java"
 
 
 # Command and flags to compile Rust files. Rust solutions are rare so you may be good without
-# configuring this. However, we sometime write checkers in rust. If you are working on a solution
+# configuring this. However, we sometimes write checkers in rust. If you are working on a solution
 # for a task that has a Rust checker, you will need to have this working.
 [rust]
 command = "rustc"

@@ -16,7 +16,7 @@
 import sys
 
 # We use the file separator control code to signal the end of a test case.
-# https://en.wikipedia.org/wiki/C0_and_C1_control_codes#Field_separators
+# https://en.wikipedia.org/wiki/C0_and_C1_control_codes#FS
 FS = chr(28)
 
 for i in range(3):

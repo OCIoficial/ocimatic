@@ -112,9 +112,9 @@ def init(path: str, phase: str | None, typesetting: Typesetting | None) -> None:
 
 @cloup.command(
     "server",
-    short_help="Start a server to control ocimatic from a browser.",
+    short_help="Start a server to control Ocimatic from a browser.",
     help="Start a server which can be used to control ocimatic from a browser. "
-    "This is for the moment very limited, but it's useful during a contest to quickly paste "
+    "This is currently very limited, but it's useful during a contest to quickly paste "
     "and run a solution.",
 )
 @cloup.option("--port", "-p", default="9999", type=int)
@@ -130,16 +130,29 @@ def run_server(cli: CLI, port: int) -> None:
 @cloup.command(
     "sync-resources",
     short_help="Copy resources (e.g., `oci.typ`) into the contest.",
-    help="Copy resources (e.g., `oci.typ`) into the contest and tasks. This is useful to fix bugs "
-    "in ocimatic when we have already initialized a contest or a task. This is a risky operation. "
+    help="Copy resources (e.g., `oci.typ`) into the contest and tasks. This is useful for fixing bugs "
+    "in Ocimatic after a contest or a task has already been initialized. This is a risky operation. "
     "Don't use it unless you know what you are doing.",
 )
 @cloup.pass_obj
 def sync_resources(cli: CLI) -> None:
+    import questionary
+    from ocimatic import ui
+
+    ui.writeln(
+        "This will overwrite resource files in the contest and all tasks.",
+        ui.INFO,
+    )
+    answer = questionary.confirm(
+        "Are you sure you want to continue?",
+        default=False,
+    ).ask()
+    if answer is not True:
+        return
     cli.contest.sync_resources()
 
 
-@cloup.command(help="Generate problemset pdf.")
+@cloup.command(help="Generate the problemset PDF.")
 @cloup.pass_obj
 def problemset(cli: CLI) -> None:
     status = cli.contest.build_problemset()
@@ -147,8 +160,8 @@ def problemset(cli: CLI) -> None:
 
 
 @cloup.command(
-    short_help="Make a zip archive of the contest.",
-    help="Make an archive of the contest containing the statements and dataset.",
+    short_help="Create a zip archive of the contest.",
+    help="Create a zip archive of the contest containing the statements and dataset.",
 )
 @cloup.pass_obj
 def archive(cli: CLI) -> None:
@@ -173,9 +186,9 @@ def new_task(cli: CLI, name: str) -> None:
     short_help="Run dataset validation.",
     help="""
 Runs multiple validations on the dataset:\n
- - Check input/output correcteness by running all correct solutions against all test cases.\n
- - Test robustness by running partial solutions and verify they fail the subtasks they are suppose to.\n
- - Validate input/output formatting ensuring basic rules like lines not ending with spaces.\n
+ - Check input/output correctness by running all correct solutions against all test cases.\n
+ - Test robustness by running partial solutions and verifying they fail the subtasks they are suppose to.\n
+ - Validate input/output formatting, ensuring basic rules like lines not ending with spaces.\n
  - Run all input validators.\n
 """,
 )
@@ -217,8 +230,8 @@ def check_dataset(cli: CLI) -> None:
 
 @cloup.command(
     short_help="Generate expected output.",
-    help="Generate expected output by running a correct solution against all the input data. "
-    "By default it will choose any correct solution preferring solutions "
+    help="Generate expected output by running a correct solution against all input data. "
+    "By default, it will choose any correct solution, preferring those "
     "written in C++.",
 )
 @cloup.option(
@@ -281,7 +294,7 @@ information about the failures.
         exit_with_status(Status.fail)
 
 
-@cloup.command(help="Build statement's pdf.")
+@cloup.command(help="Build the statement PDF.")
 @cloup.pass_obj
 def build_statement(cli: CLI) -> None:
     tasks = cli.select_tasks()
@@ -296,7 +309,7 @@ def build_statement(cli: CLI) -> None:
     "-r",
     is_flag=True,
     default=False,
-    help="Add random prefix to output filenames to sort testcases within a subtask randomly.",
+    help="Add random prefix to output filenames to randomly sort testcases within a subtask",
 )
 @cloup.pass_obj
 def compress_dataset(cli: CLI, random_sort: bool) -> None:  # noqa: FBT001
@@ -315,8 +328,14 @@ def normalize(cli: CLI) -> None:
         task.normalize()
 
 
-@cloup.command(help="Run test plan.")
-@cloup.option("--subtask", "-st", type=int, help="Only run test plan for this subtask.")
+@cloup.command(help="Run the test plan.")
+@cloup.option(
+    "--subtask",
+    "-st",
+    type=int,
+    help="Only run the test plan for this subtask. "
+    " This option can only be specified if there's a single target task.",
+)
 @cloup.pass_obj
 def run_testplan(cli: CLI, subtask: int | None) -> None:
     from ocimatic import ui
@@ -385,7 +404,7 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
     exit_with_status(status)
 
 
-@cloup.command(help="Validate format of expected output files.")
+@cloup.command(help="Validate the format of expected output files.")
 @cloup.option(
     "--subtask",
     "-st",
@@ -409,7 +428,7 @@ def validate_output(cli: CLI, subtask: int | None) -> None:
     exit_with_status(status)
 
 
-@cloup.command(help="Print score parameters for cms.")
+@cloup.command(help="Print score parameters for CMS.")
 @cloup.pass_obj
 def score_params(cli: CLI) -> None:
     tasks = cli.select_tasks()
@@ -526,7 +545,7 @@ def build(cli: CLI, solution: str, task_name: str | None) -> None:
 @cloup.command(
     short_help="Generate shell completion scripts.",
     help="""
-    Generate shell completion scripts for ocimatic commands.
+    Generate shell completion scripts for Ocimatic.
 
     ### Bash
 
@@ -559,8 +578,8 @@ def completion(shell: Literal["bash", "zsh", "fish"]) -> None:
 
 
 @cloup.command(
-    short_help="Check if ocimatic is correctly setup.",
-    help="Check ocimatic is correctly setup by running some commands.",
+    short_help="Check if Ocimatic is correctly setup.",
+    help="Check Ocimatic is correctly setup by running some commands.",
 )
 def check_setup() -> None:
     import tempfile
@@ -614,28 +633,35 @@ def check_setup() -> None:
 
 
 @cloup.command(
-    short_help="Setup ocimatic.",
-    help="Generate configuration file for ocimatic that can be used to override default commands.",
+    short_help="Setup Ocimatic.",
+    help="Generate configuration file for Ocimatic that can be used to override default commands.",
 )
 def setup() -> None:
     from ocimatic import ui
     from ocimatic.config import Config
+    import questionary
 
     if Config.HOME_PATH.exists():
         ui.writeln(
             f"Configuration file already exists at '{Config.HOME_PATH}'.\n"
-            "Modify the file to configure ocimatic. You can regenerate it by\n"
-            "deleting it and then calling `ocimatic setup`.",
+            "This will overwrite the existing file.",
             ui.INFO,
         )
-    else:
-        shutil.copy2(Config.DEFAULT_PATH, Config.HOME_PATH)
+        answer = questionary.confirm(
+            "Are you sure you want to continue?",
+            default=False,
+        ).ask()
+        if answer is not True:
+            return
+        ui.writeln()
 
-        ui.writeln(
-            f"Configuration file created at '{Config.HOME_PATH}'.\n"
-            "You can configure ocimatic by editing the file.",
-            ui.INFO,
-        )
+    shutil.copy2(Config.DEFAULT_PATH, Config.HOME_PATH)
+
+    ui.writeln(
+        f"Configuration file created at '{Config.HOME_PATH}'.\n"
+        "You can configure ocimatic by editing the file.",
+        ui.INFO,
+    )
 
 
 @cloup.command(
@@ -696,17 +722,17 @@ SECTIONS = [
 @cloup.group(
     help="""
 A contest consists of a set of tasks. Ocimatic provides a set of commands that can work on multiple
-tasks at the same time. We refer to the set of tasks a commands runs on as the list of *targets*.
-To facilitate the selection of targets, Ocimatic is sensitive to the directory where you run it.
-When inside a task's directory (or any subdiretory) that single task is selected as the target. When
-run at the root of the contest, all tasks will be selected as targets. For some commands, the default
-set of targets can be overriden by passing the --task flag.
+tasks at the same time. We refer to the set of tasks a command runs on as the list of *targets*.
+To facilitate the selection of targets, ocimatic is sensitive to the directory where you run it.
+When inside a task's directory (or any subdirectory), that single task is selected as the target. When
+running ocimatic at the root of the contest, all tasks will be selected as targets. For some commands,
+you can override the default set of targets by passing the --task flag.
 
 Some commands are only valid if there's a single target task (Single-task commands). Some commands
 apply to the entire contest (Contest commands) or are used to configure Ocimatic (Config commands),
 and do not have a corresponding set of targets.
 
-You can see more information about a subcommand by calling it with --help/-h.
+You can see more information about a command by calling it with --help/-h.
 """,
     sections=SECTIONS,
     context_settings={"help_option_names": ["-h", "--help"]},
