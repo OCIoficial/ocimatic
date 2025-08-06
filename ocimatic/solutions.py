@@ -1,48 +1,29 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
+import re
 
-from ocimatic import ui
+from ocimatic import ui, utils
 from ocimatic.checkers import Checker
-from ocimatic.dataset import Dataset, DatasetResults, RunMode
-from ocimatic.result import Result, Status
+from ocimatic.dataset import (
+    Dataset,
+    Outcome,
+    DatasetResults,
+    GroupResults,
+    RunMode,
+)
+from ocimatic.result import Result, Status, Error
 from ocimatic.source_code import (
     BuildError,
     CppSource,
     JavaSource,
     PythonSource,
     RustSource,
-    ShouldFail,
     SourceCode,
 )
-from ocimatic.utils import Stn
-
-
-class SolutionSpec:
-    """Specification of which subtasks should pass or fail."""
-
-    subtasks_spec: ShouldFail | None
-
-    def __init__(self, name: str, comments: list[ShouldFail]) -> None:
-        match len(comments):
-            case 0:
-                self.subtasks_spec = None
-            case 1:
-                self.subtasks_spec = comments[0]
-            case _:
-                ui.fatal_error(
-                    "The should-fail comment can only be specified once",
-                )
-
-    def should_fail(self, data: Dataset) -> set[Stn]:
-        """Return the set of subtasks the solution should fail based on the spec. It must pass the complement."""
-        all_subtasks = data.subtasks()
-        match self.subtasks_spec:
-            case ShouldFail(subtasks=subtasks):
-                return all_subtasks.intersection(subtasks)
-            case None:
-                return all_subtasks
+from ocimatic.utils import SortedDict, Stn
 
 
 class Solution:
@@ -52,15 +33,8 @@ class Solution:
 
     def __init__(self, source: SourceCode) -> None:
         self._source = source
-        self._spec = SolutionSpec(source.name, source.comments)
+
         self.is_partial = source.file.parent.name == "partial"
-
-    def should_fail(self, data: Dataset) -> set[Stn]:
-        return self._spec.should_fail(data)
-
-    def check_results(self, results: DatasetResults) -> bool:
-        assert self.is_partial
-        return results.check_passes_correct_subtasks(self.should_fail(results.dataset))
 
     @staticmethod
     def load_solutions_in_dir(
@@ -106,6 +80,53 @@ class Solution:
         return Solution(source)
 
     @ui.workhd("{0}", COLOR)
+    def run_on_subtask(
+        self,
+        dataset: Dataset,
+        checker: Checker,
+        stn: Stn,
+        *,
+        timeout: float | None = None,
+    ) -> ui.WorkHd[GroupResults | None]:
+        """Run this solution on one subtask."""
+        build_result = self._source.build()
+        if isinstance(build_result, BuildError):
+            yield Result.fail(short_msg="Failed", long_msg=build_result.msg)
+            return None
+        yield Result.success(short_msg="OK")
+        return dataset.subtask(stn).run_on(
+            build_result,
+            checker,
+            RunMode.run_solution,
+            timeout=timeout,
+        )
+
+    def load_expected_outcome(
+        self,
+        dataset: Dataset,
+    ) -> SortedDict[Stn, Outcome] | Error:
+        if not self.is_partial:
+            return SortedDict((sti, Outcome.OK) for sti in dataset.subtasks())
+
+        if isinstance(comments := _parse_comments(self.source), Error):
+            return comments
+        match len(comments):
+            case 0:
+                return Error("Missing `@ocimatic::expected` comment")
+            case 1:
+                expected = comments[0].subtasks
+                sts = set(expected.keys())
+                if sts != dataset.subtasks():
+                    return Error(
+                        f"Subtasks in comment don't match dataset\nexpected '{dataset.subtasks()}', got '{sts}'",
+                    )
+                return expected
+            case _:
+                return Error(
+                    "The `@ocimatic::expected` comment can only be specified once",
+                )
+
+    @ui.workhd("{0}", COLOR)
     def run_on_dataset(
         self,
         dataset: Dataset,
@@ -113,22 +134,24 @@ class Solution:
         mode: RunMode,
         *,
         timeout: float | None = None,
-        stn: Stn | None = None,
     ) -> ui.WorkHd[DatasetResults | None]:
         """Run this solution for all test cases in the given dataset."""
-        build_result = self._source.build()
-        if isinstance(build_result, BuildError):
-            yield Result.fail(short_msg="Failed", long_msg=build_result.msg)
+        if isinstance(expected := self.load_expected_outcome(dataset), Error):
+            yield Result.fail(short_msg="Failed", long_msg=expected.msg)
             return None
-        else:
-            yield Result.success(short_msg="OK")
-            return dataset.run_on(
-                build_result,
-                checker,
-                mode,
-                timeout=timeout,
-                stn=stn,
-            )
+
+        if isinstance(runnable := self._source.build(), BuildError):
+            yield Result.fail(short_msg="Failed", long_msg=runnable.msg)
+            return None
+
+        yield Result.success(short_msg="OK")
+        return dataset.run_on(
+            runnable,
+            checker,
+            mode,
+            expected,
+            timeout=timeout,
+        )
 
     @ui.workhd("{0}", COLOR)
     def run_on_input(self, input: Path | TextIO) -> ui.WorkHd[None]:
@@ -175,3 +198,56 @@ class Solution:
     @property
     def source(self) -> SourceCode:
         return self._source
+
+
+def _parse_comments(source: SourceCode) -> list[ExpectedComment] | Error:
+    pattern = re.compile(r"\s*@ocimatic::expected\s+(.*)")
+    comments: list[ExpectedComment] = []
+    for comment in source.comments_iter():
+        m = pattern.match(comment)
+        if not m:
+            continue
+        parsed = ExpectedComment.parse(m.group(1))
+        if isinstance(parsed, Error):
+            path = utils.relative_to_cwd(source.file)
+            return Error(
+                f"Invalid comment `{m.group(0)}` in {path}\n" + parsed.msg,
+            )
+        else:
+            comments.append(parsed)
+    return comments
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class ExpectedComment:
+    ITEM_RE = re.compile(r"\s*st(\d+)\s*=\s*(\w+)\s*")
+
+    subtasks: SortedDict[Stn, Outcome]
+
+    @staticmethod
+    def parse(s: str) -> ExpectedComment | Error:
+        s = s.strip()
+        if not s.startswith("[") or not s.endswith("]"):
+            return Error("Content must be delimited by square brackets")
+        s = s[1:-1]
+
+        subtasks: SortedDict[Stn, Outcome] = SortedDict()
+        for item in s.split(","):
+            m = ExpectedComment.ITEM_RE.match(item)
+            if not m:
+                return Error(
+                    f"Items must be specified in the format `st{{n}}=VAL`, got `{item.strip()}`",
+                )
+            n = int(m.group(1))
+            if n < 1:
+                return Error(
+                    f"Subtask number must be greater than or equal to 1: `st{n}`",
+                )
+            stn = Stn(n)
+            outcome = Outcome.parse(m.group(2))
+            if isinstance(outcome, Error):
+                return outcome
+            if stn in subtasks:
+                return Error("Each subtask must appear only once")
+            subtasks[stn] = outcome
+        return ExpectedComment(subtasks=subtasks)

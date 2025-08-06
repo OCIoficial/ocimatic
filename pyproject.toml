@@ -8,21 +8,23 @@ classifiers = [
     "Programming Language :: Python",
 ]
 dependencies = [
-    "ansi2html>=1.6.0",
-    "cloup>=3.0.2",
-    "colorama>=0.3.9",
-    "flask>=1.0.2",
-    "pypdf>=3.17.0",
-    "tomlkit>=0.12.2",
+    "ansi2html~=1.9.2",
+    "cloup~=3.0.7",
+    "colorama~=0.4.6",
+    "flask~=3.1.1",
+    "pypdf~=5.7.0",
+    "questionary~=2.1.0",
+    "typst~=0.13.2",
+    "tomlkit~=0.13.3",
 ]
 description = "Automatize task creation for OCI"
 dynamic = ["version"]
 name = "ocimatic"
-requires-python = ">= 3.11"
+requires-python = ">= 3.12"
 urls = { Source = "https://github.com/OCIoficial/ocimatic" }
 
 [project.optional-dependencies]
-dev = ["mypy==1.13.0", "pyright==1.1.389", "ruff==0.8.1"]
+dev = ["mypy==1.16.1", "pyright==1.1.402", "ruff==0.12.1"]
 
 [project.scripts]
 ocimatic = "ocimatic:main"
@@ -34,11 +36,11 @@ ocimatic = ["resources/**/*", "templates/**/*"]
 
 [tool.pyright]
 pythonPlatform = "All"
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 typeCheckingMode = "strict"
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 ignore = [
@@ -78,4 +80,5 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"ocimatic/resources/.github/scripts/read_typesetting.py" = ["ALL"]
 "setup.py" = ["PTH"]

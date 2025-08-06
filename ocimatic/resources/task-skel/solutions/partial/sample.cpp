@@ -1,16 +1,12 @@
-// This file is a partial solution for the sample task. You can add partial
-// solutions just by placing them in this directory. Remove this file before
-// you start working on the actual task.
+// This file is a partial solution for the sample task. Remove this file before
+// you start working on the actual task. See the README.md in the solutions
+// directory for more details on how to write solutions.
 //
-// Partial solutions must specify the list of subtasks they should fail with a
-// comment as exemplified below. Ocimatic will check the solution fails these
-// subtasks and only these subtasks. If no comment is present, ocimatic will
-// assume all subtasks should fail.
-//
-// For the sample task, this solution should fail subtask 2 because it uses
-// `int` instead of `long` (this implies the solution should pass subtask 1).
+// For the sample task, this solution is expected to pass all test cases in
+// subtask 1 but it should fail with a wrong answer in subtask 2 because it uses
+// `int32_t` instead of `int64_t`.
 
-// @ocimatic should-fail=[st2]
+// @ocimatic::expected [st1=OK, st2=WA]
 #include <iostream>
 
 int main() {

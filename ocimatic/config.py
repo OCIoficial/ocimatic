@@ -27,11 +27,12 @@ class CppConfig:
 
 @dataclass(kw_only=True)
 class PythonConfig:
+    detect: bool
     command: str
 
     @staticmethod
     def load(conf: dict[Any, Any]) -> PythonConfig:
-        return PythonConfig(command=conf["command"])
+        return PythonConfig(detect=conf["detect"], command=conf["command"])
 
 
 @dataclass(kw_only=True)

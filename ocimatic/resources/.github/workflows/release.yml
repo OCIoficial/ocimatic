@@ -1,0 +1,63 @@
+name: Release
+on:
+  workflow_dispatch:
+
+env:
+  OCIMATIC_REPO: "https://github.com/OCIoficial/ocimatic"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read typesetting
+        id: read-typesetting
+        run: |
+          python3 .github/scripts/read_typesetting.py
+
+      # For typst contests, run action directly in Ubuntu
+      - if: steps.read-typesetting.outputs.typesetting == 'typst'
+        run: |
+          sudo .github/scripts/setup-languages.sh
+
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv tool install git+${{ env.OCIMATIC_REPO }}
+
+          ocimatic run-testplan
+          ocimatic gen-expected
+          ocimatic archive
+
+      # For latex contests, run action in container
+      - uses: xu-cheng/texlive-action@v2
+        if: steps.read-typesetting.outputs.typesetting == 'latex'
+        with:
+          scheme: full
+          run: |
+            .github/scripts/setup-languages.sh
+
+            export PATH="$HOME/.local/bin:$PATH"
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            uv tool install git+${{ env.OCIMATIC_REPO }}
+
+            ocimatic run-testplan
+            ocimatic gen-expected
+            ocimatic archive
+
+      - run: mv archive.zip ${{ github.event.repository.name }}.zip
+
+      - name: Publish Release
+        uses: ./.github/actions/github-release
+        with:
+          files: ${{ github.event.repository.name }}.zip
+          name: ${{ github.event.repository.name  }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update README.md
+        run: |
+          .github/scripts/ocimatic-version.py >> README.md
+          git config user.name ocimatic
+          git config user.email ocimatic@github.com
+          git add .
+          git commit -m "Release"
+          git push

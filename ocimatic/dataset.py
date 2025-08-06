@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import itertools
 import math
 import random
 import re
@@ -19,7 +18,12 @@ from ocimatic import ui, utils
 from ocimatic.checkers import Checker, CheckerError, CheckerSuccess
 from ocimatic.result import Error, Result, Status, WorkResult
 from ocimatic.runnable import RunError, Runnable, RunSuccess, RunTLE
-from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
+from ocimatic.source_code import (
+    BuildError,
+    CppSource,
+    PythonSource,
+    SourceCode,
+)
 from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
 
@@ -37,7 +41,7 @@ class RunMode(Enum):
 class TestResult:
     @dataclass
     class CheckerFinished:
-        """The solution finished without runtime errors and the checker was successfully run on the output.
+        """The solution finished without runtime errors and the checker successfully ran on the output.
 
         This could mean a correct answer, a wrong answer, or partial score if the checker returns
         something greater than 0.0 but less than 1.0.
@@ -131,6 +135,15 @@ class TestResult:
             isinstance(self.kind, TestResult.CheckerFinished) and self.kind.is_correct()
         )
 
+    def is_tle(self) -> bool:
+        return isinstance(self.kind, TestResult.TimeLimitExceeded)
+
+    def is_wrong_answer(self) -> bool:
+        return (
+            isinstance(self.kind, TestResult.CheckerFinished)
+            and not self.kind.is_correct()
+        )
+
     def is_proper_fail(self) -> bool:
         """Check whether the test was a "proper" failure.
 
@@ -146,12 +159,12 @@ class TestResult:
             case _:
                 return False
 
-    Kind = (
-        CheckerFinished
-        | TimeLimitExceeded
-        | RuntimeError
-        | CheckerError
-        | NoExpectedOutput
+    type Kind = (
+        TestResult.CheckerFinished
+        | TestResult.TimeLimitExceeded
+        | TestResult.RuntimeError
+        | TestResult.CheckerError
+        | TestResult.NoExpectedOutput
     )
     test: Test
     kind: Kind
@@ -317,12 +330,6 @@ class _TestGroup:
         self._name = name
         self._tests = sorted(tests)
 
-    def mtime(self) -> float:
-        mtime = -1.0
-        for test in self._tests:
-            mtime = max(mtime, test.mtime())
-        return mtime
-
     def normalize(self) -> None:
         for test in self._tests:
             test.normalize()
@@ -335,28 +342,22 @@ class _TestGroup:
         self,
         runnable: Runnable,
         checker: Checker,
-        parents: list[Stn],
         mode: RunMode,
         *,
         timeout: float | None,
-        skip: bool = False,
-    ) -> list[TestResult] | None:
-        if skip:
-            ui.show_message("info", "skipping")
-            return None
+    ) -> GroupResults:
+        if isinstance(self, Subtask) and mode == RunMode.run_solution:
+            for sti in self.parents:
+                ui.writeln(f" @extends {sti}", ui.CYAN)
 
-        if mode == RunMode.run_solution:
-            for sti in parents:
-                ui.writeln(f" @extends st{sti}", ui.CYAN)
-
-        results: list[TestResult] = []
+        tests: list[TestResult] = []
         for test in self._tests:
             result = test.run_on(runnable, checker, mode, timeout)
-            results.append(result)
+            tests.append(result)
         if not self._tests:
             ui.writeln(" warning: no test cases", ui.YELLOW)
 
-        return results
+        return GroupResults(tests=tests)
 
     @ui.hd2("{0}")
     def gen_expected(self, runnable: Runnable) -> Status:
@@ -372,24 +373,24 @@ class _TestGroup:
         return self._name
 
 
-class _Subtask(_TestGroup):
+class Subtask(_TestGroup):
     """Subclass of `TestGroup` to represent a subtask."""
 
-    def __init__(self, stn: Stn, directory: Path) -> None:
+    def __init__(self, stn: Stn, parents: list[Stn], directory: Path) -> None:
         super().__init__(
             directory.name,
             [Test(f, f.with_suffix(SOL)) for f in directory.glob(f"*{IN}")],
         )
+        self.parents = parents
         self._stn = stn
 
     @ui.hd2("{0}")
     def validate_input(
         self,
         validator: Path | None,
-        ancestors: list[_Subtask],
+        ancestors: list[Subtask],
     ) -> Status:
         if validator is None:
-            ui.writeln(" warning: no validator available", ui.YELLOW)
             runnable = None
         else:
             runnable_or_error = _build_validator(validator)
@@ -414,6 +415,9 @@ class _Subtask(_TestGroup):
                 runnable,
                 check_basic_format=True,
             ).status
+
+        if validator is None:
+            ui.writeln(" warning: no validator available", ui.YELLOW)
 
         if not self._tests:
             ui.writeln(" warning: no test cases", ui.YELLOW)
@@ -479,7 +483,8 @@ class RuntimeStats:
 @dataclass(kw_only=True, frozen=True, slots=True)
 class DatasetResults:
     dataset: Dataset
-    subtasks: SortedDict[Stn, SubtaskResults | None]
+    subtasks: SortedDict[Stn, list[TestResult]]
+    validation: SortedDict[Stn, Error | None]
     sample: list[TestResult] | None
 
     def check_all_correct(self) -> bool:
@@ -491,25 +496,9 @@ class DatasetResults:
                 return False
         return True
 
-    def check_passes_correct_subtasks(self, should_fail: set[Stn]) -> bool:
-        """Check all subtasks specified in `should_fail` fail and the rest pass."""
-        for sti, st in self.subtasks.items():
-            assert st is not None, f"Subtask {sti} has no test results"
-            in_should_fail = sti in should_fail
-            if in_should_fail and not any(t.is_proper_fail() for t in st.results(self)):
-                return False
-            if not in_should_fail and not all(t.is_correct() for t in st.results(self)):
-                return False
-
-        return True
-
-    def failed_subtasks(self) -> set[Stn]:
-        failed: set[Stn] = set()
-        for sti, st in self.subtasks.items():
-            assert st, f"Subtask {sti} has no results"
-            if not all(t.is_correct() for t in st.results(self)):
-                failed.add(sti)
-        return failed
+    def has_validation_errors(self) -> bool:
+        """Check whether some of the subtasks had a validation error."""
+        return any(isinstance(e, Error) for e in self.validation.values())
 
     def runtime_stats(self, *, include_sample: bool = False) -> RuntimeStats | None:
         running_times = list(self._running_times(include_sample=include_sample))
@@ -518,12 +507,9 @@ class DatasetResults:
         return RuntimeStats(max=max(running_times), min=min(running_times))
 
     def _iter_all(self, *, include_sample: bool = False) -> Iterator[TestResult]:
-        tests: Iterable[TestResult] = (
-            t for st in self.subtasks.values() if st for t in st.results(self)
-        )
+        yield from (t for tests in self.subtasks.values() for t in tests)
         if include_sample and self.sample:
-            tests = itertools.chain(tests, self.sample)
-        yield from tests
+            yield from self.sample
 
     def _running_times(self, *, include_sample: bool = False) -> Iterator[float]:
         """Return running times of all successful runs."""
@@ -533,19 +519,20 @@ class DatasetResults:
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
-class SubtaskResults:
-    stn: Stn
+class GroupResults:
     tests: list[TestResult]
 
-    def results(self, results: DatasetResults) -> Iterator[TestResult]:
-        yield from self.tests
-        testplan = results.dataset.testplan
-        if not testplan:
-            return
+    def runtime_stats(self) -> RuntimeStats | None:
+        running_times = list(self._running_times())
+        if not running_times:
+            return None
+        return RuntimeStats(max=max(running_times), min=min(running_times))
 
-        for sti in results.dataset.ancestors_of(self.stn):
-            st = results.subtasks[sti]
-            yield from (st.tests if st else [])
+    def _running_times(self) -> Iterator[float]:
+        """Return running times of all successful runs."""
+        for test in self.tests:
+            if isinstance(test.kind, TestResult.CheckerFinished):
+                yield test.kind.running_time()
 
 
 class Dataset:
@@ -558,15 +545,19 @@ class Dataset:
         self.testplan = testplan
         self._directory = directory
 
-        self._subtasks: SortedDict[Stn, _Subtask]
+        self._subtasks: SortedDict[Stn, Subtask]
         if testplan is not None:
             self._subtasks = SortedDict(
-                (Stn(stn), _Subtask(Stn(stn), directory / f"st{stn}"))
-                for stn in range(1, testplan.subtasks + 1)
+                (
+                    stn,
+                    Subtask(stn, testplan.parents_of(stn), directory / f"st{i}"),
+                )
+                for i in range(1, testplan.subtasks + 1)
+                for stn in [Stn(i)]
             )
         elif directory.exists():
             self._subtasks = SortedDict(
-                (Stn(stn), _Subtask(Stn(stn), d))
+                (Stn(stn), Subtask(Stn(stn), [], d))
                 for stn, d in enumerate(sorted(directory.iterdir()), 1)
                 if d.is_dir()
             )
@@ -586,28 +577,32 @@ class Dataset:
             status &= self._sampledata.gen_expected(runnable)
         return status
 
+    def subtask(self, sti: Stn) -> Subtask:
+        return self._subtasks[sti]
+
     def run_on(
         self,
         runnable: Runnable,
         checker: Checker,
         mode: RunMode,
+        expected: SortedDict[Stn, Outcome],
         *,
         timeout: float | None = None,
-        stn: Stn | None = None,
     ) -> DatasetResults:
-        subtasks: SortedDict[Stn, SubtaskResults | None] = SortedDict()
+        subtasks: SortedDict[Stn, list[TestResult]] = SortedDict()
         for sti, st in self._subtasks.items():
-            skip = stn is not None and stn != sti
-            tests = st.run_on(
+            results = st.run_on(
                 runnable,
                 checker,
-                self.parents_of(sti),
                 mode,
                 timeout=timeout,
-                skip=skip,
             )
-            subtasks[sti] = (
-                SubtaskResults(stn=sti, tests=tests) if tests is not None else None
+            subtasks[sti] = results.tests
+
+        validation: SortedDict[Stn, Error | None] = SortedDict()
+        for sti in subtasks:
+            validation[sti] = expected[sti].validate_results(
+                self._transitive_results(subtasks, sti),
             )
 
         sample = None
@@ -615,16 +610,29 @@ class Dataset:
             sample = self._sampledata.run_on(
                 runnable,
                 checker,
-                [],
                 mode,
                 timeout=timeout,
-                skip=stn is not None,
             )
         return DatasetResults(
             dataset=self,
             subtasks=subtasks,
-            sample=sample,
+            validation=validation,
+            sample=sample.tests if sample else None,
         )
+
+    def _transitive_results(
+        self,
+        subtasks: SortedDict[Stn, list[TestResult]],
+        sti: Stn,
+    ) -> Iterator[TestResult]:
+        """Iterate over all the results for the given subtask and all its ancestors."""
+        yield from subtasks[sti]
+        testplan = self.testplan
+        if not testplan:
+            return
+
+        for stj in self.ancestors_of(sti):
+            yield from subtasks[stj]
 
     def parents_of(self, stn: Stn) -> list[Stn]:
         testplan = self.testplan
@@ -664,12 +672,6 @@ class Dataset:
 
     def __str__(self) -> str:
         return f"{self._directory}"
-
-    def mtime(self) -> float:
-        mtime = -1.0
-        for subtask in self._subtasks.values():
-            mtime = max(mtime, subtask.mtime())
-        return mtime
 
     @ui.work("ZIP")
     def compress(self, *, random_sort: bool = False) -> Result:
@@ -718,6 +720,61 @@ class Dataset:
                 if not test.has_expected():
                     return False
         return True
+
+
+class Outcome(Enum):
+    OK = "OK"
+    TLE = "TLE"
+    WA = "WA"
+    FAIL = "FAIL"
+
+    def __str__(self) -> str:
+        return self.value
+
+    @staticmethod
+    def parse(s: str) -> Outcome | Error:
+        try:
+            return Outcome[s]
+        except KeyError:
+            return Error(
+                f"Value must be one of `{[it.value for it in Outcome]}`",
+            )
+
+    def validate_results(self, tests: Iterator[TestResult]) -> Error | None:
+        match self:
+            case Outcome.OK:
+                if not all(test.is_correct() for test in tests):
+                    return Error(
+                        "Expected 'OK', but some tests didn't produce a correct result.",
+                    )
+            case Outcome.TLE:
+                found = False
+                for test in tests:
+                    if not (test.is_tle() or test.is_correct()):
+                        return Error(
+                            "Expected 'TLE', but some tests failed for a reason different than time limit exceeded.",
+                        )
+                    found |= test.is_tle()
+                if not found:
+                    return Error(
+                        "Expected 'TLE', but no test gave time limit exceeded.",
+                    )
+            case Outcome.WA:
+                found = False
+                for test in tests:
+                    if not (test.is_wrong_answer() or test.is_correct()):
+                        return Error(
+                            "Expected 'WA', but some tests failed for a reason different than wrong answer.",
+                        )
+                    found |= test.is_wrong_answer()
+                if not found:
+                    return Error("Expected 'WA', but no test resulted in wrong answer.")
+            case Outcome.FAIL:
+                if not any(test.is_proper_fail() for test in tests):
+                    return Error(
+                        "Expected 'FAIL', but no test produced an incorrect result.",
+                    )
+        return None
 
 
 def _validate_basic_format(lines: list[str]) -> Result:

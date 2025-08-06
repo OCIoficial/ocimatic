@@ -6,12 +6,13 @@ import os
 import re
 import shutil
 import tempfile
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, Literal, cast, get_args
 
 import tomlkit
 from click.shell_completion import CompletionItem
@@ -19,11 +20,21 @@ from click.shell_completion import CompletionItem
 from ocimatic import config, ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
-from ocimatic.result import Result, Status
+from ocimatic.result import Result, Status, Error
 from ocimatic.solutions import Solution
-from ocimatic.source_code import CppSource, JavaSource, LatexSource, RustSource
+from ocimatic.source_code import (
+    CppSource,
+    JavaSource,
+    LatexSource,
+    PDFSource,
+    RustSource,
+    TypstSource,
+)
 from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
+
+# Don't use type alias because we use `get_args` to get the values at runtime
+Typesetting = Literal["typst", "latex"]
 
 
 class CLI:
@@ -58,8 +69,8 @@ class CLI:
         return Contest.load_task_by_dir(contest_dir, task_dir)
 
     @staticmethod
-    def init_contest(dest: Path, phase: str | None) -> None:
-        Contest.create_layout(dest, phase)
+    def init_contest(dest: Path, phase: str, typesetting: Typesetting) -> None:
+        Contest.create_layout(dest, phase, typesetting)
 
     @property
     def contest(self) -> Contest:
@@ -108,13 +119,16 @@ class ContestConfig:
     FILE_NAME = "contest.toml"
 
     phase: str
+    typesetting: Typesetting
 
     @staticmethod
-    def init(contest_path: Path, phase: str) -> None:
+    def init(contest_path: Path, phase: str | None, typesetting: Typesetting) -> None:
         conf_path = Path(contest_path, ContestConfig.FILE_NAME)
         with conf_path.open("r+") as f:
             conf = cast(dict[Any, Any], tomlkit.load(f))
-            conf["contest"]["phase"] = phase
+            if phase is not None:
+                conf["contest"]["phase"] = phase
+            conf["contest"]["typesetting"] = typesetting
 
             f.seek(0)
             tomlkit.dump(conf, f)  # pyright: ignore [reportUnknownMemberType]
@@ -127,7 +141,49 @@ class ContestConfig:
             conf = cast(dict[Any, Any], tomlkit.load(f))
             contest_table = conf.get("contest", {})
             phase = contest_table.get("phase", "")
-            return ContestConfig(phase=phase)
+            typesetting = contest_table.get("typesetting", "typst")
+            if typesetting not in get_args(Typesetting):
+                ui.fatal_error(f"`typesetting` must be one of {get_args(Typesetting)}")
+            return ContestConfig(phase=phase, typesetting=typesetting)
+
+
+class Resource:
+    """A resource is a file or directory in ocimatic that's copied when creating a contest or a task.
+
+    Some resources can be synchronized after the contest or task has been created. This is useful
+    when developing or fixing bugs in ocimatic if a contest has already been initialized.
+    """
+
+    def __init__(self, *args: str, root: bool = False, sync: bool = False) -> None:
+        assert not (root and sync), "A root resource cannot be sync"
+        ocimatic_dir = Path(__file__).parent
+        resources_dir = ocimatic_dir / "resources"
+        self._path = resources_dir / Path(*args)
+        self._sync = sync
+        self._root = root
+
+    def copy_to(self, dest: Path) -> None:
+        if self._path.is_dir():
+            dest = dest if self._root else dest / self._path.name
+            shutil.copytree(
+                self._path,
+                dest,
+                dirs_exist_ok=True,
+                ignore=shutil.ignore_patterns("auto"),
+                symlinks=True,
+            )
+        else:
+            shutil.copy2(self._path, dest)
+
+    @ui.work("SYNC")
+    def sync(self, dest: Path) -> Result:
+        if not self._sync:
+            return Result.success("SKIPPED")
+        self.copy_to(dest)
+        return Result.success("OK")
+
+    def __str__(self) -> str:
+        return str(self._path)
 
 
 class Contest:
@@ -139,18 +195,34 @@ class Contest:
 
     COLOR = ui.MAGENTA
 
+    SKEL = Resource("contest-skel", root=True)
+
+    RESOURCES: ClassVar[list[Resource]] = [Resource(".github", sync=True)]
+
+    TYPESETTING_RESOURCES: ClassVar[dict[Typesetting, list[Resource]]] = {
+        "latex": [
+            Resource("latex", "logo.eps", sync=True),
+            Resource("latex", "oci.cls", sync=True),
+            Resource("latex", "titlepage.tex"),
+            Resource("latex", "general.tex", sync=True),
+        ],
+        "typst": [
+            Resource("typst", "logo.png", sync=True),
+            Resource("typst", "oci.typ", sync=True),
+            Resource("typst", "titlepage.typ"),
+            Resource("typst", "general.typ", sync=True),
+        ],
+    }
+
     @staticmethod
-    def create_layout(dest: Path, phase: str | None) -> None:
+    def create_layout(dest: Path, phase: str, typesetting: Typesetting) -> None:
         """Copy contest skeleton to `dest`."""
-        ocimatic_dir = Path(__file__).parent
-        shutil.copytree(
-            ocimatic_dir / "resources" / "contest-skel",
-            dest,
-            ignore=shutil.ignore_patterns("auto"),
-            symlinks=True,
-        )
-        if phase is not None:
-            ContestConfig.init(dest, phase)
+        Contest.SKEL.copy_to(dest)
+        for resource in Contest.RESOURCES:
+            resource.copy_to(dest)
+        for resource in Contest.TYPESETTING_RESOURCES[typesetting]:
+            resource.copy_to(dest)
+        ContestConfig.init(dest, phase, typesetting)
 
     @staticmethod
     def _detect_tasks(contest_dir: Path) -> Iterator[tuple[int, TaskConfig, Path]]:
@@ -164,9 +236,10 @@ class Contest:
 
     @staticmethod
     def load_task_by_name(contest_dir: Path, task_name: str) -> Task | None:
+        contest_conf = ContestConfig.load(contest_dir)
         return next(
             (
-                Task(d, conf, i)
+                Task(d, contest_conf, conf, i)
                 for i, conf, d in Contest._detect_tasks(contest_dir)
                 if conf.codename == task_name
             ),
@@ -175,9 +248,10 @@ class Contest:
 
     @staticmethod
     def load_task_by_dir(contest_dir: Path, task_dir: Path) -> Task | None:
+        contest_conf = ContestConfig.load(contest_dir)
         return next(
             (
-                Task(d, conf, i)
+                Task(d, contest_conf, conf, i)
                 for i, conf, d in Contest._detect_tasks(contest_dir)
                 if d == task_dir
             ),
@@ -188,20 +262,33 @@ class Contest:
         self._directory = directory
         self._conf = ContestConfig.load(directory)
         self._tasks = [
-            Task(d, conf, i) for i, conf, d in Contest._detect_tasks(directory)
+            Task(d, self._conf, conf, i)
+            for i, conf, d in Contest._detect_tasks(directory)
         ]
 
-        os.environ["OCIMATIC_PHASE"] = self._conf.phase
-
-        self._titlepage = LatexSource(directory / "titlepage.tex")
-        self._general = LatexSource(directory / "general.tex")
+        vars = {"OCIMATIC_PHASE": self._conf.phase}
+        self._titlepage: PDFSource
+        self._general: PDFSource
+        match self._conf.typesetting:
+            case "latex":
+                self._titlepage = LatexSource(directory / "titlepage.tex", env=vars)
+                self._general = LatexSource(directory / "general.tex", env=vars)
+            case "typst":
+                self._titlepage = TypstSource(
+                    directory / "titlepage.typ",
+                    sys_inputs=vars,
+                )
+                self._general = TypstSource(
+                    directory / "general.typ",
+                    sys_inputs=vars,
+                )
 
     @property
     def directory(self) -> Path:
         return self._directory
 
     def new_task(self, name: str) -> None:
-        Task.create_layout(self._directory / name)
+        Task.create_layout(self._directory / name, self._conf.typesetting)
 
     @property
     def tasks(self) -> list[Task]:
@@ -209,42 +296,24 @@ class Contest:
 
     @ui.hd1("Generating problemset", color=COLOR)
     def build_problemset(self) -> Status:
-        """Build titlepage and statement of all tasks. Then merge all pdfs into a single pdf."""
+        """Build titlepage and statement for all tasks. Then merge all pdfs into a single pdf."""
         return self._build_problemset()
 
     def _build_problemset(self) -> Status:
-        if self._compile_titlepage().is_fail():
+        if self._titlepage.compile_work().is_fail():
             return Status.fail
 
-        if self._compile_general().is_fail():
+        if self._general.compile_work().is_fail():
             return Status.fail
 
         status = Status.success
         for task in self._tasks:
             status &= task.statement.build().status
 
-        self._merge_pdfs(Sideness.ONESIDE)
-        self._merge_pdfs(Sideness.TWOSIDE)
+        status &= self._merge_pdfs(Sideness.ONESIDE).status
+        status &= self._merge_pdfs(Sideness.TWOSIDE).status
 
         return status
-
-    @ui.work("LATEX", "titlepage.tex")
-    def _compile_titlepage(self) -> Result:
-        """Compile title page latex."""
-        result = self._titlepage.compile()
-        if isinstance(result, Path):
-            return Result.success(short_msg="OK")
-        else:
-            return Result.fail(short_msg="FAILED", long_msg=result.msg)
-
-    @ui.work("LATEX", "general.tex")
-    def _compile_general(self) -> Result:
-        """Compile title page latex."""
-        result = self._general.compile()
-        if isinstance(result, Path):
-            return Result.success(short_msg="OK")
-        else:
-            return Result.fail(short_msg="FAILED", long_msg=result.msg)
 
     @ui.work("MERGE", "{1}.pdf")
     def _merge_pdfs(self, sideness: Sideness) -> Result:
@@ -327,6 +396,16 @@ class Contest:
         """Find task with the given name."""
         return next((p for p in self._tasks if p.name == name), None)
 
+    @ui.hd1("{0}", "Sync", COLOR)
+    def sync_resources(self) -> None:
+        typesetting = self._conf.typesetting
+        for resource in Contest.RESOURCES:
+            resource.sync(self._directory)
+        for resource in Contest.TYPESETTING_RESOURCES[typesetting]:
+            resource.sync(self._directory)
+        for task in self._tasks:
+            task.sync_resources(typesetting)
+
 
 @dataclass(kw_only=True, frozen=True)
 class TaskConfig:
@@ -380,25 +459,38 @@ class Task:
 
     COLOR = ui.MAGENTA + ui.BOLD
 
-    @staticmethod
-    def create_layout(task_path: Path) -> None:
-        ocimatic_dir = Path(__file__).parent
+    SKEL = Resource("task-skel", root=True)
 
-        # Copy task skeleton
-        task_skel = ocimatic_dir / "resources" / "task-skel"
-        shutil.copytree(task_skel, task_path, symlinks=True)
+    STATEMENT_RESOURCES: ClassVar[dict[Typesetting, list[Resource]]] = {
+        "latex": [
+            Resource("latex", "statement.tex"),
+            Resource("latex", "logo.eps", sync=True),
+            Resource("latex", "oci.cls", sync=True),
+        ],
+        "typst": [
+            Resource("typst", "statement.typ"),
+            Resource("typst", "logo.png", sync=True),
+            Resource("typst", "oci.typ", sync=True),
+        ],
+    }
+
+    @staticmethod
+    def create_layout(task_path: Path, typesetting: Typesetting) -> None:
+        # Copy resources
+        Task.SKEL.copy_to(task_path)
+        for resource in Task.STATEMENT_RESOURCES[typesetting]:
+            resource.copy_to(task_path / "statement")
 
         # Init config
         TaskConfig.init(task_path)
 
-        # We put `oci.cls` and `logo.eps` in the statement directory to make it easier to work on
-        # the pdf without using ocimatic.
-        contest_skel = ocimatic_dir / "resources" / "contest-skel"
-        statement_path = task_path / "statement"
-        shutil.copy2(contest_skel / "oci.cls", statement_path)
-        shutil.copy2(contest_skel / "logo.eps", statement_path)
-
-    def __init__(self, directory: Path, conf: TaskConfig, num: int) -> None:
+    def __init__(
+        self,
+        directory: Path,
+        contest_conf: ContestConfig,
+        conf: TaskConfig,
+        num: int,
+    ) -> None:
         self._directory = directory
         self._conf = conf
 
@@ -417,8 +509,10 @@ class Task:
             self._managers_dir,
         )
 
-        self._statement = Statement(
+        self._statement = Statement.load(
             directory / "statement",
+            contest_conf.typesetting,
+            phase=contest_conf.phase,
             num=num,
             codename=self.codename,
         )
@@ -607,9 +701,12 @@ class Task:
         for sol in self._correct:
             ui.writeln(f" * [correct] {sol.source.file.name}", ui.CYAN)
         for sol in self._partial:
-            should_fail = _fmt_stn_iter(sol.should_fail(self._dataset))
             ui.write(f" * [partial] {sol.source.file.name}", ui.CYAN)
-            ui.writeln(f", should-fail={should_fail}", ui.CYAN)
+            if isinstance(expected := sol.load_expected_outcome(self._dataset), Error):
+                ui.writeln("  error in expected outcome comment", ui.ERROR)
+            else:
+                fmt = ", ".join(f"{k!r}={v}" for k, v in expected.items())
+                ui.writeln(f" [{fmt}]", ui.CYAN)
 
     @ui.hd1("{0}", "Normalizing", COLOR)
     def normalize(self) -> None:
@@ -622,49 +719,55 @@ class Task:
         if not sol:
             return ui.show_message("Error", "Solution not found", ui.ERROR)
 
-        results = sol.run_on_dataset(
-            self._dataset,
-            self._checker,
-            RunMode.run_solution,
-            timeout=timeout,
-            stn=stn,
-        )
-        if results:
-            ui.writeln()
-            stats = results.runtime_stats()
-            if stats:
+        if stn is not None:
+            subtask_results = sol.run_on_subtask(
+                self._dataset,
+                self._checker,
+                timeout=timeout,
+                stn=stn,
+            )
+            if not subtask_results:
+                return
+            if stats := subtask_results.runtime_stats():
+                ui.writeln()
+                _write_stats(stats)
+        else:
+            dataset_results = sol.run_on_dataset(
+                self._dataset,
+                self._checker,
+                RunMode.run_solution,
+                timeout=timeout,
+            )
+            if not dataset_results:
+                return
+
+            if stats := dataset_results.runtime_stats():
+                ui.writeln()
                 _write_stats(stats)
 
             if sol.is_partial:
-                should_fail = _fmt_stn_iter(sol.should_fail(self._dataset))
-                if stn is not None:
-                    pass
-                elif sol.check_results(results):
+                if dataset_results.has_validation_errors():
                     ui.writeln()
                     ui.writeln(
-                        f"Solution failed the subtasks it was supposed to fail\n * should-fail={should_fail}",
-                        ui.OK,
-                    )
-                else:
-                    failed = _fmt_stn_iter(results.failed_subtasks())
-                    ui.write(
-                        f"""
-The results don't match the solution's specification.
-- Subtasks expected to fail: {should_fail}
-- Subtasks that failed: {failed}
-
-To specify which subtasks the solution should fail, you must have a `should-fail`
-comment at the beginning of the file. For example, to specify that a solution should
-fail subtasks 1 and 2, write the following comment at the beginning of the file:
-// @ocimatic should-fail=[st1, st2]
-Ocimatic will check that the solution fails these subtasks and only these subtasks. If
-no comment is specified, ocimatic will assume that all subtasks should fail.
-""",
+                        "The results don't match the solution's expected outcome.\n",
                         ui.ERROR,
+                    )
+                    ui.writeln(
+                        "Subtasks with issues:",
+                        ui.ERROR,
+                    )
+                    for sti, err in dataset_results.validation.items():
+                        if isinstance(err, Error):
+                            ui.writeln(f" * {sti!r}: {err.msg}", ui.ERROR)
+                else:
+                    ui.writeln()
+                    ui.writeln(
+                        "Solution produced the expected results",
+                        ui.OK,
                     )
             else:
                 ui.writeln()
-                if results.check_all_correct():
+                if dataset_results.check_all_correct():
                     ui.writeln("Result: All test passed", ui.OK)
                 else:
                     ui.writeln("Result: Some tests failed", ui.ERROR)
@@ -803,7 +906,7 @@ Solutions with issues:
                 RunMode.check_partial,
                 timeout=timeout,
             )
-            if results is None or not sol.check_results(results):
+            if results is None or results.has_validation_errors():
                 if len(self._partial) > 1:
                     ui.writeln("error: issues found", ui.RED)
                 failed.append(sol)
@@ -850,7 +953,7 @@ Solutions with issues:
         """Generate expected outputs files for the dataset by running a correct solution.
 
         If `sample` is True, also generate expected output for sample input. If `solution` is
-        not `None` use it to generate the expected output, otherwise use any correct one
+        not `None` use it to generate the expected output, otherwise use any correct one,
         prioritizing C++ solutions.
         """
         if self._conf.static_dataset:
@@ -888,8 +991,139 @@ Solutions with issues:
         """Generate pdf for the statement."""
         self._statement.build()
 
+    @ui.hd1("{0}", "Sync", COLOR)
+    def sync_resources(self, typesetting: Typesetting) -> None:
+        statement_dir = self._directory / "statement"
+        for resource in Task.STATEMENT_RESOURCES[typesetting]:
+            resource.sync(statement_dir)
 
-class Statement:
+
+class Statement(ABC):
+    @staticmethod
+    def load(
+        directory: Path,
+        typesetting: Typesetting,
+        *,
+        phase: str,
+        num: int,
+        codename: str,
+    ) -> Statement:
+        match typesetting:
+            case "latex":
+                return LatexStatement(
+                    directory,
+                    phase=phase,
+                    num=num,
+                    codename=codename,
+                )
+            case "typst":
+                return TypstStatement(
+                    directory,
+                    phase=phase,
+                    num=num,
+                    codename=codename,
+                )
+
+    def __init__(
+        self,
+        directory: Path,
+        source: PDFSource,
+        num: int,
+        codename: str,
+    ) -> None:
+        self._directory = directory
+        self._source = source
+        self._num = num
+        self._codename = codename
+
+    @abstractmethod
+    def _get_title_from_source(self) -> str | None: ...
+
+    @abstractmethod
+    def _get_io_samples_from_source(self) -> set[str]: ...
+
+    @abstractmethod
+    def _get_scores_from_source(self) -> SortedDict[Stn, int]: ...
+
+    def get_io_samples(self) -> list[Test]:
+        """Find sample input data in the statement."""
+        return [
+            Test(self._directory / f"{s}.in", self._directory / f"{s}.sol")
+            for s in self._get_io_samples_from_source()
+        ]
+
+    def get_title(self) -> str:
+        title = self._get_title_from_source() or self._codename or self._directory.name
+        return f"Problema {_number_to_letter(self._num)} - {title}"
+
+    def get_scores(self) -> SortedDict[Stn, int]:
+        """Find the scores for each subtask."""
+        scores: SortedDict[Stn, int] = self._get_scores_from_source()
+        if not scores:
+            ui.show_message(
+                "warning",
+                "couldn't infer the score from the statement, assuming a single subtask with 100 points.",
+                ui.WARNING,
+            )
+            scores[Stn(1)] = 100
+
+        return scores
+
+    def build(self) -> Result:
+        return self._source.compile_work()
+
+    def __str__(self) -> str:
+        return str(self._source)
+
+    @property
+    def pdf(self) -> Path | None:
+        """Return path to pdf if exists."""
+        return self._source.pdf()
+
+
+class TypstStatement(Statement):
+    _TITLE_RE = re.compile(r"\s*title:\s*\"([^\"]+)\"")
+    _SAMPLE_IO_RE: re.Pattern[str] = re.compile(r"\s*#sampleIO\(\"([^\"]+)\"\)")
+    _SUBTASK_RE = re.compile(r"\s*#subtask\(([^\)]+)\)")
+
+    def __init__(
+        self,
+        directory: Path,
+        *,
+        phase: str,
+        num: int,
+        codename: str,
+    ) -> None:
+        assert (directory / "statement.typ").exists()
+        sys_inputs: dict[str, str] = {
+            "OCIMATIC_PHASE": phase,
+            "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),
+            "OCIMATIC_CODENAME": codename,
+        }
+        source = TypstSource(directory / "statement.typ", sys_inputs=sys_inputs)
+        super().__init__(directory, source, num, codename)
+
+    def _get_title_from_source(self) -> str | None:
+        m = next((_match_lines(self._source.iter_lines(), self._TITLE_RE)), None)
+        return m and m.group(1)
+
+    def _get_io_samples_from_source(self) -> set[str]:
+        return {
+            m.group(1)
+            for m in _match_lines(self._source.iter_lines(), self._SAMPLE_IO_RE)
+        }
+
+    def _get_scores_from_source(self) -> SortedDict[Stn, int]:
+        """Find the scores for each subtask."""
+        scores: SortedDict[Stn, int] = SortedDict()
+        sti = 1
+        for m in _match_lines(self._source.iter_lines(), self._SUBTASK_RE):
+            scores[Stn(sti)] = int(m.group(1))
+            sti += 1
+        return scores
+
+
+class LatexStatement(Statement):
     """Represents a statement. A statement is composed by a latex source and a pdf file."""
 
     _SAMPLE_IO_RE = re.compile(r"[^%]*\\sampleIO(?:\*)?(\[[^\]]*\]){0,2}{([^}]+)}")
@@ -899,92 +1133,51 @@ class Statement:
     def __init__(
         self,
         directory: Path,
-        num: int | None = None,
-        codename: str | None = None,
+        *,
+        phase: str,
+        num: int,
+        codename: str,
     ) -> None:
         assert (directory / "statement.tex").exists()
-        self._source = LatexSource(directory / "statement.tex")
-        self._directory = directory
-        self._num = num
-        self._codename = codename
+        env: dict[str, str] = {
+            "OCIMATIC_PHASE": phase,
+            "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),
+            "OCIMATIC_CODENAME": codename,
+        }
+        source = LatexSource(directory / "statement.tex", env=env)
+        super().__init__(directory, source, num, codename)
 
-    @property
-    def pdf(self) -> Path | None:
-        """Return path to pdf if exists."""
-        return self._source.pdf()
+    def _get_title_from_source(self) -> str | None:
+        m = next((_match_lines(self._source.iter_lines(), self._TITLE_RE)), None)
+        return m and m.group(1)
 
-    def __str__(self) -> str:
-        return str(self._source)
+    def _get_io_samples_from_source(self) -> set[str]:
+        return {
+            m.group(2)
+            for m in _match_lines(self._source.iter_lines(), self._SAMPLE_IO_RE)
+        }
 
-    @ui.work("LATEX")
-    def build(self) -> Result:
-        """Compile latex statement."""
-        if self._num is not None:
-            os.environ["OCIMATIC_PROBLEM_NUMBER"] = _number_to_letter(self._num)
-        if self._codename:
-            os.environ["OCIMATIC_CODENAME"] = self._codename
-
-        result = self._source.compile()
-        if isinstance(result, Path):
-            return Result.success("OK")
-        else:
-            return Result.fail("FAILED", long_msg=result.msg)
-
-    def get_title(self) -> str:
-        title = (
-            self._get_title_from_statement() or self._codename or self._directory.name
-        )
-        if self._num is not None:
-            return f"Problema {_number_to_letter(self._num)} - {title}"
-        else:
-            return title
-
-    def _get_title_from_statement(self) -> str | None:
-        for line in self._source.iter_lines():
-            m = self._TITLE_RE.match(line)
-            if m:
-                return m.group(1)
-        return None
-
-    def get_io_samples(self) -> list[Test]:
-        """Find sample input data in the statement."""
-        samples: set[str] = set()
-        for line in self._source.iter_lines():
-            m = self._SAMPLE_IO_RE.match(line)
-            if m:
-                samples.add(m.group(2))
-        return [
-            Test(self._directory / f"{s}.in", self._directory / f"{s}.sol")
-            for s in samples
-        ]
-
-    def get_scores(self) -> SortedDict[Stn, int]:
-        """Find the scores for each subtask."""
+    def _get_scores_from_source(self) -> SortedDict[Stn, int]:
         scores: SortedDict[Stn, int] = SortedDict()
         sti = 1
-        for line in self._source.iter_lines():
-            m = self._SUBTASK_RE.match(line)
-            if m:
-                scores[Stn(sti)] = int(m.group(1))
-                sti += 1
-        if not scores:
-            ui.show_message(
-                "warning",
-                "couldn't infer the score from the statement, assuming a single subtask with 100 points.",
-                ui.WARNING,
-            )
-            scores[Stn(sti)] = 100
-
+        for m in _match_lines(self._source.iter_lines(), self._SUBTASK_RE):
+            scores[Stn(sti)] = int(m.group(1))
+            sti += 1
         return scores
+
+
+def _match_lines(
+    lines: Iterable[str],
+    pattern: re.Pattern[str],
+) -> Iterator[re.Match[str]]:
+    for line in lines:
+        m = pattern.match(line)
+        if m:
+            yield m
 
 
 def _number_to_letter(num: int) -> str:
     return chr(ord("A") + num)
-
-
-def _fmt_stn_iter(should_fail: Iterable[Stn]) -> str:
-    joined = ", ".join(f"st{st}" for st in sorted(should_fail))
-    return f"[{joined}]"
 
 
 def _write_stats(stats: RuntimeStats) -> None:

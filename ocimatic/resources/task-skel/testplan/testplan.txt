@@ -1,11 +1,14 @@
 # This is a test plan for the sample task. See the README.md next to this file for more details on
 # how to write a test plan.
 
-# We define a validator for this subtask. The path is relative to this file
-[Subtask 1 - validation/validator.cpp]
+[Subtask 1]
+  # We define a validator for this subtask. The path is relative to the directory containing this
+  # test plan.
+  @validator validation/validator.cpp
 
   # You can use `copy` to use sample test cases in the test plan. Here we use a glob pattern
-  # to copy multiple files in a single command.
+  # to copy multiple files in a single command. Note that the path is relative to the root of the
+  # task.
   sample ; copy statement/sample-*.in
 
   # You can also use `copy` to specify manual test cases
@@ -15,8 +18,8 @@
   rand ; gen_random.py 10 100
 
 
-# We don't define a validator for this subtask.
 [Subtask 2]
+  # This subtask extends from the first subtask
   @extends subtask 1
 
   # You can also write a script in C++, useful to speed up generation.

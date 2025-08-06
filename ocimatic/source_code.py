@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import re
+import os
+import shlex
+import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
@@ -8,31 +10,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from string import Template
 
+import typst
+
 from ocimatic import ui, utils
 from ocimatic.config import CONFIG
-from ocimatic.runnable import Binary, JavaClasses, Python3, Runnable
-from ocimatic.utils import Stn
+from ocimatic.result import Status, Result
+from ocimatic.runnable import (
+    Binary,
+    JavaClasses,
+    Python3,
+    RunError,
+    Runnable,
+    RunSuccess,
+)
 
 
 @dataclass
 class BuildError:
     msg: str
-
-
-@dataclass(frozen=True, kw_only=True, slots=True)
-class ShouldFail:
-    REGEX = re.compile(r"\s+should-fail\s*=\s*\[(\s*st\d+\s*(,\s*st\d+\s*)*(,\s*)?)\]")
-    subtasks: set[Stn]
-
-    @staticmethod
-    def parse(comment: str) -> ShouldFail | None:
-        m = ShouldFail.REGEX.match(comment)
-        if not m:
-            return None
-        subtasks = {
-            Stn(int(st.strip().removeprefix("st"))) for st in m.group(1).split(",")
-        }
-        return ShouldFail(subtasks=subtasks)
 
 
 class SourceCode(ABC):
@@ -42,7 +37,6 @@ class SourceCode(ABC):
         relative_path = utils.relative_to_cwd(file)
         self._file = file
         self.name = str(relative_path)
-        self.comments = list(parse_comments(file, self.__class__.LINE_COMMENT_START))
 
     def __str__(self) -> str:
         return self.name
@@ -51,22 +45,66 @@ class SourceCode(ABC):
     def file(self) -> Path:
         return self._file
 
-    @staticmethod
-    def should_build(sources: list[Path], out: Path) -> bool:
-        mtime = max(
-            (s.stat().st_mtime for s in sources if s.exists()),
-            default=float("inf"),
-        )
-        btime = out.stat().st_mtime if out.exists() else float("-inf")
-        return btime < mtime
-
     @abstractmethod
     def build(self, *, force: bool = False) -> Runnable | BuildError: ...
 
+    def comments_iter(self) -> Iterator[str]:
+        comment_start = self.__class__.LINE_COMMENT_START
+        with self._file.open() as file:
+            for line in file:
+                if line.startswith(comment_start):
+                    yield line.removeprefix(comment_start)
 
-class CppSource(SourceCode):
+
+class CompiledSource(SourceCode):
+    @abstractmethod
+    def _build_cmd(self) -> list[str]: ...
+
+    @abstractmethod
+    def _runnable(self) -> Runnable: ...
+
+    @abstractmethod
+    def _should_build(self) -> bool: ...
+
+    @abstractmethod
+    def _ensure_out_dir(self) -> None: ...
+
+    def build(self, *, force: bool = False) -> Runnable | BuildError:
+        if force or self._should_build():
+            self._ensure_out_dir()
+            try:
+                complete = subprocess.run(
+                    self._build_cmd(),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                )
+                if complete.returncode != 0:
+                    return BuildError(msg=complete.stderr)
+            except Exception as e:
+                return BuildError(msg=str(e))
+        return self._runnable()
+
+
+class CppSource(CompiledSource):
     SUFFIX = ".cpp"
     LINE_COMMENT_START = "//"
+
+    @staticmethod
+    @ui.hd1("C++", color=ui.BLUE)
+    def test(resources: Path, tmp: Path) -> Status:
+        file = _copy_test(resources / "test.cpp", tmp)
+        cpp = CppSource(file)
+        ui.writeln(f"$ {_fmt_cmd(cpp._build_cmd())}")
+
+        bin = cpp.build()
+        if isinstance(bin, BuildError):
+            ui.writeln(bin.msg, ui.ERROR)
+            return Status.fail
+
+        ui.writeln(f"$ {_fmt_cmd(bin.cmd())}")
+        return _check_run_status(bin.run())
 
     def __init__(
         self,
@@ -81,7 +119,16 @@ class CppSource(SourceCode):
         self._include = include
         self._out = out or Path(file.parent, ".build", f"{file.stem}-cpp")
 
-    def build_cmd(self) -> list[str]:
+    def _ensure_out_dir(self) -> None:
+        self._out.parent.mkdir(parents=True, exist_ok=True)
+
+    def _runnable(self) -> Runnable:
+        return Binary(self._out)
+
+    def _should_build(self) -> bool:
+        return _should_build(self.files, self._out)
+
+    def _build_cmd(self) -> list[str]:
         cmd = [
             str(CONFIG.cpp.command),
             *CONFIG.cpp.flags,
@@ -93,38 +140,44 @@ class CppSource(SourceCode):
         cmd.extend(str(s) for s in self.files)
         return cmd
 
-    def build(self, *, force: bool = False) -> Binary | BuildError:
-        self._out.parent.mkdir(parents=True, exist_ok=True)
-        if force or CppSource.should_build(self.files, self._out):
-            cmd = self.build_cmd()
-            try:
-                complete = subprocess.run(
-                    cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    check=False,
-                )
-                if complete.returncode != 0:
-                    return BuildError(msg=complete.stderr)
-            except Exception as e:
-                return BuildError(msg=str(e))
-        return Binary(self._out)
-
     @property
     def files(self) -> list[Path]:
         return [self._file, *self._extra_files]
 
 
-class RustSource(SourceCode):
+class RustSource(CompiledSource):
     SUFFIX = ".rs"
     LINE_COMMENT_START = "//"
+
+    @staticmethod
+    @ui.hd1("Rust", color=ui.BLUE)
+    def test(resources: Path, tmp: Path) -> Status:
+        file = _copy_test(resources / "test.rs", tmp)
+        rs = RustSource(file)
+        ui.writeln(f"$ {_fmt_cmd(rs._build_cmd())}")
+
+        bin = rs.build()
+        if isinstance(bin, BuildError):
+            ui.write(bin.msg, ui.ERROR)
+            return Status.fail
+
+        ui.writeln(f"$ {_fmt_cmd(bin.cmd())}")
+        return _check_run_status(bin.run())
 
     def __init__(self, file: Path, out: Path | None = None) -> None:
         super().__init__(file)
         self._out = out or Path(file.parent, ".build", f"{file.stem}-rs")
 
-    def build_cmd(self) -> list[str]:
+    def _ensure_out_dir(self) -> None:
+        self._out.parent.mkdir(parents=True, exist_ok=True)
+
+    def _runnable(self) -> Runnable:
+        return Binary(self._out)
+
+    def _should_build(self) -> bool:
+        return _should_build([self._file], self._out)
+
+    def _build_cmd(self) -> list[str]:
         cmd = [
             CONFIG.rust.command,
             *CONFIG.rust.flags,
@@ -134,54 +187,62 @@ class RustSource(SourceCode):
         ]
         return cmd
 
-    def build(self, *, force: bool = False) -> Binary | BuildError:
-        self._out.parent.mkdir(parents=True, exist_ok=True)
-        if force or RustSource.should_build([self._file], self._out):
-            cmd = self.build_cmd()
-            complete = subprocess.run(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
-            if complete.returncode != 0:
-                return BuildError(msg=complete.stderr)
-        return Binary(self._out)
 
-
-class JavaSource(SourceCode):
+class JavaSource(CompiledSource):
     SUFFIX = ".java"
     LINE_COMMENT_START = "//"
 
-    def __init__(self, classname: str, source: Path, out: Path | None = None) -> None:
+    @staticmethod
+    @ui.hd1("Java", color=ui.BLUE)
+    def test(resources: Path, tmp: Path) -> Status:
+        file = _copy_test(resources / "test.java", tmp)
+
+        java = JavaSource("Test", file)
+        ui.writeln(f"$ {_fmt_cmd(java._build_cmd())}")
+
+        classes = java.build()
+        if isinstance(classes, BuildError):
+            ui.writeln(classes.msg, ui.ERROR)
+            return Status.fail
+
+        ui.writeln(f"$ {_fmt_cmd(classes.cmd())}")
+        return _check_run_status(classes.run())
+
+    def __init__(
+        self,
+        classname: str,
+        source: Path,
+        outdir: Path | None = None,
+    ) -> None:
         super().__init__(source)
         self._classname = classname
         self._source = source
-        self._out = out or Path(source.parent, ".build", f"{source.stem}-java")
+        self._outdir = outdir or Path(source.parent, ".build", f"{source.stem}-java")
 
-    def build_cmd(self) -> list[str]:
-        return [CONFIG.java.javac, "-d", str(self._out), str(self._source)]
+    def _ensure_out_dir(self) -> None:
+        self._outdir.mkdir(parents=True, exist_ok=True)
 
-    def build(self, *, force: bool = False) -> JavaClasses | BuildError:
-        if force or JavaSource.should_build([self._source], self._out):
-            self._out.mkdir(parents=True, exist_ok=True)
-            cmd = self.build_cmd()
-            complete = subprocess.run(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
-            if complete.returncode != 0:
-                return BuildError(msg=complete.stderr)
-        return JavaClasses(self._classname, self._out)
+    def _runnable(self) -> Runnable:
+        return JavaClasses(self._classname, self._outdir)
+
+    def _should_build(self) -> bool:
+        return _should_build([self._source], self._outdir)
+
+    def _build_cmd(self) -> list[str]:
+        return [CONFIG.java.javac, "-d", str(self._outdir), str(self._source)]
 
 
 class PythonSource(SourceCode):
     SUFFIX = ".py"
     LINE_COMMENT_START = "#"
+
+    @staticmethod
+    @ui.hd1("Python", color=ui.BLUE)
+    def test(resources: Path, tmp: Path) -> Status:
+        file = _copy_test(resources / "test.py", tmp)
+        py = PythonSource(file).build()
+        ui.writeln(f"$ {_fmt_cmd(py.cmd())}")
+        return _check_run_status(py.run())
 
     def __init__(self, file: Path) -> None:
         super().__init__(file)
@@ -191,36 +252,50 @@ class PythonSource(SourceCode):
         return Python3(self._file)
 
 
-def parse_comments(file: Path, comment_start: str) -> Iterator[ShouldFail]:
-    for m in comment_iter(file, comment_start):
-        parsed = ShouldFail.parse(m.group(1))
-        if parsed:
-            yield parsed
-            break
-        else:
-            path = utils.relative_to_cwd(file)
-            ui.show_message(
-                "Warning",
-                f"Invalid comment `{m.group(0)}` in {path}",
-                ui.WARNING,
-            )
-
-
-def comment_iter(file_path: Path, comment_start: str) -> Iterator[re.Match[str]]:
-    pattern = re.compile(rf"\s*{comment_start}\s*@ocimatic(.*)")
-    with file_path.open() as file:
-        for line in file:
-            m = pattern.match(line)
-            if m:
-                yield m
-
-
-class LatexSource:
+class PDFSource(ABC):
     def __init__(self, source: Path) -> None:
         self._source = source
 
+    @abstractmethod
+    def compile(self) -> Path | BuildError: ...
+
+    @ui.work("COMPILE")
+    def compile_work(self) -> Result:
+        result = self.compile()
+        if isinstance(result, Path):
+            return Result.success("OK")
+        else:
+            return Result.fail("FAILED", long_msg=result.msg)
+
     def iter_lines(self) -> Iterable[str]:
         yield from self._source.open()
+
+    def pdf(self) -> Path | None:
+        pdf = self._source.with_suffix(".pdf")
+        return pdf if pdf.exists() else None
+
+    def __str__(self) -> str:
+        return str(utils.relative_to_cwd(self._source))
+
+
+class LatexSource(PDFSource):
+    @staticmethod
+    @ui.hd1("Latex", color=ui.BLUE)
+    def test(resources: Path, tmp: Path) -> Status:
+        file = _copy_test(resources / "test.tex", tmp)
+        latex = LatexSource(file)
+        ui.writeln(f"$ {latex._cmd()}")
+
+        if isinstance(r := latex.compile(), BuildError):
+            ui.writeln(r.msg, ui.ERROR)
+            return Status.fail
+
+        ui.writeln("Success!", ui.GREEN)
+        return Status.success
+
+    def __init__(self, source: Path, *, env: dict[str, str] | None = None) -> None:
+        super().__init__(source)
+        self._env = env
 
     def _cmd(self) -> str:
         return Template(CONFIG.latex.command).substitute(
@@ -236,6 +311,7 @@ class LatexSource:
             text=True,
             check=False,
             capture_output=True,
+            env=dict(os.environ, **(self._env or {})),
         )
         if complete.returncode != 0:
             msg = complete.stderr
@@ -245,9 +321,58 @@ class LatexSource:
             return BuildError(msg=msg)
         return self._source.with_suffix(".pdf")
 
-    def pdf(self) -> Path | None:
-        pdf = self._source.with_suffix(".pdf")
-        return pdf if pdf.exists() else None
 
-    def __str__(self) -> str:
-        return str(utils.relative_to_cwd(self._source))
+class TypstSource(PDFSource):
+    def __init__(
+        self,
+        source: Path,
+        *,
+        sys_inputs: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(source)
+        self._sys_inputs = sys_inputs or {}
+
+    def compile(self) -> Path | BuildError:
+        output = self._source.with_suffix(".pdf")
+        try:
+            typst.compile(self._source, output=output, sys_inputs=self._sys_inputs)
+        except Exception as exc:
+            return BuildError(msg=str(exc))
+        return output
+
+
+def _fmt_cmd(cmd: list[str]) -> str:
+    return " ".join(shlex.quote(s) for s in cmd)
+
+
+def _check_run_status(r: RunSuccess | RunError) -> Status:
+    match r:
+        case RunSuccess(_):
+            ui.write(r.stdout, ui.GREEN)
+            return Status.success
+        case RunError(msg, stderr):
+            ui.writeln(msg, ui.ERROR)
+            ui.writeln(stderr, ui.ERROR)
+            return Status.fail
+
+
+def _copy_test(file: Path, tmp: Path) -> Path:
+    ui.writeln(f"$ cp {shlex.quote(str(file))} {shlex.quote(str(tmp))}")
+    return Path(shutil.copy2(file, tmp))
+
+
+def _should_build(sources: list[Path], out: Path) -> bool:
+    mtime = max(
+        (s.stat().st_mtime for s in sources if s.exists()),
+        default=float("inf"),
+    )
+    if out.is_dir():
+        btime = min(
+            (s.stat().st_mtime for s in out.iterdir() if s.exists()),
+            default=float("-inf"),
+        )
+    elif out.is_file():
+        btime = out.stat().st_mtime
+    else:
+        btime = float("-inf")
+    return btime < mtime

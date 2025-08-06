@@ -13,10 +13,12 @@ std::tuple<llong, llong> read() {
 }
 
 int main(int argc, char *argv[]) {
+  auto subtask = std::string(argv[1]);
+
   registerValidation();
   auto [a, b] = read();
 
-  if (!strcmp(argv[1], "st1")) {
+  if (subtask == "st1") {
     ensure(a >= -1'000'000'000ll && a <= 1'000'000'000ll);
     ensure(b >= -1'000'000'000ll && b <= 1'000'000'000ll);
   }
