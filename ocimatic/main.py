@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import os
-import shutil
-import sys
-from collections.abc import Callable
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal, NoReturn
 
 import click
@@ -12,7 +7,10 @@ import cloup
 from click.shell_completion import CompletionItem
 from cloup.constraints import If, accept_none, mutually_exclusive
 
+# Do not import anything unnecessary to speed up loading. This makes a noticeable difference
+# when cloup is computing completions.
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from ocimatic.core import CLI, Typesetting
     from ocimatic.result import Status
 
@@ -70,6 +68,8 @@ def _solution_completion(
     help="Software used for typesetting documents.",
 )
 def init(path: str, phase: str | None, typesetting: Typesetting | None) -> None:
+    from pathlib import Path
+
     from ocimatic import ui
     from ocimatic.core import CLI
     import questionary
@@ -121,6 +121,7 @@ def init(path: str, phase: str | None, typesetting: Typesetting | None) -> None:
 @cloup.pass_obj
 def run_server(cli: CLI, port: int) -> None:
     import sys
+    from pathlib import Path
 
     from ocimatic import server
 
@@ -251,6 +252,8 @@ def check_dataset(cli: CLI) -> None:
 )
 @cloup.pass_obj
 def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa: FBT001
+    from pathlib import Path
+
     from ocimatic import ui
     from ocimatic.result import Status
 
@@ -447,6 +450,7 @@ def list_solutions(cli: CLI) -> None:
 
 
 def exit_with_status(status: Status) -> NoReturn:
+    import sys
     from ocimatic.result import Status
 
     match status:
@@ -506,6 +510,9 @@ def run_solution(
     file: str | None,
     timeout: float | None,
 ) -> None:
+    import sys
+    from pathlib import Path
+
     from ocimatic import ui
     from ocimatic.utils import Stn
 
@@ -534,6 +541,8 @@ def run_solution(
 )
 @cloup.pass_obj
 def build(cli: CLI, solution: str, task_name: str | None) -> None:
+    from pathlib import Path
+
     from ocimatic import ui
 
     task = cli.select_task(task_name)
@@ -573,6 +582,8 @@ def build(cli: CLI, solution: str, task_name: str | None) -> None:
     type=click.Choice(["bash", "zsh", "fish"]),
 )
 def completion(shell: Literal["bash", "zsh", "fish"]) -> None:
+    import os
+
     os.environ["_OCIMATIC_COMPLETE"] = f"{shell}_source"
     cli()
 
@@ -583,6 +594,7 @@ def completion(shell: Literal["bash", "zsh", "fish"]) -> None:
 )
 def check_setup() -> None:
     import tempfile
+    from pathlib import Path
 
     from ocimatic import ui
     from ocimatic.result import Status
@@ -637,6 +649,7 @@ def check_setup() -> None:
     help="Generate configuration file for Ocimatic that can be used to override default commands.",
 )
 def setup() -> None:
+    import shutil
     from ocimatic import ui
     from ocimatic.config import Config
     import questionary
