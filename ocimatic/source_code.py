@@ -147,7 +147,7 @@ class CppSource(CompiledSource):
         shutil.rmtree(self._cov_dir, ignore_errors=True)
         self._cov_dir.mkdir(parents=True, exist_ok=True)
 
-        targets = {f: self._cov_dir / f"{f.stem}.o" for f in self.files}
+        targets = {str(f): str(self._cov_dir / f"{f.stem}.o") for f in self.files}
         for input, obj in targets.items():
             cmd = [CONFIG.cpp.command, "-coverage", "-c", "-o", obj, input]
             complete = subprocess.run(
@@ -160,7 +160,7 @@ class CppSource(CompiledSource):
             if complete.returncode != 0:
                 return BuildError(msg=complete.stderr)
         out_bin = self._cov_dir / self._source.stem
-        cmd = [CONFIG.cpp.command, "-coverage", "-o", out_bin, *targets.values()]
+        cmd = [CONFIG.cpp.command, "-coverage", "-o", str(out_bin), *targets.values()]
         complete = subprocess.run(
             cmd,
             stdout=subprocess.DEVNULL,
