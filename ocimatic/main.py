@@ -449,6 +449,15 @@ def list_solutions(cli: CLI) -> None:
         task.list_solutions()
 
 
+@cloup.command(help="Compute code coverage.")
+@cloup.pass_obj
+def coverage(cli: CLI) -> None:
+    tasks = cli.select_tasks()
+
+    for task in tasks:
+        task.coverage()
+
+
 def exit_with_status(status: Status) -> NoReturn:
     import sys
     from ocimatic.result import Status
@@ -711,6 +720,7 @@ SECTIONS = [
             normalize,
             score_params,
             list_solutions,
+            coverage,
         ],
     ),
     cloup.Section(

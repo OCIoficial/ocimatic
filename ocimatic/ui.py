@@ -64,8 +64,10 @@ def decolorize(text: str) -> str:
     return re.sub(r"\033\[[0-9]+m", "", text)
 
 
-def write(text: str, color: str = RESET) -> None:
+def write(text: str, color: str = RESET, *, flush: bool = False) -> None:
     sys.stdout.write(colorize(text, color))
+    if flush:
+        sys.stdout.flush()
 
 
 def flush() -> None:
@@ -73,8 +75,7 @@ def flush() -> None:
 
 
 def writeln(text: str = "", color: str = RESET) -> None:
-    write(text + "\n", color)
-    flush()
+    write(text + "\n", color, flush=True)
 
 
 def fatal_error(message: str) -> NoReturn:
@@ -112,8 +113,7 @@ def _start_work(action: str, msg: str, length: int = 80) -> None:
         return
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
     msg = " * [" + action + "] " + msg + "  "
-    write(colorize(msg, CYAN))
-    flush()
+    write(colorize(msg, CYAN), flush=True)
 
 
 def _end_work(result: WorkResult, verbosity: Verbosity) -> None:
@@ -134,8 +134,7 @@ def _end_work(result: WorkResult, verbosity: Verbosity) -> None:
         if result.long_msg:
             dump_message(result.long_msg)
     else:
-        write(colorize(char, color))
-    flush()
+        write(colorize(char, color), flush=True)
 
 
 def dump_message(msg: str) -> None:
@@ -216,10 +215,9 @@ def _fmt_header(
         write(colorize(f" {msg}", color or RESET))
 
     if level == 2 and _verbosity is Verbosity.quiet:
-        write(" ")
+        write(" ", flush=True)
     else:
         writeln()
-    flush()
 
 
 def _start_workhd(label: str, color: str | None = None) -> None:
@@ -230,4 +228,3 @@ def _start_workhd(label: str, color: str | None = None) -> None:
 def _fmt_footer(level: Literal[1, 2]) -> None:
     if level == 2 and _verbosity is Verbosity.quiet:
         writeln()
-        flush()
