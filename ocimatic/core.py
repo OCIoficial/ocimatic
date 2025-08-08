@@ -708,6 +708,11 @@ class Task:
                 fmt = ", ".join(f"{k!r}={v}" for k, v in expected.items())
                 ui.writeln(f" [{fmt}]", ui.CYAN)
 
+    @ui.hd1("{0}", "Coverage", COLOR)
+    def coverage(self) -> None:
+        for sol in self._correct:
+            sol.coverage(self._dataset)
+
     @ui.hd1("{0}", "Normalizing", COLOR)
     def normalize(self) -> None:
         self._dataset.normalize()

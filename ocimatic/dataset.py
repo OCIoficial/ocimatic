@@ -577,6 +577,11 @@ class Dataset:
             status &= self._sampledata.gen_expected(runnable)
         return status
 
+    def all_tests(self, *, sample: bool = False) -> Iterable[Test]:
+        yield from (t for st in self._subtasks.values() for t in st.tests())
+        if sample:
+            yield from self._sampledata.tests()
+
     def subtask(self, sti: Stn) -> Subtask:
         return self._subtasks[sti]
 

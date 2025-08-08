@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import subprocess
 from typing import TextIO
 import re
 
@@ -187,6 +188,34 @@ class Solution:
             return Result.fail(short_msg="Failed", long_msg=result.msg)
         else:
             return Result.success(short_msg="OK")
+
+    @ui.workhd("{0}", COLOR)
+    def coverage(self, dataset: Dataset) -> ui.WorkHd[None]:
+        """Build solution."""
+        if not isinstance(self._source, CppSource):
+            yield Result.success(short_msg="OK")
+            ui.writeln("Coverage analysis is only supported for C++")
+            return
+
+        result = self._source.build_for_coverage()
+        if isinstance(result, BuildError):
+            yield Result.fail(short_msg="Failed", long_msg=result.msg)
+        else:
+            yield Result.success(short_msg="OK")
+            for test in dataset.all_tests(sample=False):
+                ui.write(".", flush=True)
+                result.run_on_input(
+                    test.in_path,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            ui.writeln()
+            coverage = self._source.compute_coverage()
+            if isinstance(coverage, Error):
+                ui.write(coverage.msg, ui.RED)
+            else:
+                ui.writeln(f"Line Coverage:   {coverage.line:.1f}%")
+                ui.writeln(f"Branch Coverage: {coverage.branch:.1f}%")
 
     @property
     def name(self) -> str:

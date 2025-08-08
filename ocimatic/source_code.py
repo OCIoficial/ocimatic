@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import shutil
@@ -9,12 +10,13 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
+from typing import Any
 
 import typst
 
 from ocimatic import ui, utils
 from ocimatic.config import CONFIG
-from ocimatic.result import Status, Result
+from ocimatic.result import Error, Status, Result
 from ocimatic.runnable import (
     Binary,
     JavaClasses,
@@ -118,6 +120,7 @@ class CppSource(CompiledSource):
         self._extra_files = extra_files or []
         self._include = include
         self._out = out or Path(file.parent, ".build", f"{file.stem}-cpp")
+        self._cov_dir = out or Path(file.parent, ".cov", f"{file.stem}-cpp")
 
     def _ensure_out_dir(self) -> None:
         self._out.parent.mkdir(parents=True, exist_ok=True)
@@ -130,7 +133,7 @@ class CppSource(CompiledSource):
 
     def _build_cmd(self) -> list[str]:
         cmd = [
-            str(CONFIG.cpp.command),
+            CONFIG.cpp.command,
             *CONFIG.cpp.flags,
             "-o",
             str(self._out),
@@ -140,9 +143,99 @@ class CppSource(CompiledSource):
         cmd.extend(str(s) for s in self.files)
         return cmd
 
+    def build_for_coverage(self) -> Runnable | BuildError:
+        shutil.rmtree(self._cov_dir, ignore_errors=True)
+        self._cov_dir.mkdir(parents=True, exist_ok=True)
+
+        targets = {str(f): str(self._cov_dir / f"{f.stem}.o") for f in self.files}
+        for input, obj in targets.items():
+            cmd = [CONFIG.cpp.command, "-coverage", "-c", "-o", obj, input]
+            complete = subprocess.run(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            if complete.returncode != 0:
+                return BuildError(msg=complete.stderr)
+        out_bin = self._cov_dir / self._source.stem
+        cmd = [CONFIG.cpp.command, "-coverage", "-o", str(out_bin), *targets.values()]
+        complete = subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if complete.returncode != 0:
+            return BuildError(msg=complete.stderr)
+        return Binary(out_bin)
+
+    def compute_coverage(self) -> Coverage | Error:
+        complete = subprocess.run(
+            [
+                "gcov",
+                "--json-format",
+                "--stdout",
+                "-b",
+                "-o",
+                self._cov_dir,
+                self._source,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if complete.returncode != 0 or complete.stderr:
+            return Error(msg=complete.stderr)
+        try:
+            output = json.loads(complete.stdout)
+            data = next(
+                f for f in output.get("files", []) if f["file"] == str(self._source)
+            )
+            return compute_gcov_file_coverage(data)
+        except Exception as exc:
+            return Error(msg=str(exc))
+
     @property
     def files(self) -> list[Path]:
         return [self._file, *self._extra_files]
+
+
+@dataclass(kw_only=True, frozen=True)
+class Coverage:
+    line: float
+    branch: float
+
+
+def compute_gcov_file_coverage(gcov_json: Any) -> Coverage:
+    """Compute line and branch coverage from gcov JSON output for a single file."""
+    lines = gcov_json.get("lines", [])
+
+    total_lines = executed_lines = 0
+    total_branches = executed_branches = 0
+
+    for line in lines:
+        # Line coverage
+        total_lines += 1
+        if line.get("count", 0) > 0 and not line.get("unexecuted_block", False):
+            executed_lines += 1
+
+        # Branch coverage
+        for branch in line.get("branches", []):
+            if branch.get("throw", False):
+                continue
+            total_branches += 1
+            if branch.get("count", 0) > 0:
+                executed_branches += 1
+
+    line_cov = (executed_lines / total_lines * 100) if total_lines > 0 else 0.0
+    branch_cov = (
+        (executed_branches / total_branches * 100) if total_branches > 0 else 0.0
+    )
+
+    return Coverage(line=line_cov, branch=branch_cov)
 
 
 class RustSource(CompiledSource):

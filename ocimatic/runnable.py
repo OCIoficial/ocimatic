@@ -154,12 +154,18 @@ class Runnable(ABC):
             stdout.seek(0)
             return RunSuccess(time=time, stdout=stdout.read(), stderr=complete.stderr)
 
-    def run_on_input(self, input: Path | TextIO) -> None:
+    def run_on_input(
+        self,
+        input: Path | TextIO,
+        *,
+        stdout: TextIO | int | None = None,
+        stderr: TextIO | int | None = None,
+    ) -> None:
         with contextlib.ExitStack() as stack:
             if isinstance(input, Path):
                 input = stack.enter_context(input.open("r"))
             cmd = self.cmd()
-            subprocess.run(cmd, stdin=input, check=False)
+            subprocess.run(cmd, stdin=input, stdout=stdout, stderr=stderr, check=False)
 
     def spawn(
         self,

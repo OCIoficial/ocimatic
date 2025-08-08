@@ -33,6 +33,7 @@ TAGS
 *.bin
 *.class
 .build
+.cov
 checker
 *fdb_latexmk
 *.md5
