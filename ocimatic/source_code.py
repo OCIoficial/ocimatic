@@ -427,8 +427,15 @@ class TypstSource(PDFSource):
 
     def compile(self) -> Path | BuildError:
         output = self._source.with_suffix(".pdf")
+        fonts = self._source.with_name("fonts")
         try:
-            typst.compile(self._source, output=output, sys_inputs=self._sys_inputs)
+            typst.compile(
+                self._source,
+                output=output,
+                sys_inputs=self._sys_inputs,
+                font_paths=[fonts],
+                ignore_system_fonts=True,
+            )
         except Exception as exc:
             return BuildError(msg=str(exc))
         return output

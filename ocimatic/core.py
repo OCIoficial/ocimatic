@@ -211,6 +211,7 @@ class Contest:
             Resource("typst", "oci.typ", sync=True),
             Resource("typst", "titlepage.typ"),
             Resource("typst", "general.typ", sync=True),
+            Resource("typst", "fonts", sync=True),
         ],
     }
 
@@ -471,6 +472,7 @@ class Task:
             Resource("typst", "statement.typ"),
             Resource("typst", "logo.png", sync=True),
             Resource("typst", "oci.typ", sync=True),
+            Resource("typst", "fonts", sync=True),
         ],
     }
 
