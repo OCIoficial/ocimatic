@@ -2,6 +2,7 @@
 // you start working on the actual task. See the README.md in the solutions
 // directory for more details on how to write solutions.
 
+#include <cstdint>
 #include <iostream>
 
 int main() {

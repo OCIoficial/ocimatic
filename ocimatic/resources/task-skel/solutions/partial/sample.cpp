@@ -7,6 +7,7 @@
 // `int32_t` instead of `int64_t`.
 
 // @ocimatic::expected [st1=OK, st2=WA]
+#include <cstdint>
 #include <iostream>
 
 int main() {
