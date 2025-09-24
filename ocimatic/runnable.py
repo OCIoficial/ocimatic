@@ -211,7 +211,14 @@ class JavaClasses(Runnable):
         self._classes = classes
 
     def cmd(self) -> list[str]:
-        return [CONFIG.java.jre, "-cp", str(self._classes), self._classname]
+        return [
+            CONFIG.java.jre,
+            "-Xmx512M",
+            "-Xss64M",
+            "-cp",
+            str(self._classes),
+            self._classname,
+        ]
 
 
 class Python3(Runnable):

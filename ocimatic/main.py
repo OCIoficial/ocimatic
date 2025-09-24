@@ -271,7 +271,7 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa:
     failed = [
         task
         for task in tasks
-        if task.gen_expected(sample=sample, solution=solution_path) == Status.success
+        if task.gen_expected(sample=sample, solution=solution_path) == Status.fail
     ]
 
     if len(tasks) > 1 and len(failed) > 0:

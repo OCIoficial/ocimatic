@@ -228,6 +228,9 @@ class Solution:
     def source(self) -> SourceCode:
         return self._source
 
+    def should_include_in_stats(self) -> bool:
+        return not isinstance(self.source, PythonSource)
+
 
 def _parse_comments(source: SourceCode) -> list[ExpectedComment] | Error:
     pattern = re.compile(r"\s*@ocimatic::expected\s+(.*)")

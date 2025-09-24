@@ -807,14 +807,14 @@ class Task:
         validate_input_status = self._check_dataset_validate_input()
         validate_output_status = self._check_dataset_validate_output()
 
-        stats = self._check_dataset_run_correct_solutions()
-        if not stats:
+        timeout = self._check_dataset_run_correct_solutions()
+        if not timeout:
             return Status.fail
 
         return (
-            self._check_dataset_run_partial_solutions(stats)
-            and validate_input_status
-            and validate_output_status
+            self._check_dataset_run_partial_solutions(timeout)
+            & validate_input_status
+            & validate_output_status
         )
 
     def _check_dataset_validate_input(self) -> Status:
@@ -841,21 +841,23 @@ class Task:
 
         return status
 
-    def _check_dataset_run_correct_solutions(self) -> RuntimeStats | None:
-        stats = RuntimeStats.unit()
+    def _check_dataset_run_correct_solutions(self) -> float | None:
+        included = [sol for sol in self._correct if sol.should_include_in_stats()]
+        excluded = [sol for sol in self._correct if not sol.should_include_in_stats()]
 
-        if not self._correct:
+        if not included:
             ui.show_message(
                 "Error",
-                "at least one correct solution needed",
+                "at least one correct solution must be included in the runtime stats",
                 ui.ERROR,
             )
             return None
 
-        # Run correct solutions
-        ui.writeln("Running correct solutions", ui.INFO)
         failed: list[Solution] = []
-        for sol in self._correct:
+
+        ui.writeln("Running correct solutions included in stats", ui.INFO)
+        stats = RuntimeStats.unit()
+        for sol in included:
             results = sol.run_on_dataset(
                 self._dataset,
                 self._checker,
@@ -867,6 +869,27 @@ class Task:
             new_stats = results.runtime_stats()
             assert new_stats
             stats += new_stats
+
+        ui.writeln()
+        _write_stats(stats)
+        ui.writeln()
+        timeout = stats.set_limit()
+        ui.writeln(
+            f"Timeout set to {timeout:.1f}s ({stats.fmt_limit_calculation()})",
+        )
+
+        if excluded:
+            ui.writeln()
+            ui.writeln("Running correct solutions excluded from stats", ui.INFO)
+            for sol in excluded:
+                results = sol.run_on_dataset(
+                    self._dataset,
+                    self._checker,
+                    RunMode.check_correct,
+                    timeout=timeout,
+                )
+                if results is None or not results.check_all_correct():
+                    failed.append(sol)
 
         if failed:
             ui.write(
@@ -886,20 +909,12 @@ Solutions with issues:
             return None
 
         ui.writeln()
-        _write_stats(stats)
-        ui.writeln()
         ui.writeln("All correct solutions produced correct results", ui.GREEN)
-        return stats
+        return timeout
 
-    def _check_dataset_run_partial_solutions(self, stats: RuntimeStats) -> Status:
-        timeout = stats.set_limit()
-
+    def _check_dataset_run_partial_solutions(self, timeout: float) -> Status:
         ui.writeln()
         ui.writeln("Running partial solutions", ui.INFO)
-        ui.writeln()
-        ui.writeln(
-            f"Timeout set to {timeout:.1f}s ({stats.fmt_limit_calculation()})",
-        )
         if not self._partial:
             ui.writeln()
             ui.writeln("warning: no partial solutions", ui.YELLOW)

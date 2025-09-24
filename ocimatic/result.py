@@ -22,7 +22,7 @@ class Status(Enum):
             case Status.fail:
                 return False
 
-    def __iand__(self, other: Status) -> Status:
+    def __and__(self, other: Status) -> Status:
         return Status.from_bool(self.to_bool() and other.to_bool())
 
 
