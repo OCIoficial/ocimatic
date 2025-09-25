@@ -153,3 +153,5 @@
   == Ejemplos de entrada y salida
   #content
 ]
+
+#let hide(content) = text(size: 0.01pt, fill: white, content)
