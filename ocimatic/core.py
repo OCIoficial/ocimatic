@@ -1116,13 +1116,14 @@ class TypstStatement(Statement):
         num: int,
         codename: str,
     ) -> None:
-        assert (directory / "statement.typ").exists()
+        statement_path = directory / "statement.typ"
+        assert statement_path.exists(), f"{statement_path} does not exist"
         sys_inputs: dict[str, str] = {
             "OCIMATIC_PHASE": phase,
             "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),
             "OCIMATIC_CODENAME": codename,
         }
-        source = TypstSource(directory / "statement.typ", sys_inputs=sys_inputs)
+        source = TypstSource(statement_path, sys_inputs=sys_inputs)
         super().__init__(directory, source, num, codename)
 
     def _get_title_from_source(self) -> str | None:
