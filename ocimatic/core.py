@@ -331,19 +331,26 @@ class Contest:
             titlepage = self._directory / "titlepage.pdf"
             general = self._directory / "general.pdf"
             if titlepage.exists():
-                merger.append(titlepage)
+                merger.append(titlepage, import_outline=False)
                 _add_blank_page(merger, sideness, Evenness.ODD)
             if general.exists():
-                merger.append(general)
+                merger.append(
+                    general,
+                    outline_item="Información General",
+                    import_outline=False,
+                )
                 _add_blank_page(merger, sideness, Evenness.ODD)
             for task in self._tasks:
-                merger.add_outline_item(task.title, len(merger.pages))
                 if not task.statement.pdf:
                     return Result.fail(
                         short_msg="FAILED",
                         long_msg="No statement",
                     )
-                merger.append(task.statement.pdf)
+                merger.append(
+                    task.statement.pdf,
+                    outline_item=task.title,
+                    import_outline=False,
+                )
                 _add_blank_page(merger, sideness, Evenness.ODD)
 
             _add_blank_page(merger, sideness, Evenness.EVEN)
