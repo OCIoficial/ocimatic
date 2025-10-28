@@ -46,9 +46,9 @@ class CLI:
         """Find the root of the contest.
 
         Returns the absolute path to the root of the contest and the last directory
-        before reaching the root (if there's one), this correspond to the directory
-        of the task in which ocimatic was called. If the function reaches the system
-        root without finding the a contest the program exists with an error.
+        before reaching the root (if there's one), this is used to find the target
+        task. Returns `None` if the function reaches the system root without finding
+        a contest.
         """
         last_dir = None
         curr_dir = Path.cwd()
