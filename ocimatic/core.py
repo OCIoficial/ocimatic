@@ -8,12 +8,12 @@ import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
 from typing import Any, ClassVar, Literal, cast, get_args
 
+import msgspec
 import tomlkit
 from click.shell_completion import CompletionItem
 
@@ -114,12 +114,14 @@ class CLI:
             return self.contest.tasks
 
 
-@dataclass(kw_only=True, frozen=True)
-class ContestConfig:
+class ContestConfig(msgspec.Struct, kw_only=True, frozen=True):
+    class Contest(msgspec.Struct, kw_only=True, frozen=True):
+        phase: str
+        typesetting: Typesetting
+
     FILE_NAME = "contest.toml"
 
-    phase: str
-    typesetting: Typesetting
+    contest: ContestConfig.Contest
 
     @staticmethod
     def init(contest_path: Path, phase: str | None, typesetting: Typesetting) -> None:
@@ -136,15 +138,12 @@ class ContestConfig:
 
     @staticmethod
     def load(contest_path: Path) -> ContestConfig:
-        conf_path = Path(contest_path, ContestConfig.FILE_NAME)
-        with conf_path.open() as f:
-            conf = cast(dict[Any, Any], tomlkit.load(f))
-            contest_table = conf.get("contest", {})
-            phase = contest_table.get("phase", "")
-            typesetting = contest_table.get("typesetting", "typst")
-            if typesetting not in get_args(Typesetting):
-                ui.fatal_error(f"`typesetting` must be one of {get_args(Typesetting)}")
-            return ContestConfig(phase=phase, typesetting=typesetting)
+        path = Path(contest_path, ContestConfig.FILE_NAME)
+        try:
+            conf = msgspec.toml.decode(path.read_text(), type=ContestConfig)
+        except Exception as e:
+            ui.fatal_error(f"Failed to load contest config from {path}: {e}")
+        return conf
 
 
 class Resource:
@@ -242,7 +241,7 @@ class Contest:
             (
                 Task(d, contest_conf, conf, i)
                 for i, conf, d in Contest._detect_tasks(contest_dir)
-                if conf.codename == task_name
+                if conf.task.codename == task_name
             ),
             None,
         )
@@ -267,10 +266,10 @@ class Contest:
             for i, conf, d in Contest._detect_tasks(directory)
         ]
 
-        vars = {"OCIMATIC_PHASE": self._conf.phase}
+        vars = {"OCIMATIC_PHASE": self._conf.contest.phase}
         self._titlepage: PDFSource
         self._general: PDFSource
-        match self._conf.typesetting:
+        match self._conf.contest.typesetting:
             case "latex":
                 self._titlepage = LatexSource(directory / "titlepage.tex", env=vars)
                 self._general = LatexSource(directory / "general.tex", env=vars)
@@ -289,7 +288,7 @@ class Contest:
         return self._directory
 
     def new_task(self, name: str) -> None:
-        Task.create_layout(self._directory / name, self._conf.typesetting)
+        Task.create_layout(self._directory / name, self._conf.contest.typesetting)
 
     @property
     def tasks(self) -> list[Task]:
@@ -406,7 +405,7 @@ class Contest:
 
     @ui.hd1("{0}", "Sync", COLOR)
     def sync_resources(self) -> None:
-        typesetting = self._conf.typesetting
+        typesetting = self._conf.contest.typesetting
         for resource in Contest.RESOURCES:
             resource.sync(self._directory)
         for resource in Contest.TYPESETTING_RESOURCES[typesetting]:
@@ -415,13 +414,18 @@ class Contest:
             task.sync_resources(typesetting)
 
 
-@dataclass(kw_only=True, frozen=True)
-class TaskConfig:
+class TaskConfig(msgspec.Struct, kw_only=True, frozen=True):
     FILE_NAME = "task.toml"
 
-    codename: str
-    priority: int
-    static_dataset: bool
+    class Task(msgspec.Struct, kw_only=True, frozen=True):
+        codename: str
+        priority: int = 0
+
+    class Dataset(msgspec.Struct, kw_only=True, frozen=True):
+        static: bool = False
+
+    task: TaskConfig.Task
+    dataset: TaskConfig.Dataset
 
     @staticmethod
     def init(task_path: Path) -> None:
@@ -436,26 +440,21 @@ class TaskConfig:
 
     @staticmethod
     def load(task_path: Path) -> TaskConfig | None:
-        conf_path = Path(task_path, TaskConfig.FILE_NAME)
-        if not conf_path.exists():
+        path = Path(task_path, TaskConfig.FILE_NAME)
+        if not path.exists():
             return None
 
-        with conf_path.open() as f:
-            conf = cast(dict[Any, Any], tomlkit.load(f))
-            task_table = conf.get("task", {})
-            codename = task_table.get("codename", task_path.name)
-            priority = task_table.get("priority", 0)
-
-            dataset_table = conf.get("dataset", {})
-            static_dataset = dataset_table.get("static", False)
-            return TaskConfig(
-                codename=codename,
-                priority=priority,
-                static_dataset=static_dataset,
-            )
+        try:
+            conf = msgspec.toml.decode(path.read_text(), type=TaskConfig)
+        except Exception as e:
+            ui.fatal_error(f"Failed to load task config from {path}: {e}")
+        return conf
 
     def __lt__(self, other: TaskConfig) -> bool:
-        return (self.priority, self.codename) < (other.priority, other.codename)
+        return (self.task.priority, self.task.codename) < (
+            other.task.priority,
+            other.task.codename,
+        )
 
 
 class Task:
@@ -520,14 +519,14 @@ class Task:
 
         self._statement = Statement.load(
             directory / "statement",
-            contest_conf.typesetting,
-            phase=contest_conf.phase,
+            contest_conf.contest.typesetting,
+            phase=contest_conf.contest.phase,
             num=num,
             codename=self.codename,
         )
 
         testplan = None
-        if not self._conf.static_dataset:
+        if not self._conf.dataset.static:
             testplan = Testplan(
                 directory / "testplan",
                 directory,
@@ -542,7 +541,7 @@ class Task:
 
     @property
     def codename(self) -> str:
-        return self._conf.codename
+        return self._conf.task.codename
 
     @property
     def directory(self) -> Path:
@@ -665,7 +664,7 @@ class Task:
     @property
     def name(self) -> str:
         """Name of the task."""
-        return self._conf.codename
+        return self._conf.task.codename
 
     def __str__(self) -> str:
         return self.name
@@ -985,7 +984,7 @@ Solutions with issues:
         not `None` use it to generate the expected output, otherwise use any correct one,
         prioritizing C++ solutions.
         """
-        if self._conf.static_dataset:
+        if self._conf.dataset.static:
             ui.show_message("skipping", "task has a static dataset.")
             return Status.success
         if not self._correct:
