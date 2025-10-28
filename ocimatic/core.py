@@ -8,10 +8,10 @@ import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
-from enum import Enum
+from enum import Enum, StrEnum
 from functools import cached_property
 from pathlib import Path
-from typing import Any, ClassVar, Literal, cast, get_args
+from typing import Any, ClassVar, cast
 
 import msgspec
 import tomlkit
@@ -33,8 +33,10 @@ from ocimatic.source_code import (
 from ocimatic.testplan import Testplan
 from ocimatic.utils import SortedDict, Stn
 
-# Don't use type alias because we use `get_args` to get the values at runtime
-Typesetting = Literal["typst", "latex"]
+
+class Typesetting(StrEnum):
+    TYPST = "typst"
+    LATEX = "latex"
 
 
 class CLI:
@@ -199,13 +201,13 @@ class Contest:
     RESOURCES: ClassVar[list[Resource]] = [Resource(".github", sync=True)]
 
     TYPESETTING_RESOURCES: ClassVar[dict[Typesetting, list[Resource]]] = {
-        "latex": [
+        Typesetting.LATEX: [
             Resource("latex", "logo.eps", sync=True),
             Resource("latex", "oci.cls", sync=True),
             Resource("latex", "titlepage.tex"),
             Resource("latex", "general.tex", sync=True),
         ],
-        "typst": [
+        Typesetting.TYPST: [
             Resource("typst", "logo.png", sync=True),
             Resource("typst", "oci.typ", sync=True),
             Resource("typst", "titlepage.typ"),
@@ -270,10 +272,10 @@ class Contest:
         self._titlepage: PDFSource
         self._general: PDFSource
         match self._conf.contest.typesetting:
-            case "latex":
+            case Typesetting.LATEX:
                 self._titlepage = LatexSource(directory / "titlepage.tex", env=vars)
                 self._general = LatexSource(directory / "general.tex", env=vars)
-            case "typst":
+            case Typesetting.TYPST:
                 self._titlepage = TypstSource(
                     directory / "titlepage.typ",
                     sys_inputs=vars,
@@ -469,12 +471,12 @@ class Task:
     SKEL = Resource("task-skel", root=True)
 
     STATEMENT_RESOURCES: ClassVar[dict[Typesetting, list[Resource]]] = {
-        "latex": [
+        Typesetting.LATEX: [
             Resource("latex", "statement.tex"),
             Resource("latex", "logo.eps", sync=True),
             Resource("latex", "oci.cls", sync=True),
         ],
-        "typst": [
+        Typesetting.TYPST: [
             Resource("typst", "statement.typ"),
             Resource("typst", "logo.png", sync=True),
             Resource("typst", "oci.typ", sync=True),
@@ -1037,14 +1039,14 @@ class Statement(ABC):
         codename: str,
     ) -> Statement:
         match typesetting:
-            case "latex":
+            case Typesetting.LATEX:
                 return LatexStatement(
                     directory,
                     phase=phase,
                     num=num,
                     codename=codename,
                 )
-            case "typst":
+            case Typesetting.TYPST:
                 return TypstStatement(
                     directory,
                     phase=phase,

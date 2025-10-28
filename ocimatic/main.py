@@ -11,7 +11,7 @@ from cloup.constraints import If, accept_none, mutually_exclusive
 # when cloup is computing completions.
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from ocimatic.core import CLI, Typesetting
+    from ocimatic.core import CLI
     from ocimatic.result import Status
 
 
@@ -67,11 +67,11 @@ def _solution_completion(
     type=cloup.Choice(["typst", "latex"]),
     help="Software used for typesetting documents.",
 )
-def init(path: str, phase: str | None, typesetting: Typesetting | None) -> None:
+def init(path: str, phase: str | None, typesetting: str | None) -> None:
     from pathlib import Path
 
     from ocimatic import ui
-    from ocimatic.core import CLI
+    from ocimatic.core import CLI, Typesetting
     import questionary
 
     # Ask for phase if not provided
@@ -104,7 +104,7 @@ def init(path: str, phase: str | None, typesetting: Typesetting | None) -> None:
         contest_path = Path(Path.cwd(), path)
         if contest_path.exists():
             ui.fatal_error("Couldn't create contest. Path already exists")
-        CLI.init_contest(contest_path, phase, typesetting)
+        CLI.init_contest(contest_path, phase, Typesetting(typesetting))
         ui.show_message("Info", f"Contest [{path}] created", ui.OK)
     except Exception as exc:
         ui.fatal_error(f"Couldn't create contest: {exc}.")
