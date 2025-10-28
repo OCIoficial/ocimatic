@@ -64,19 +64,20 @@ class LatexConfig:
         return LatexConfig(command=conf["command"])
 
 
+@dataclass(kw_only=True)
 class Config:
     HOME_PATH: ClassVar[Path] = Path.home() / ".ocimatic.toml"
     DEFAULT_PATH: ClassVar[Path] = Path(__file__).parent / "resources" / "ocimatic.toml"
 
-    _initialized = False
     cpp: CppConfig
     python: PythonConfig
     java: JavaConfig
     rust: RustConfig
     latex: LatexConfig
 
-    def initialize(self) -> None:
-        if self._initialized:
+    @staticmethod
+    def initialize() -> None:
+        if Config._value:
             return
 
         path = Config.HOME_PATH
@@ -86,12 +87,17 @@ class Config:
         with path.open() as f:
             conf = cast(dict[Any, Any], tomlkit.load(f))
 
-        self.cpp = CppConfig.load(conf["cpp"])
-        self.python = PythonConfig.load(conf["python"])
-        self.java = JavaConfig.load(conf["java"])
-        self.rust = RustConfig.load(conf["rust"])
-        self.latex = LatexConfig.load(conf["latex"])
-        self._initialized = True
+        cls._config = Config(
+            cpp=CppConfig.load(conf["cpp"]),
+            python=PythonConfig.load(conf["python"]),
+            java=JavaConfig.load(conf["java"]),
+            rust=RustConfig.load(conf["rust"]),
+            latex=LatexConfig.load(conf["latex"]),
+        )
 
-
-CONFIG = Config()
+    @staticmethod
+    def get() -> Config:
+        assert Config._value, (
+            "Configuration not initialized. Call Config.initialize() before Config.get()."
+        )
+        return Config._value

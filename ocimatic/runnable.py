@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO, overload
 
-from ocimatic.config import CONFIG
+from ocimatic.config import Config
 from ocimatic.result import Error
 
 SIGNALS = {
@@ -212,7 +212,7 @@ class JavaClasses(Runnable):
 
     def cmd(self) -> list[str]:
         return [
-            CONFIG.java.jre,
+            Config.get().java.jre,
             "-Xmx512M",
             "-Xss64M",
             "-cp",
@@ -227,8 +227,8 @@ class Python3(Runnable):
 
     def cmd(self) -> list[str]:
         py = None
-        if CONFIG.python.detect:
+        if Config.get().python.detect:
             py = sys.executable
         if py is None:
-            py = CONFIG.python.command
+            py = Config.get().python.command
         return [py, str(self._script)]

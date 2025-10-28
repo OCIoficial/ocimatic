@@ -15,7 +15,7 @@ from typing import Any
 import typst
 
 from ocimatic import ui, utils
-from ocimatic.config import CONFIG
+from ocimatic.config import Config
 from ocimatic.result import Error, Status, Result
 from ocimatic.runnable import (
     Binary,
@@ -133,8 +133,8 @@ class CppSource(CompiledSource):
 
     def _build_cmd(self) -> list[str]:
         cmd = [
-            CONFIG.cpp.command,
-            *CONFIG.cpp.flags,
+            Config.get().cpp.command,
+            *Config.get().cpp.flags,
             "-o",
             str(self._out),
         ]
@@ -149,7 +149,7 @@ class CppSource(CompiledSource):
 
         targets = {str(f): str(self._cov_dir / f"{f.stem}.o") for f in self.files}
         for input, obj in targets.items():
-            cmd = [CONFIG.cpp.command, "-coverage", "-c", "-o", obj, input]
+            cmd = [Config.get().cpp.command, "-coverage", "-c", "-o", obj, input]
             complete = subprocess.run(
                 cmd,
                 stdout=subprocess.DEVNULL,
@@ -160,7 +160,13 @@ class CppSource(CompiledSource):
             if complete.returncode != 0:
                 return BuildError(msg=complete.stderr)
         out_bin = self._cov_dir / self._source.stem
-        cmd = [CONFIG.cpp.command, "-coverage", "-o", str(out_bin), *targets.values()]
+        cmd = [
+            Config.get().cpp.command,
+            "-coverage",
+            "-o",
+            str(out_bin),
+            *targets.values(),
+        ]
         complete = subprocess.run(
             cmd,
             stdout=subprocess.DEVNULL,
@@ -272,8 +278,8 @@ class RustSource(CompiledSource):
 
     def _build_cmd(self) -> list[str]:
         cmd = [
-            CONFIG.rust.command,
-            *CONFIG.rust.flags,
+            Config.get().rust.command,
+            *Config.get().rust.flags,
             "-o",
             str(self._out),
             str(self._file),
@@ -322,7 +328,7 @@ class JavaSource(CompiledSource):
         return _should_build([self._source], self._outdir)
 
     def _build_cmd(self) -> list[str]:
-        return [CONFIG.java.javac, "-d", str(self._outdir), str(self._source)]
+        return [Config.get().java.javac, "-d", str(self._outdir), str(self._source)]
 
 
 class PythonSource(SourceCode):
@@ -391,7 +397,7 @@ class LatexSource(PDFSource):
         self._env = env
 
     def _cmd(self) -> str:
-        return Template(CONFIG.latex.command).substitute(
+        return Template(Config.get().latex.command).substitute(
             TEXNAME=self._source.name,
         )
 

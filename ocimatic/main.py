@@ -762,11 +762,11 @@ You can see more information about a command by calling it with --help/-h.
 )
 @cloup.pass_context
 def cli(ctx: click.Context) -> None:
-    from ocimatic.config import CONFIG
+    from ocimatic.config import Config
     from ocimatic.core import CLI
 
     ctx.obj = CLI()
     # Only initialize config if we are not running the `setup` command. This ensures we can
     # run `ocimatic setup` even if there are issues with the config file.
     if ctx.invoked_subcommand != "setup":
-        CONFIG.initialize()
+        Config.initialize()
