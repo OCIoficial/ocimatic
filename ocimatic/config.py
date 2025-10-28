@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import ClassVar
 
-import tomlkit
+import msgspec
+
+from ocimatic import ui
 
 try:
     __version__ = version("ocimatic")
@@ -15,57 +16,32 @@ except PackageNotFoundError:
 CONTEST_ROOT: Path = Path("/")
 
 
-@dataclass(kw_only=True)
-class CppConfig:
+class CppConfig(msgspec.Struct, kw_only=True, frozen=True):
     command: str
     flags: list[str]
 
-    @staticmethod
-    def load(conf: dict[Any, Any]) -> CppConfig:
-        return CppConfig(command=conf["command"], flags=conf["flags"])
 
-
-@dataclass(kw_only=True)
-class PythonConfig:
+class PythonConfig(msgspec.Struct, kw_only=True, frozen=True):
     detect: bool
     command: str
 
-    @staticmethod
-    def load(conf: dict[Any, Any]) -> PythonConfig:
-        return PythonConfig(detect=conf["detect"], command=conf["command"])
 
-
-@dataclass(kw_only=True)
-class JavaConfig:
+class JavaConfig(msgspec.Struct, kw_only=True, frozen=True):
     javac: str
     jre: str
 
-    @staticmethod
-    def load(conf: dict[Any, Any]) -> JavaConfig:
-        return JavaConfig(javac=conf["javac"], jre=conf["jre"])
 
-
-@dataclass(kw_only=True)
-class RustConfig:
+class RustConfig(msgspec.Struct, kw_only=True, frozen=True):
     command: str
     flags: list[str]
 
-    @staticmethod
-    def load(conf: dict[Any, Any]) -> RustConfig:
-        return RustConfig(command=conf["command"], flags=conf["flags"])
 
-
-@dataclass(kw_only=True)
-class LatexConfig:
+class LatexConfig(msgspec.Struct, kw_only=True, frozen=True):
     command: str
 
-    @staticmethod
-    def load(conf: dict[Any, Any]) -> LatexConfig:
-        return LatexConfig(command=conf["command"])
 
-
-@dataclass(kw_only=True)
-class Config:
+class Config(msgspec.Struct, kw_only=True, frozen=True):
+    _value: ClassVar[Config | None] = None
     HOME_PATH: ClassVar[Path] = Path.home() / ".ocimatic.toml"
     DEFAULT_PATH: ClassVar[Path] = Path(__file__).parent / "resources" / "ocimatic.toml"
 
@@ -84,16 +60,10 @@ class Config:
         if not path.exists():
             path = Config.DEFAULT_PATH
 
-        with path.open() as f:
-            conf = cast(dict[Any, Any], tomlkit.load(f))
-
-        cls._config = Config(
-            cpp=CppConfig.load(conf["cpp"]),
-            python=PythonConfig.load(conf["python"]),
-            java=JavaConfig.load(conf["java"]),
-            rust=RustConfig.load(conf["rust"]),
-            latex=LatexConfig.load(conf["latex"]),
-        )
+        try:
+            Config._value = msgspec.toml.decode(path.read_text(), type=Config)
+        except Exception as e:
+            ui.fatal_error(f"Failed to load configuration from {path}: {e}")
 
     @staticmethod
     def get() -> Config:
