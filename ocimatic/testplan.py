@@ -42,7 +42,18 @@ class Testplan:
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
 
-        subtasks = self._parse_file()
+        parser = _Parser(self._testplan_path, task_directory)
+        parser.parse()
+
+        if len(parser.errors) > 0:
+            ui.writeln(
+                f"Error when parsing testplan in `{utils.relative_to_cwd(self._testplan_path)}`",
+                ui.ERROR,
+            )
+            ui.writeln(f"{parser.errors[0]}", ui.ERROR)
+            sys.exit(1)
+
+        subtasks = self._validate_subtasks(parser.subtasks)
         if isinstance(subtasks, ParseError):
             ui.writeln(
                 f"Error when parsing testplan in `{utils.relative_to_cwd(self._testplan_path)}`",
@@ -96,97 +107,42 @@ class Testplan:
 
         return status
 
-    def _parse_file(self) -> SortedDict[Stn, _Subtask] | ParseError:
+    def _validate_subtasks(
+        self,
+        parsed: list[tuple[_SubtaskHeader, list[Item]]],
+    ) -> SortedDict[Stn, _Subtask] | ParseError:
         subtasks: SortedDict[Stn, _Subtask] = SortedDict()
-        sti = 0
-        for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
-            # Remove comments
-            m = Testplan.COMMENT_RE.fullmatch(line)
-            if m is None:
-                continue
-            line = m.group(1)
-
-            # Skip empty lines
-            line = line.strip()
-            if not line:
-                continue
-
-            if m := _Subtask.RE.fullmatch(line):
-                found_st = int(m.group(1))
-                sti += 1
-                if sti != found_st:
-                    return ParseError(
-                        lineno=lineno,
-                        msg=f"found [Subtask {found_st}], but [Subtask {sti}] was expected",
-                    )
-                subtasks[Stn(sti)] = _Subtask(self._dataset_dir, sti)
-            elif m := _Command.RE.fullmatch(line):
-                if sti == 0:
-                    return ParseError(
-                        lineno=lineno,
-                        msg="found command before declaring a subtask.",
-                    )
-                group = _GroupName.parse(m.group(1))
-                if isinstance(group, Error):
-                    return ParseError(lineno=lineno, msg=group.msg)
-                cmd = m.group(2)
-                args = _parse_args(m.group(3) or "")
-
-                command = self._parse_command(group, cmd, args, lineno)
-                if isinstance(command, ParseError):
-                    return command
-                subtasks[Stn(sti)].commands.append(command)
-            elif m := _Extends.RE.fullmatch(line):
-                subtasks[Stn(sti)].extends.append(
-                    _Extends(
-                        stn=Stn(int(m.group(1))),
-                        lineno=lineno,
-                    ),
+        for i, (header, items) in enumerate(parsed, start=1):
+            if i != header.number:
+                return ParseError(
+                    lineno=header.lineno,
+                    msg=f"found {header}, but [Subtask {i}] was expected",
                 )
-            elif m := _Validator.RE.fullmatch(line):
-                if subtasks[Stn(sti)].validator is not None:
+            sti = Stn(i)
+
+            validator = None
+            for item in items:
+                if not isinstance(item, _Validator):
+                    continue
+                if validator is not None:
                     return ParseError(
-                        lineno=lineno,
+                        lineno=item.lineno,
                         msg="multiple @validator directives found for the same subtask.",
                     )
-                subtasks[Stn(sti)].validator = _Validator(
-                    path=Path(self._directory, m.group(1)),
-                    lineno=lineno,
-                )
-            else:
-                return ParseError(lineno=lineno, msg=f"invalid line `{line}`")
-        validated = Testplan._validate_extends_graph(subtasks)
-        if isinstance(validated, ParseError):
-            return validated
-        return subtasks
+                validator = item
 
-    def _parse_command(
-        self,
-        group: _GroupName,
-        cmd: str,
-        args: list[str],
-        lineno: int,
-    ) -> _Command | ParseError:
-        if cmd == "copy":
-            if len(args) > 2:
-                return ParseError(
-                    lineno=lineno,
-                    msg="the `copy` command expects exactly one argument.",
-                )
-            return _Copy(group, self._task_directory, args[0])
-        elif cmd == "echo":
-            return _Echo(group, args)
-        elif (ext := Path(cmd).suffix) in (".py", ".cpp"):
-            # mypy can't tell `ext` is either `.py` or `.cpp` from the check above
-            return _Script(
-                group,
-                Path(self._directory, cmd),
-                cast(_Script.VALID_EXTENSIONS, ext),  # pyright: ignore [reportUnnecessaryCast]
-                args,
-                self._directory,
-            )
-        else:
-            return ParseError(lineno=lineno, msg=_invalid_command_err_msg(cmd))
+            commands = [item for item in items if isinstance(item, _Command)]
+            extends = [item for item in items if isinstance(item, _Extends)]
+
+            subtask = _Subtask(self._dataset_dir, commands, extends, validator, sti)
+
+            subtasks[sti] = subtask
+
+        error = Testplan._validate_extends_graph(subtasks)
+        if error is not None:
+            return error
+
+        return subtasks
 
     @staticmethod
     def _validate_extends_graph(
@@ -219,6 +175,93 @@ class Testplan:
         return None
 
 
+class _Parser:
+    def __init__(self, path: Path, task_directory: Path) -> None:
+        self.subtasks: list[tuple[_SubtaskHeader, list[Item]]] = []
+        self.errors: list[ParseError] = []
+
+        self._path = path
+        self._task_directory = task_directory
+
+    def parse(self) -> None:
+        header = None
+        items: list[Item] = []
+        for lineno, line in enumerate(self._path.open("r").readlines(), 1):
+            # Remove comments
+            m = Testplan.COMMENT_RE.fullmatch(line)
+            if m is None:
+                continue
+            line = m.group(1)
+
+            # Skip empty lines
+            line = line.strip()
+            if not line:
+                continue
+
+            if m := _SubtaskHeader.RE.fullmatch(line):
+                if header is not None:
+                    self.subtasks.append((header, items))
+
+                number = int(m.group(1))
+                header = _SubtaskHeader(number=number, lineno=lineno)
+                items = []
+                continue
+
+            if header is None:
+                self.append_error(lineno, "unexpected line before first subtask header")
+                continue
+
+            if m := _Command.RE.fullmatch(line):
+                command = self._parse_command(m, lineno)
+                if command is not None:
+                    items.append(command)
+            elif m := _Extends.RE.fullmatch(line):
+                items.append(_Extends(stn=Stn(int(m.group(1))), lineno=lineno))
+            elif m := _Validator.RE.fullmatch(line):
+                path = Path(self._path.parent, m.group(1))
+                items.append(_Validator(path=path, lineno=lineno))
+            else:
+                self.append_error(lineno, f"invalid line `{line}`")
+
+        if header is not None:
+            self.subtasks.append((header, items))
+
+    def _parse_command(self, m: re.Match[str], lineno: int) -> _Command | None:
+        group = _GroupName.parse(m.group(1))
+        if isinstance(group, Error):
+            self.append_error(lineno, group.msg)
+            return None
+
+        cmd = m.group(2)
+        args = _parse_args(m.group(3) or "")
+
+        if cmd == "copy":
+            if len(args) > 2:
+                self.append_error(
+                    lineno,
+                    "the `copy` command expects exactly one argument.",
+                )
+                return None
+            return _Copy(group, self._task_directory, args[0])
+        elif cmd == "echo":
+            return _Echo(group, args)
+        elif (ext := Path(cmd).suffix) in (".py", ".cpp"):
+            # mypy can't tell `ext` is either `.py` or `.cpp` from the check above
+            return _Script(
+                group,
+                Path(self._path.parent, cmd),
+                cast(_Script.VALID_EXTENSIONS, ext),  # pyright: ignore [reportUnnecessaryCast]
+                args,
+                self._path.parent,
+            )
+        else:
+            self.append_error(lineno, _invalid_command_err_msg(cmd))
+            return None
+
+    def append_error(self, lineno: int, msg: str) -> None:
+        self.errors.append(ParseError(lineno=lineno, msg=msg))
+
+
 @dataclass(kw_only=True, frozen=True, slots=True)
 class ParseError:
     lineno: int | None = None
@@ -229,6 +272,20 @@ class ParseError:
             return f"line {self.lineno}: {self.msg}"
         else:
             return self.msg
+
+
+type Item = _Validator | _Extends | _Command
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class _SubtaskHeader:
+    RE: ClassVar[re.Pattern[str]] = re.compile(r"\s*\[\s*Subtask\s+(\d+)\s*\]\s*")
+
+    number: int
+    lineno: int
+
+    def __str__(self) -> str:
+        return f"[Subtask {self.number}]"
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
@@ -281,13 +338,18 @@ class _GroupName:
 
 
 class _Subtask:
-    RE = re.compile(r"\s*\[\s*Subtask\s+(\d+)\s*\]\s*")
-
-    def __init__(self, dataset_dir: Path, stn: int) -> None:
+    def __init__(
+        self,
+        dataset_dir: Path,
+        commands: list[_Command],
+        extends: list[_Extends],
+        validator: _Validator | None,
+        stn: Stn,
+    ) -> None:
         self._dir = Path(dataset_dir, f"st{stn}")
-        self.commands: list[_Command] = []
-        self.extends: list[_Extends] = []
-        self.validator: _Validator | None = None
+        self.extends = extends
+        self.validator = validator
+        self.commands = commands
 
     def __str__(self) -> str:
         return str(self._dir.name)
