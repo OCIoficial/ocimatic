@@ -335,12 +335,22 @@ def normalize(cli: CLI) -> None:
 @cloup.option(
     "--subtask",
     "-st",
-    type=int,
+    type=cloup.IntRange(min=1),
     help="Only run the test plan for this subtask. "
     " This option can only be specified if there's a single target task.",
 )
+@cloup.option(
+    "--gen-expected",
+    is_flag=True,
+    default=False,
+    help="Generate expected output after running testplan.",
+)
 @cloup.pass_obj
-def run_testplan(cli: CLI, subtask: int | None) -> None:
+def run_testplan(
+    cli: CLI,
+    subtask: int | None,
+    gen_expected: bool,  # noqa: FBT001
+) -> None:
     from ocimatic import ui
     from ocimatic.result import Status
     from ocimatic.utils import Stn
@@ -354,11 +364,10 @@ def run_testplan(cli: CLI, subtask: int | None) -> None:
             "A subtask can only be specified when there's a single target task.",
         )
 
-    failed = [
-        task
-        for task in tasks
-        if task.run_testplan(stn=Stn(subtask) if subtask else None) == Status.fail
-    ]
+    stn = Stn(subtask) if subtask else None
+    failed = [task for task in tasks if task.run_testplan(stn=stn) == Status.fail]
+    if len(failed) == 0 and gen_expected:
+        failed = [task for task in tasks if task.gen_expected(stn=stn) == Status.fail]
 
     if len(tasks) > 1 and len(failed) > 0:
         ui.writeln(
@@ -384,7 +393,12 @@ detailed information about the failures.
 
 
 @cloup.command(help="Run input validators.")
-@cloup.option("--subtask", "-st", type=int, help="Only run validator for this subtask.")
+@cloup.option(
+    "--subtask",
+    "-st",
+    type=cloup.IntRange(min=1),
+    help="Only run validator for this subtask.",
+)
 @cloup.pass_obj
 def validate_input(cli: CLI, subtask: int | None) -> None:
     from ocimatic import ui

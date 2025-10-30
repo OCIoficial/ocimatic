@@ -569,10 +569,17 @@ class Dataset:
     def subtasks(self) -> set[Stn]:
         return set(self._subtasks.keys())
 
-    def gen_expected(self, runnable: Runnable, *, sample: bool = False) -> Status:
+    def gen_expected(
+        self,
+        runnable: Runnable,
+        *,
+        stn: Stn | None,
+        sample: bool = False,
+    ) -> Status:
         status = Status.success
-        for subtask in self._subtasks.values():
-            status &= subtask.gen_expected(runnable)
+        for sti, subtask in self._subtasks.items():
+            if stn is None or stn == sti:
+                status &= subtask.gen_expected(runnable)
         if sample:
             status &= self._sampledata.gen_expected(runnable)
         return status

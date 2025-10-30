@@ -977,6 +977,7 @@ Solutions with issues:
     def gen_expected(
         self,
         *,
+        stn: Stn | None = None,
         sample: bool = False,
         solution: Path | None = None,
     ) -> Status:
@@ -1008,7 +1009,7 @@ Solutions with issues:
 
         if not generator:
             ui.fatal_error("solution not found")
-        if generator.gen_expected(self._dataset, sample=sample) == Status.fail:
+        if generator.gen_expected(self._dataset, stn=stn, sample=sample) == Status.fail:
             return Status.fail
 
         if sum(c for c in self._dataset.counts().values()) == 0:

@@ -169,6 +169,7 @@ class Solution:
         self,
         dataset: Dataset,
         *,
+        stn: Stn | None,
         sample: bool = False,
     ) -> ui.WorkHd[Status]:
         """Generate expected output files for all test cases in the given dataset running this solution."""
@@ -178,7 +179,7 @@ class Solution:
             return Status.fail
         else:
             yield Result.success(short_msg="OK")
-            return dataset.gen_expected(build_result, sample=sample)
+            return dataset.gen_expected(build_result, stn=stn, sample=sample)
 
     @ui.work("Build")
     def build(self) -> Result:
