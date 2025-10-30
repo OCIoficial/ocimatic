@@ -288,7 +288,6 @@ class _Subtask:
         self.commands: list[_Command] = []
         self.extends: list[_Extends] = []
         self.validator: _Validator | None = None
-        self.parents: set[Stn] = set()
 
     def __str__(self) -> str:
         return str(self._dir.name)
