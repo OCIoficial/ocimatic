@@ -19,6 +19,7 @@ CONTEST_ROOT: Path = Path("/")
 class CppConfig(msgspec.Struct, kw_only=True, frozen=True):
     command: str
     flags: list[str]
+    sanitize_flags: list[str]
 
 
 class PythonConfig(msgspec.Struct, kw_only=True, frozen=True):
@@ -63,7 +64,10 @@ class Config(msgspec.Struct, kw_only=True, frozen=True):
         try:
             Config._value = msgspec.toml.decode(path.read_text(), type=Config)
         except Exception as e:
-            ui.fatal_error(f"Failed to load configuration from {path}: {e}")
+            ui.fatal_error(
+                f"Failed to load configuration from {path}: {e}\n"
+                "You can regenerate the default configuration with `ocimatic setup`.",
+            )
 
     @staticmethod
     def get() -> Config:

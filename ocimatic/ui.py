@@ -79,7 +79,7 @@ def writeln(text: str = "", color: str = RESET) -> None:
 
 
 def fatal_error(message: str) -> NoReturn:
-    writeln(colorize("ocimatic: " + message, INFO + RED))
+    writeln(colorize(message, INFO + RED))
     writeln()
     sys.exit(1)
 

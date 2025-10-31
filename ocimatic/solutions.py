@@ -88,15 +88,15 @@ class Solution:
         stn: Stn,
         *,
         timeout: float | None = None,
+        sanitize: bool = False,
     ) -> ui.WorkHd[GroupResults | None]:
         """Run this solution on one subtask."""
-        build_result = self._source.build()
-        if isinstance(build_result, BuildError):
-            yield Result.fail(short_msg="Failed", long_msg=build_result.msg)
+        if isinstance(runnable := self._source.build(sanitize=sanitize), BuildError):
+            yield Result.fail(short_msg="Failed", long_msg=runnable.msg)
             return None
         yield Result.success(short_msg="OK")
         return dataset.subtask(stn).run_on(
-            build_result,
+            runnable,
             checker,
             RunMode.run_solution,
             timeout=timeout,
@@ -134,6 +134,7 @@ class Solution:
         checker: Checker,
         mode: RunMode,
         *,
+        sanitize: bool = False,
         timeout: float | None = None,
     ) -> ui.WorkHd[DatasetResults | None]:
         """Run this solution for all test cases in the given dataset."""
@@ -141,7 +142,7 @@ class Solution:
             yield Result.fail(short_msg="Failed", long_msg=expected.msg)
             return None
 
-        if isinstance(runnable := self._source.build(), BuildError):
+        if isinstance(runnable := self._source.build(sanitize=sanitize), BuildError):
             yield Result.fail(short_msg="Failed", long_msg=runnable.msg)
             return None
 
@@ -182,9 +183,9 @@ class Solution:
             return dataset.gen_expected(build_result, stn=stn, sample=sample)
 
     @ui.work("Build")
-    def build(self) -> Result:
+    def build(self, *, sanitize: bool = False) -> Result:
         """Build solution."""
-        result = self._source.build(force=True)
+        result = self._source.build(sanitize=sanitize, force=True)
         if isinstance(result, BuildError):
             return Result.fail(short_msg="Failed", long_msg=result.msg)
         else:

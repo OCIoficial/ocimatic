@@ -728,7 +728,14 @@ class Task:
         self._dataset.normalize()
 
     @ui.hd1("{0}", "Running solution", COLOR)
-    def run_solution(self, solution: Path, timeout: float, stn: Stn | None) -> None:
+    def run_solution(
+        self,
+        solution: Path,
+        timeout: float,
+        stn: Stn | None,
+        *,
+        sanitize: bool = False,
+    ) -> None:
         """Run a solution reporting outcome and running time."""
         sol = self.load_solution_from_path(solution)
         if not sol:
@@ -738,8 +745,9 @@ class Task:
             subtask_results = sol.run_on_subtask(
                 self._dataset,
                 self._checker,
-                timeout=timeout,
                 stn=stn,
+                timeout=timeout,
+                sanitize=sanitize,
             )
             if not subtask_results:
                 return
@@ -752,6 +760,7 @@ class Task:
                 self._checker,
                 RunMode.run_solution,
                 timeout=timeout,
+                sanitize=sanitize,
             )
             if not dataset_results:
                 return
@@ -966,12 +975,12 @@ Solutions with issues:
         return Status.success
 
     @ui.hd1("{0}", "Building solutions", COLOR)
-    def build_solution(self, solution: Path) -> None:
+    def build_solution(self, solution: Path, *, sanitize: bool = False) -> None:
         """Force compilation of solutions."""
         sol = self.load_solution_from_path(solution)
         if not sol:
             return ui.show_message("Error", "Solution not found", ui.ERROR)
-        sol.build()
+        sol.build(sanitize=sanitize)
 
     @ui.hd1("{0}", "Generating expected output", COLOR)
     def gen_expected(
