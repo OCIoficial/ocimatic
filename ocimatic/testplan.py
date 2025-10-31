@@ -28,26 +28,24 @@ class Testplan:
 
     def __init__(
         self,
-        directory: Path,
+        path: Path,
         task_directory: Path,
         dataset_directory: Path,
-        filename: str = "testplan.txt",
     ) -> None:
-        self._directory = directory
-        testplan_path = directory / filename
-        if not testplan_path.exists():
+        self._path = path
+        if not self._path.exists():
             ui.fatal_error(
-                f'File not found: "{testplan_path}"',
+                f'File not found: "{self._path}"',
             )
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
 
         parser = _Parser()
-        parser.parse(testplan_path.read_text())
+        parser.parse(self._path.read_text())
 
         if len(parser.errors) > 0:
             ui.writeln(
-                f"Error when parsing testplan in `{utils.relative_to_cwd(testplan_path)}`",
+                f"Error when parsing testplan in `{utils.relative_to_cwd(self._path)}`",
                 ui.ERROR,
             )
             ui.writeln(f"{parser.errors[0]}", ui.ERROR)
@@ -55,7 +53,7 @@ class Testplan:
 
         if isinstance(subtasks := self._validate_subtasks(parser.subtasks), ParseError):
             ui.writeln(
-                f"Error when parsing testplan in `{utils.relative_to_cwd(testplan_path)}`",
+                f"Error when parsing testplan in `{utils.relative_to_cwd(self._path)}`",
                 ui.ERROR,
             )
             ui.writeln(f"{subtasks}", ui.ERROR)
@@ -68,8 +66,9 @@ class Testplan:
         return len(self._subtasks)
 
     def validators(self) -> SortedDict[Stn, Path | None]:
+        basedir = self._path.parent
         return SortedDict(
-            (sti, (Path(self._directory, st.validator.path)) if st.validator else None)
+            (sti, Path(basedir, st.validator.path) if st.validator else None)
             for sti, st in self._subtasks.items()
         )
 
@@ -96,7 +95,7 @@ class Testplan:
             if stn is not None and stn != sti:
                 continue
             status &= st.run(
-                _CommandCtxt(cwd=self._directory, task_dir=self._task_directory),
+                _CommandCtxt(cwd=self._path.parent, task_dir=self._task_directory),
             )
 
         if sum(len(st.commands) for st in self._subtasks.values()) == 0:

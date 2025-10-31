@@ -530,7 +530,7 @@ class Task:
         testplan = None
         if not self._conf.dataset.static:
             testplan = Testplan(
-                directory / "testplan",
+                directory / "testplan" / "testplan.txt",
                 directory,
                 directory / "dataset",
             )
