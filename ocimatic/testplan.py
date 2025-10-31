@@ -34,29 +34,28 @@ class Testplan:
         filename: str = "testplan.txt",
     ) -> None:
         self._directory = directory
-        self._testplan_path = directory / filename
-        if not self._testplan_path.exists():
+        testplan_path = directory / filename
+        if not testplan_path.exists():
             ui.fatal_error(
-                f'File not found: "{self._testplan_path}"',
+                f'File not found: "{testplan_path}"',
             )
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
 
-        parser = _Parser(self._testplan_path, task_directory)
-        parser.parse()
+        parser = _Parser()
+        parser.parse(testplan_path.read_text())
 
         if len(parser.errors) > 0:
             ui.writeln(
-                f"Error when parsing testplan in `{utils.relative_to_cwd(self._testplan_path)}`",
+                f"Error when parsing testplan in `{utils.relative_to_cwd(testplan_path)}`",
                 ui.ERROR,
             )
             ui.writeln(f"{parser.errors[0]}", ui.ERROR)
             sys.exit(1)
 
-        subtasks = self._validate_subtasks(parser.subtasks)
-        if isinstance(subtasks, ParseError):
+        if isinstance(subtasks := self._validate_subtasks(parser.subtasks), ParseError):
             ui.writeln(
-                f"Error when parsing testplan in `{utils.relative_to_cwd(self._testplan_path)}`",
+                f"Error when parsing testplan in `{utils.relative_to_cwd(testplan_path)}`",
                 ui.ERROR,
             )
             ui.writeln(f"{subtasks}", ui.ERROR)
@@ -70,7 +69,7 @@ class Testplan:
 
     def validators(self) -> SortedDict[Stn, Path | None]:
         return SortedDict(
-            (sti, st.validator.path if st.validator else None)
+            (sti, (Path(self._directory, st.validator.path)) if st.validator else None)
             for sti, st in self._subtasks.items()
         )
 
@@ -97,7 +96,7 @@ class Testplan:
             if stn is not None and stn != sti:
                 continue
             status &= st.run(
-                _CommandCtxt(cwd=self._testplan_path, task_dir=self._task_directory),
+                _CommandCtxt(cwd=self._directory, task_dir=self._task_directory),
             )
 
         if sum(len(st.commands) for st in self._subtasks.values()) == 0:
@@ -178,16 +177,14 @@ class Testplan:
 
 
 class _Parser:
-    def __init__(self, path: Path, task_directory: Path) -> None:
+    def __init__(self) -> None:
         self.subtasks: list[tuple[_SubtaskHeader, list[Item]]] = []
         self.errors: list[ParseError] = []
 
-        self._path = path
-
-    def parse(self) -> None:
+    def parse(self, content: str) -> None:
         header = None
         items: list[Item] = []
-        for lineno, line in enumerate(self._path.open("r").readlines(), 1):
+        for lineno, line in enumerate(content.splitlines(), 1):
             # Remove comments
             m = Testplan.COMMENT_RE.fullmatch(line)
             if m is None:
@@ -219,8 +216,7 @@ class _Parser:
             elif m := _Extends.RE.fullmatch(line):
                 items.append(_Extends(stn=Stn(int(m.group(1))), lineno=lineno))
             elif m := _Validator.RE.fullmatch(line):
-                path = Path(self._path.parent, m.group(1))
-                items.append(_Validator(path=path, lineno=lineno))
+                items.append(_Validator(path=m.group(1), lineno=lineno))
             else:
                 self.append_error(lineno, f"invalid line `{line}`")
 
@@ -296,7 +292,7 @@ class _Validator:
         r"\s*@\s*validator\s*(\S+)\s*",
     )
 
-    path: Path
+    path: str
     lineno: int
 
     def __str__(self) -> str:
