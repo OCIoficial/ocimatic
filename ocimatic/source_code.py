@@ -143,7 +143,7 @@ class CppSource(CompiledSource):
         conf = Config.get().cpp
         cmd = [
             conf.command,
-            *conf.flags,
+            *conf.get_flags(),
             "-o",
             str(self._out),
         ]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
+import os
 from pathlib import Path
 from typing import Any, ClassVar
 from collections.abc import Callable
@@ -25,6 +26,11 @@ def field[T](c: Callable[[], T]) -> T:
 class CppConfig(msgspec.Struct, kw_only=True, frozen=True):
     command: str = "clang++"
     flags: list[str] = field(lambda: ["-O2", "-std=c++20"])
+
+    def get_flags(self) -> list[str]:
+        if os.environ.get("OCIMATIC_CPP_FLAGS"):
+            return os.environ["OCIMATIC_CPP_FLAGS"].split()
+        return self.flags
 
 
 class PythonConfig(msgspec.Struct, kw_only=True, frozen=True):
