@@ -96,7 +96,9 @@ class Testplan:
         for sti, st in self._subtasks.items():
             if stn is not None and stn != sti:
                 continue
-            status &= st.run(self._task_directory)
+            status &= st.run(
+                _CommandCtxt(cwd=self._testplan_path, task_dir=self._task_directory),
+            )
 
         if sum(len(st.commands) for st in self._subtasks.values()) == 0:
             ui.show_message(
@@ -248,10 +250,9 @@ class _Parser:
             # mypy can't tell `ext` is either `.py` or `.cpp` from the check above
             return _Script(
                 group,
-                Path(self._path.parent, cmd),
+                cmd,
                 cast(_Script.VALID_EXTENSIONS, ext),  # pyright: ignore [reportUnnecessaryCast]
                 args,
-                self._path.parent,
             )
         else:
             self.append_error(lineno, _invalid_command_err_msg(cmd))
@@ -354,15 +355,38 @@ class _Subtask:
         return str(self._dir.name)
 
     @ui.hd2("{0}")
-    def run(self, task_dir: Path) -> Status:
+    def run(self, cx: _CommandCtxt) -> Status:
         shutil.rmtree(self._dir, ignore_errors=True)
         self._dir.mkdir(parents=True, exist_ok=True)
 
         status = Status.success
         tests_in_group: Counter[_GroupName] = Counter()
         for cmd in self.commands:
-            status &= cmd.run(task_dir, self._dir, tests_in_group).status
+            status &= cmd.run(cx, self._dir, tests_in_group).status
         return status
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class _CommandCtxt:
+    cwd: Path
+    task_dir: Path
+
+    def script_path(self, filename: str) -> Path:
+        return self.cwd / filename
+
+    def load_script(
+        self,
+        filename: str,
+        ext: _Script.VALID_EXTENSIONS,
+    ) -> SourceCode | None:
+        path = self.script_path(filename)
+        if not path.exists():
+            return None
+        match ext:
+            case ".py":
+                return PythonSource(path)
+            case ".cpp":
+                return CppSource(path)
 
 
 class _Command(ABC):
@@ -381,7 +405,7 @@ class _Command(ABC):
     @abstractmethod
     def run(
         self,
-        task_dir: Path,
+        cx: _CommandCtxt,
         dst_dir: Path,
         tests_in_group: Counter[_GroupName],
     ) -> Result:
@@ -403,11 +427,11 @@ class _Copy(_Command):
     @ui.work("copy", "{0}")
     def run(
         self,
-        task_dir: Path,
+        cx: _CommandCtxt,
         dst_dir: Path,
         tests_in_group: Counter[_GroupName],
     ) -> Result:
-        files = list(task_dir.glob(self._pattern))
+        files = list(cx.task_dir.glob(self._pattern))
         if not files:
             msg = "No file matches the pattern" if self.has_magic() else "No such file"
             return Result.fail(short_msg=msg)
@@ -434,11 +458,11 @@ class _Echo(_Command):
     @ui.work("echo", "{0}")
     def run(
         self,
-        task_dir: Path,
+        cx: _CommandCtxt,
         dst_dir: Path,
         tests_in_group: Counter[_GroupName],
     ) -> Result:
-        del task_dir
+        del cx
         idx = self._next_idx_in_group(tests_in_group)
         with self.dst_file(dst_dir, idx).open("w") as test_file:
             test_file.write(" ".join(self._args) + "\n")
@@ -452,45 +476,40 @@ class _Script(_Command):
     def __init__(
         self,
         group: _GroupName,
-        path: Path,
+        filename: str,
         ext: VALID_EXTENSIONS,
         args: list[str],
-        cwd: Path,
     ) -> None:
         super().__init__(group)
-        self._cwd = cwd
+        self._filename = filename
         self._args = args
-        self._script_path = path
         self._ext = ext
 
     def __str__(self) -> str:
         args = " ".join(self._args)
-        script = self._script_path.name
+        script = self._filename
         return f"{script} {args}"
 
     @ui.work("gen", "{0}")
     def run(
         self,
-        task_dir: Path,
+        cx: _CommandCtxt,
         dst_dir: Path,
         tests_in_group: Counter[_GroupName],
     ) -> Result:
-        del task_dir
-        script = self._load_script()
-        if not script:
+        if (script := self._load_script(cx)) is None:
             return Result.fail(short_msg="script file not found")
-        build_result = script.build()
-        if isinstance(build_result, BuildError):
+
+        if isinstance(runnable := script.build(), BuildError):
             return Result.fail(
                 short_msg="failed to build generator",
-                long_msg=build_result.msg,
+                long_msg=runnable.msg,
             )
 
         count = 0
         # We seed the script with the next `idx`, this guarantees it will be different next time.
         args = self._args_with_seed(dst_dir, tests_in_group[self._group] + 1)
-        process = build_result.spawn(args, cwd=self._cwd)
-        if isinstance(process, Error):
+        if isinstance(process := runnable.spawn(args, cwd=cx.cwd), Error):
             return Result.fail(
                 short_msg="error when running script",
                 long_msg=process.msg,
@@ -517,7 +536,7 @@ class _Script(_Command):
         if ret != 0:
             msg = ret_code_to_str(ret)
             args_fmt = " ".join(args)
-            script_path = utils.relative_to_cwd(self._script_path)
+            script_path = utils.relative_to_cwd(cx.script_path(self._filename))
             cmd = f"$ {script_path} {args_fmt}"
             long_msg = f"{cmd}\n{process.stderr.read()}" if process.stderr else cmd
             return Result.fail(short_msg=msg, long_msg=long_msg)
@@ -527,14 +546,8 @@ class _Script(_Command):
 
         return _success_with_count_result(count)
 
-    def _load_script(self) -> SourceCode | None:
-        if not self._script_path.exists():
-            return None
-        match self._ext:
-            case ".py":
-                return PythonSource(self._script_path)
-            case ".cpp":
-                return CppSource(self._script_path)
+    def _load_script(self, cx: _CommandCtxt) -> SourceCode | None:
+        return cx.load_script(self._filename, self._ext)
 
     def _args_with_seed(self, directory: Path, idx: int) -> list[str]:
         return [f"{directory.name}-{self._group}-{idx}", *self._args]
