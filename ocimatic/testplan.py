@@ -94,9 +94,7 @@ class Testplan:
         for sti, st in self._subtasks.items():
             if stn is not None and stn != sti:
                 continue
-            status &= st.run(
-                _CommandCtxt(cwd=self._path.parent, task_dir=self._task_directory),
-            )
+            status &= st.run(self._path.parent, self._task_directory)
 
         if sum(len(st.commands) for st in self._subtasks.values()) == 0:
             ui.show_message(
@@ -341,42 +339,50 @@ class _Subtask:
         validator: _Validator | None,
         stn: Stn,
     ) -> None:
-        self._dir = Path(dataset_dir, f"st{stn}")
+        self._dst_dir = Path(dataset_dir, f"st{stn}")
         self.extends = extends
         self.validator = validator
         self.commands = commands
 
     def __str__(self) -> str:
-        return str(self._dir.name)
+        return str(self._dst_dir.name)
 
     @ui.hd2("{0}")
-    def run(self, cx: _CommandCtxt) -> Status:
-        shutil.rmtree(self._dir, ignore_errors=True)
-        self._dir.mkdir(parents=True, exist_ok=True)
+    def run(self, cwd: Path, task_dir: Path) -> Status:
+        shutil.rmtree(self._dst_dir, ignore_errors=True)
+        self._dst_dir.mkdir(parents=True, exist_ok=True)
 
+        cx = _CommandCtxt(
+            cwd=cwd,
+            task_dir=task_dir,
+            tests_in_group=Counter(),
+            dst_dir=self._dst_dir,
+        )
         status = Status.success
-        tests_in_group: Counter[_GroupName] = Counter()
         for cmd in self.commands:
-            status &= cmd.run(cx, self._dir, tests_in_group).status
+            status &= cmd.run(cx).status
         return status
 
 
-@dataclass(kw_only=True, frozen=True, slots=True)
+@dataclass(kw_only=True)
 class _CommandCtxt:
+    """Context used to execute commands for a single subtask."""
+
     cwd: Path
     task_dir: Path
+    dst_dir: Path
+    tests_in_group: Counter[_GroupName]
+
+    def next_file(self, group: _GroupName) -> Path:
+        self.tests_in_group[group] += 1
+        idx = self.tests_in_group[group]
+        return Path(self.dst_dir, f"{group}-{idx}.in")
 
     def script_path(self, filename: str) -> Path:
         return self.cwd / filename
 
-    def load_script(
-        self,
-        filename: str,
-        ext: _Script.VALID_EXTENSIONS,
-    ) -> SourceCode | None:
+    def load_script(self, filename: str, ext: _Script.VALID_EXTENSIONS) -> SourceCode:
         path = self.script_path(filename)
-        if not path.exists():
-            return None
         match ext:
             case ".py":
                 return PythonSource(path)
@@ -390,23 +396,8 @@ class _Command(ABC):
     def __init__(self, group: _GroupName) -> None:
         self._group = group
 
-    def _next_idx_in_group(self, tests_in_group: Counter[_GroupName]) -> int:
-        tests_in_group[self._group] += 1
-        return tests_in_group[self._group]
-
-    def dst_file(self, directory: Path, idx: int) -> Path:
-        return Path(directory, f"{self._group}-{idx}.in")
-
     @abstractmethod
-    def run(
-        self,
-        cx: _CommandCtxt,
-        dst_dir: Path,
-        tests_in_group: Counter[_GroupName],
-    ) -> Result:
-        raise NotImplementedError(
-            f"Class {self.__class__.__name__} doesn't implement run()",
-        )
+    def run(self, cx: _CommandCtxt) -> Result: ...
 
 
 class _Copy(_Command):
@@ -420,20 +411,14 @@ class _Copy(_Command):
         return self._pattern
 
     @ui.work("copy", "{0}")
-    def run(
-        self,
-        cx: _CommandCtxt,
-        dst_dir: Path,
-        tests_in_group: Counter[_GroupName],
-    ) -> Result:
+    def run(self, cx: _CommandCtxt) -> Result:
         files = list(cx.task_dir.glob(self._pattern))
         if not files:
             msg = "No file matches the pattern" if self.has_magic() else "No such file"
             return Result.fail(short_msg=msg)
         try:
             for file in files:
-                idx = self._next_idx_in_group(tests_in_group)
-                shutil.copy(file, self.dst_file(dst_dir, idx))
+                shutil.copy(file, cx.next_file(self._group))
             return _success_with_count_result(len(files))
         except Exception:  # pylint: disable=broad-except
             return Result.fail(short_msg="Error when copying file")
@@ -451,15 +436,8 @@ class _Echo(_Command):
         return str(self._args)
 
     @ui.work("echo", "{0}")
-    def run(
-        self,
-        cx: _CommandCtxt,
-        dst_dir: Path,
-        tests_in_group: Counter[_GroupName],
-    ) -> Result:
-        del cx
-        idx = self._next_idx_in_group(tests_in_group)
-        with self.dst_file(dst_dir, idx).open("w") as test_file:
+    def run(self, cx: _CommandCtxt) -> Result:
+        with cx.next_file(self._group).open("w") as test_file:
             test_file.write(" ".join(self._args) + "\n")
             return _success_with_count_result(1)
 
@@ -486,15 +464,8 @@ class _Script(_Command):
         return f"{script} {args}"
 
     @ui.work("gen", "{0}")
-    def run(
-        self,
-        cx: _CommandCtxt,
-        dst_dir: Path,
-        tests_in_group: Counter[_GroupName],
-    ) -> Result:
-        if (script := self._load_script(cx)) is None:
-            return Result.fail(short_msg="script file not found")
-
+    def run(self, cx: _CommandCtxt) -> Result:
+        script = cx.load_script(self._filename, self._ext)
         if isinstance(runnable := script.build(), BuildError):
             return Result.fail(
                 short_msg="failed to build generator",
@@ -502,8 +473,7 @@ class _Script(_Command):
             )
 
         count = 0
-        # We seed the script with the next `idx`, this guarantees it will be different next time.
-        args = self._args_with_seed(dst_dir, tests_in_group[self._group] + 1)
+        args = self._args_with_seed(cx)
         if isinstance(process := runnable.spawn(args, cwd=cx.cwd), Error):
             return Result.fail(
                 short_msg="error when running script",
@@ -520,8 +490,7 @@ class _Script(_Command):
                 else:
                     if current_file is None:
                         count += 1
-                        idx = self._next_idx_in_group(tests_in_group)
-                        current_file = self.dst_file(dst_dir, idx).open("w")
+                        current_file = cx.next_file(self._group).open("w")
                     current_file.write(char)
         finally:
             if current_file:
@@ -541,11 +510,11 @@ class _Script(_Command):
 
         return _success_with_count_result(count)
 
-    def _load_script(self, cx: _CommandCtxt) -> SourceCode | None:
-        return cx.load_script(self._filename, self._ext)
-
-    def _args_with_seed(self, directory: Path, idx: int) -> list[str]:
-        return [f"{directory.name}-{self._group}-{idx}", *self._args]
+    def _args_with_seed(self, cx: _CommandCtxt) -> list[str]:
+        # We seed the script with the next `idx`, this guarantees it is different
+        # every time, even if the script generates more than one file.
+        idx = cx.tests_in_group[self._group] + 1
+        return [f"{cx.dst_dir.name}-{self._group}-{idx}", *self._args]
 
 
 def _invalid_command_err_msg(cmd: str) -> str:
