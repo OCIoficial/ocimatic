@@ -17,6 +17,7 @@ dependencies = [
     "typst~=0.13.2",
     "tomlkit~=0.13.3",
     "msgspec>=0.19.0",
+    "tomli-w>=1.2.0",
 ]
 description = "Automatize task creation for OCI"
 dynamic = ["version"]

@@ -48,7 +48,11 @@ class SourceCode(ABC):
         return self._file
 
     @abstractmethod
-    def build(self, *, force: bool = False) -> Runnable | BuildError: ...
+    def build(
+        self,
+        *,
+        force: bool = False,
+    ) -> Runnable | BuildError: ...
 
     def comments_iter(self) -> Iterator[str]:
         comment_start = self.__class__.LINE_COMMENT_START
@@ -71,7 +75,11 @@ class CompiledSource(SourceCode):
     @abstractmethod
     def _ensure_out_dir(self) -> None: ...
 
-    def build(self, *, force: bool = False) -> Runnable | BuildError:
+    def build(
+        self,
+        *,
+        force: bool = False,
+    ) -> Runnable | BuildError:
         if force or self._should_build():
             self._ensure_out_dir()
             try:
@@ -132,9 +140,10 @@ class CppSource(CompiledSource):
         return _should_build(self.files, self._out)
 
     def _build_cmd(self) -> list[str]:
+        conf = Config.get().cpp
         cmd = [
-            Config.get().cpp.command,
-            *Config.get().cpp.flags,
+            conf.command,
+            *conf.get_flags(),
             "-o",
             str(self._out),
         ]

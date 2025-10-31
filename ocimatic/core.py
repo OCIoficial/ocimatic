@@ -728,7 +728,12 @@ class Task:
         self._dataset.normalize()
 
     @ui.hd1("{0}", "Running solution", COLOR)
-    def run_solution(self, solution: Path, timeout: float, stn: Stn | None) -> None:
+    def run_solution(
+        self,
+        solution: Path,
+        timeout: float,
+        stn: Stn | None,
+    ) -> None:
         """Run a solution reporting outcome and running time."""
         sol = self.load_solution_from_path(solution)
         if not sol:
@@ -738,8 +743,8 @@ class Task:
             subtask_results = sol.run_on_subtask(
                 self._dataset,
                 self._checker,
-                timeout=timeout,
                 stn=stn,
+                timeout=timeout,
             )
             if not subtask_results:
                 return

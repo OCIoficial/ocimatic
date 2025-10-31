@@ -12,8 +12,8 @@
 # also invoked using the `-I` and `-o` flags. Solutions in C++ are the most common so you better
 # have this properly configured.
 [cpp]
-command = "g++"
-flags = ["-O2", "-std=c++20"]
+command = ""
+flags = []
 
 
 # Command to interpret python files. Generator scripts are typically written in python so you may
@@ -22,25 +22,25 @@ flags = ["-O2", "-std=c++20"]
 # If `true`, detect the current interpreter running ocimatic from `sys.executable`
 detect = true
 # Command used if detect is `false` or detecting the interpreter fails
-command = "python3"
+command = ""
 
 
 # Commands to compile and run java files. Java is only used for solutions, so you should be able to
 # use most of ocimatic without configuring this.
 [java]
 # This command is invoked using the `-d` flag to specify the output directory.
-javac = "javac"
+javac = ""
 # This command is invoked with the `-cp` flag to specify the classpath as the output directory used
 # for the `javac` command.
-jre = "java"
+jre = ""
 
 
 # Command and flags to compile Rust files. Rust solutions are rare so you may be good without
 # configuring this. However, we sometimes write checkers in rust. If you are working on a solution
 # for a task that has a Rust checker, you will need to have this working.
 [rust]
-command = "rustc"
-flags = ["--edition=2024", "-O"]
+command = ""
+flags = []
 
 
 # Command used to compile a latex file into a pdf. Typically, you can work on an statement by
@@ -49,4 +49,4 @@ flags = ["--edition=2024", "-O"]
 [latex]
 # Template used to generate the command. The generated string will be interpreted by the shell. The
 # $TEXTNAME placeholder will be substituted by the filename.
-command = 'texfot pdflatex -file-line-error -shell-escape "$TEXNAME"'
+command = ""

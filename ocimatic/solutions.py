@@ -90,13 +90,12 @@ class Solution:
         timeout: float | None = None,
     ) -> ui.WorkHd[GroupResults | None]:
         """Run this solution on one subtask."""
-        build_result = self._source.build()
-        if isinstance(build_result, BuildError):
-            yield Result.fail(short_msg="Failed", long_msg=build_result.msg)
+        if isinstance(runnable := self._source.build(), BuildError):
+            yield Result.fail(short_msg="Failed", long_msg=runnable.msg)
             return None
         yield Result.success(short_msg="OK")
         return dataset.subtask(stn).run_on(
-            build_result,
+            runnable,
             checker,
             RunMode.run_solution,
             timeout=timeout,
