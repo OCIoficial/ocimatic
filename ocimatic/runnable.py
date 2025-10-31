@@ -151,8 +151,16 @@ class Runnable(ABC):
                 msg = ret_code_to_str(ret)
                 return RunError(msg=msg, stderr=complete.stderr)
 
-            stdout.seek(0)
-            return RunSuccess(time=time, stdout=stdout.read(), stderr=complete.stderr)
+            try:
+                stdout.seek(0)
+                out = stdout.read()
+            except Exception as e:
+                return RunError(
+                    msg="Excecution produced an invalid output",
+                    stderr=str(e),
+                )
+
+            return RunSuccess(time=time, stdout=out, stderr=complete.stderr)
 
     def run_on_input(
         self,
