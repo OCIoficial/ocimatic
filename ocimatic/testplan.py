@@ -96,7 +96,7 @@ class Testplan:
         for sti, st in self._subtasks.items():
             if stn is not None and stn != sti:
                 continue
-            status &= st.run()
+            status &= st.run(self._task_directory)
 
         if sum(len(st.commands) for st in self._subtasks.values()) == 0:
             ui.show_message(
@@ -181,7 +181,6 @@ class _Parser:
         self.errors: list[ParseError] = []
 
         self._path = path
-        self._task_directory = task_directory
 
     def parse(self) -> None:
         header = None
@@ -242,7 +241,7 @@ class _Parser:
                     "the `copy` command expects exactly one argument.",
                 )
                 return None
-            return _Copy(group, self._task_directory, args[0])
+            return _Copy(group, args[0])
         elif cmd == "echo":
             return _Echo(group, args)
         elif (ext := Path(cmd).suffix) in (".py", ".cpp"):
@@ -355,14 +354,14 @@ class _Subtask:
         return str(self._dir.name)
 
     @ui.hd2("{0}")
-    def run(self) -> Status:
+    def run(self, task_dir: Path) -> Status:
         shutil.rmtree(self._dir, ignore_errors=True)
         self._dir.mkdir(parents=True, exist_ok=True)
 
         status = Status.success
         tests_in_group: Counter[_GroupName] = Counter()
         for cmd in self.commands:
-            status &= cmd.run(self._dir, tests_in_group).status
+            status &= cmd.run(task_dir, self._dir, tests_in_group).status
         return status
 
 
@@ -380,7 +379,12 @@ class _Command(ABC):
         return Path(directory, f"{self._group}-{idx}.in")
 
     @abstractmethod
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> Result:
+    def run(
+        self,
+        task_dir: Path,
+        dst_dir: Path,
+        tests_in_group: Counter[_GroupName],
+    ) -> Result:
         raise NotImplementedError(
             f"Class {self.__class__.__name__} doesn't implement run()",
         )
@@ -389,17 +393,21 @@ class _Command(ABC):
 class _Copy(_Command):
     magic_check = re.compile("([*?[])")
 
-    def __init__(self, group: _GroupName, dir: Path, pattern: str) -> None:
+    def __init__(self, group: _GroupName, pattern: str) -> None:
         super().__init__(group)
-        self._dir = dir
         self._pattern = pattern
 
     def __str__(self) -> str:
         return self._pattern
 
     @ui.work("copy", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> Result:
-        files = list(self._dir.glob(self._pattern))
+    def run(
+        self,
+        task_dir: Path,
+        dst_dir: Path,
+        tests_in_group: Counter[_GroupName],
+    ) -> Result:
+        files = list(task_dir.glob(self._pattern))
         if not files:
             msg = "No file matches the pattern" if self.has_magic() else "No such file"
             return Result.fail(short_msg=msg)
@@ -424,7 +432,13 @@ class _Echo(_Command):
         return str(self._args)
 
     @ui.work("echo", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> Result:
+    def run(
+        self,
+        task_dir: Path,
+        dst_dir: Path,
+        tests_in_group: Counter[_GroupName],
+    ) -> Result:
+        del task_dir
         idx = self._next_idx_in_group(tests_in_group)
         with self.dst_file(dst_dir, idx).open("w") as test_file:
             test_file.write(" ".join(self._args) + "\n")
@@ -455,7 +469,13 @@ class _Script(_Command):
         return f"{script} {args}"
 
     @ui.work("gen", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> Result:
+    def run(
+        self,
+        task_dir: Path,
+        dst_dir: Path,
+        tests_in_group: Counter[_GroupName],
+    ) -> Result:
+        del task_dir
         script = self._load_script()
         if not script:
             return Result.fail(short_msg="script file not found")
