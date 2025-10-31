@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import shlex
 import shutil
 import sys
 import typing
@@ -9,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Literal, cast
+from typing import Literal, cast
 
 from ocimatic import ui, utils
 from ocimatic.result import Error, Result, Status
@@ -24,8 +23,6 @@ FS = chr(28)
 class Testplan:
     """Functionality to read and run a plan for generating dataset."""
 
-    COMMENT_RE = re.compile(r"([^#]*)(#.*)?", re.RegexFlag.DOTALL)
-
     def __init__(
         self,
         path: Path,
@@ -34,28 +31,21 @@ class Testplan:
     ) -> None:
         self._path = path
         if not self._path.exists():
-            ui.fatal_error(
-                f'File not found: "{self._path}"',
-            )
+            ui.fatal_error(f'File not found: "{self._path}"')
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
 
         parser = _Parser()
         parser.parse(self._path.read_text())
 
+        err_msg = f"Error when parsing testplan: `{utils.relative_to_cwd(self._path)}`"
         if len(parser.errors) > 0:
-            ui.writeln(
-                f"Error when parsing testplan in `{utils.relative_to_cwd(self._path)}`",
-                ui.ERROR,
-            )
+            ui.writeln(err_msg, ui.ERROR)
             ui.writeln(f"{parser.errors[0]}", ui.ERROR)
             sys.exit(1)
 
         if isinstance(subtasks := self._validate_subtasks(parser.subtasks), ParseError):
-            ui.writeln(
-                f"Error when parsing testplan in `{utils.relative_to_cwd(self._path)}`",
-                ui.ERROR,
-            )
+            ui.writeln(err_msg, ui.ERROR)
             ui.writeln(f"{subtasks}", ui.ERROR)
             sys.exit(1)
 
@@ -173,6 +163,58 @@ class Testplan:
         return None
 
 
+class _Scanner:
+    COMMENT_RE = re.compile(r"\s*(#.*)?")
+    HEADER_RE = re.compile(r"\[\s*Subtask\s+(\d+)\s*\]")
+    WORD_RE = re.compile(r"[a-zA-Z0-9_\./*-]+")
+    STRING_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
+    GROUP_RE = re.compile(r"[a-zA-Z0-9_-]+")
+    EXTENDS_RE = re.compile(r"@extends\s*subtask\s*(\d+)")
+    VALIDATOR_RE = re.compile(r"@validator\s*(\S+)")
+
+    def __init__(self, lineno: int, line: str) -> None:
+        self._lineno = lineno
+        self._pos = 0
+        self._line = line
+        self._skip_comment()
+
+    def is_eol(self) -> bool:
+        if self._pos == len(self._line):
+            return True
+        return self._line[self._pos] == "\n"
+
+    def scan(self, pattern: re.Pattern[str]) -> re.Match[str] | None:
+        if (m := pattern.match(self._line, pos=self._pos)) is not None:
+            self._pos = m.end(0)
+        self._skip_comment()
+        return m
+
+    def expect(self, c: str) -> bool:
+        if self._pos < len(self._line) and self._line[self._pos] == c:
+            self._pos += 1
+            self._skip_comment()
+            return True
+        else:
+            return False
+
+    def unexpected_token(self) -> ParseError:
+        if self._pos == len(self._line):
+            msg = "unexpected end of line"
+        else:
+            msg = (
+                f"unexpected token `{self._line[self._pos]}` at column {self._pos + 1}"
+            )
+        return ParseError(msg=msg, lineno=self.lineno)
+
+    def _skip_comment(self) -> None:
+        self._scan_inner(_Scanner.COMMENT_RE)
+
+    def _scan_inner(self, pattern: re.Pattern[str]) -> re.Match[str] | None:
+        if (m := pattern.match(self._line, pos=self._pos)) is not None:
+            self._pos = m.end(0)
+        return m
+
+
 class _Parser:
     def __init__(self) -> None:
         self.subtasks: list[tuple[_SubtaskHeader, list[Item]]] = []
@@ -182,57 +224,54 @@ class _Parser:
         header = None
         items: list[Item] = []
         for lineno, line in enumerate(content.splitlines(), 1):
-            # Remove comments
-            m = Testplan.COMMENT_RE.fullmatch(line)
-            if m is None:
-                continue
-            line = m.group(1)
+            scanner = _Scanner(lineno, line)
 
-            # Skip empty lines
-            line = line.strip()
-            if not line:
-                continue
-
-            if m := _SubtaskHeader.RE.fullmatch(line):
+            if m := scanner.scan(_Scanner.HEADER_RE):
                 if header is not None:
                     self.subtasks.append((header, items))
 
                 number = int(m.group(1))
                 header = _SubtaskHeader(number=number, lineno=lineno)
                 items = []
+
+                self._expect_eol(scanner)
                 continue
 
             if header is None:
                 self.append_error(lineno, "unexpected line before first subtask header")
                 continue
 
-            if m := _Command.RE.fullmatch(line):
-                command = self._parse_command(m, lineno)
-                if command is not None:
-                    items.append(command)
-            elif m := _Extends.RE.fullmatch(line):
+            if m := scanner.scan(_Scanner.GROUP_RE):
+                group = _GroupName(name=m.group(0))
+                if (cmd := self._parse_command(group, scanner)) is not None:
+                    items.append(cmd)
+            elif m := scanner.scan(_Scanner.EXTENDS_RE):
                 items.append(_Extends(stn=Stn(int(m.group(1))), lineno=lineno))
-            elif m := _Validator.RE.fullmatch(line):
+            elif m := scanner.scan(_Scanner.VALIDATOR_RE):
                 items.append(_Validator(path=m.group(1), lineno=lineno))
-            else:
-                self.append_error(lineno, f"invalid line `{line}`")
+
+            self._expect_eol(scanner)
 
         if header is not None:
             self.subtasks.append((header, items))
 
-    def _parse_command(self, m: re.Match[str], lineno: int) -> _Command | None:
-        group = _GroupName.parse(m.group(1))
-        if isinstance(group, Error):
-            self.append_error(lineno, group.msg)
+    def _parse_command(self, group: _GroupName, scanner: _Scanner) -> _Command | None:
+        if not scanner.expect(";"):
+            self.errors.append(scanner.unexpected_token())
             return None
 
-        cmd = m.group(2)
-        args = _parse_args(m.group(3) or "")
+        if (m := scanner.scan(_Scanner.WORD_RE)) is None:
+            self.errors.append(scanner.unexpected_token())
+            return None
+        cmd = m.group(0)
+
+        if (args := self._parse_command_args(scanner)) is None:
+            return None
 
         if cmd == "copy":
             if len(args) > 2:
                 self.append_error(
-                    lineno,
+                    scanner.lineno,
                     "the `copy` command expects exactly one argument.",
                 )
                 return None
@@ -248,8 +287,24 @@ class _Parser:
                 args,
             )
         else:
-            self.append_error(lineno, _invalid_command_err_msg(cmd))
+            self.append_error(scanner.lineno, _invalid_command_err_msg(cmd))
             return None
+
+    def _parse_command_args(self, scanner: _Scanner) -> list[str] | None:
+        args: list[str] = []
+        while not scanner.is_eol():
+            if m := scanner.scan(_Scanner.STRING_RE):
+                args.append(m.group(1).encode().decode("unicode_escape"))
+            elif m := scanner.scan(_Scanner.WORD_RE):
+                args.append(m.group(0))
+            else:
+                self.errors.append(scanner.unexpected_token())
+                return None
+        return args
+
+    def _expect_eol(self, scanner: _Scanner) -> None:
+        if not scanner.is_eol():
+            self.errors.append(scanner.unexpected_token())
 
     def append_error(self, lineno: int, msg: str) -> None:
         self.errors.append(ParseError(lineno=lineno, msg=msg))
@@ -272,8 +327,6 @@ type Item = _Validator | _Extends | _Command
 
 @dataclass(kw_only=True, frozen=True, slots=True)
 class _SubtaskHeader:
-    RE: ClassVar[re.Pattern[str]] = re.compile(r"\s*\[\s*Subtask\s+(\d+)\s*\]\s*")
-
     number: int
     lineno: int
 
@@ -284,10 +337,6 @@ class _SubtaskHeader:
 @dataclass(kw_only=True, frozen=True, slots=True)
 class _Validator:
     """A validator directive can be used to define an input validator for a subtask."""
-
-    RE: ClassVar[re.Pattern[str]] = re.compile(
-        r"\s*@\s*validator\s*(\S+)\s*",
-    )
 
     path: str
     lineno: int
@@ -300,10 +349,6 @@ class _Validator:
 class _Extends:
     """An extends directive can be used to include all tests from another subtask."""
 
-    RE: ClassVar[re.Pattern[str]] = re.compile(
-        r"\s*@\s*extends\s*subtask\s*(\d+)\s*",
-    )
-
     stn: Stn
     lineno: int
 
@@ -313,18 +358,7 @@ class _Extends:
 
 @dataclass(kw_only=True, frozen=True, slots=True)
 class _GroupName:
-    RE: ClassVar[re.Pattern[str]] = re.compile(r"[a-zA-Z0-9_-]+")
-
     name: str
-
-    @staticmethod
-    def parse(name: str) -> _GroupName | Error:
-        if not _GroupName.RE.fullmatch(name):
-            return Error(
-                msg="invalid group name `{group_str}`. The group name should "
-                f"match the regex `{_GroupName.RE.pattern}`.",
-            )
-        return _GroupName(name=name)
 
     def __str__(self) -> str:
         return self.name
@@ -391,8 +425,6 @@ class _CommandCtxt:
 
 
 class _Command(ABC):
-    RE = re.compile(r"\s*([^;\s]+)\s*;\s*(\S+)(:?\s+(.*))?")
-
     def __init__(self, group: _GroupName) -> None:
         self._group = group
 
@@ -531,11 +563,6 @@ def _success_with_count_result(count: int) -> Result:
         return Result.success(short_msg="1 test case generated")
     else:
         return Result.success(short_msg=f"{count} test cases generated")
-
-
-def _parse_args(args: str) -> list[str]:
-    args = args.strip()
-    return [a.encode().decode("unicode_escape") for a in shlex.split(args)]
 
 
 def _has_cycles(subtasks: SortedDict[Stn, _Subtask]) -> bool:
