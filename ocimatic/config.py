@@ -23,11 +23,8 @@ def field[T](c: Callable[[], T]) -> T:
 
 
 class CppConfig(msgspec.Struct, kw_only=True, frozen=True):
-    command: str = "g++"
+    command: str = "clang++"
     flags: list[str] = field(lambda: ["-O2", "-std=c++20"])
-    sanitize_flags: list[str] = field(
-        lambda: ["-fsanitize=address", "-fsanitize=undefined"],
-    )
 
 
 class PythonConfig(msgspec.Struct, kw_only=True, frozen=True):

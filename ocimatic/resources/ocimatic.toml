@@ -14,7 +14,6 @@
 [cpp]
 command = ""
 flags = []
-sanitize_flags = []
 
 
 # Command to interpret python files. Generator scripts are typically written in python so you may

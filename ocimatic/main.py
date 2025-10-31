@@ -23,8 +23,6 @@ _SOLUTION_HELP = (
     "Here, <task> refers to the path of the current task and <cwd> to the current working directory."
 )
 
-_SANITIZE_HELP = "Compile C++ solutions with sanitizers (UBSan & ASan by default)"
-
 
 def _solution_completion(
     *,
@@ -520,7 +518,6 @@ single_task = cloup.option(
     ),
 )
 @cloup.option("--timeout", help="Timeout in seconds (default: 3.0).", type=float)
-@cloup.option("--sanitize", is_flag=True, default=False, help=_SANITIZE_HELP)
 @cloup.constraint(
     If("file", then=accept_none).rephrased(
         error="--timeout cannot be used with --file",
@@ -535,7 +532,6 @@ def run_solution(
     stn: int | None,
     file: str | None,
     timeout: float | None,
-    sanitize: bool,  # noqa: FBT001
 ) -> None:
     import sys
     from pathlib import Path
@@ -556,7 +552,6 @@ def run_solution(
             Path(solution),
             timeout=timeout or 3.0,
             stn=Stn(stn) if stn else None,
-            sanitize=sanitize,
         )
 
 
@@ -567,9 +562,8 @@ def run_solution(
     help="A path to a solution. " + _SOLUTION_HELP,
     type=click.Path(),
 )
-@cloup.option("--sanitize", is_flag=True, default=False, help=_SANITIZE_HELP)
 @cloup.pass_obj
-def build(cli: CLI, solution: str, task_name: str | None, sanitize: bool) -> None:  # noqa: FBT001
+def build(cli: CLI, solution: str, task_name: str | None) -> None:
     from pathlib import Path
 
     from ocimatic import ui
@@ -577,7 +571,7 @@ def build(cli: CLI, solution: str, task_name: str | None, sanitize: bool) -> Non
     task = cli.select_task(task_name)
     if not task:
         ui.fatal_error("You have to be inside a task to run this command.")
-    task.build_solution(Path(solution), sanitize=sanitize)
+    task.build_solution(Path(solution))
 
 
 @cloup.command(

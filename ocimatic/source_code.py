@@ -51,7 +51,6 @@ class SourceCode(ABC):
     def build(
         self,
         *,
-        sanitize: bool = False,
         force: bool = False,
     ) -> Runnable | BuildError: ...
 
@@ -65,7 +64,7 @@ class SourceCode(ABC):
 
 class CompiledSource(SourceCode):
     @abstractmethod
-    def _build_cmd(self, *, sanitize: bool = False) -> list[str]: ...
+    def _build_cmd(self) -> list[str]: ...
 
     @abstractmethod
     def _runnable(self) -> Runnable: ...
@@ -79,14 +78,13 @@ class CompiledSource(SourceCode):
     def build(
         self,
         *,
-        sanitize: bool = False,
         force: bool = False,
     ) -> Runnable | BuildError:
         if force or self._should_build():
             self._ensure_out_dir()
             try:
                 complete = subprocess.run(
-                    self._build_cmd(sanitize=sanitize),
+                    self._build_cmd(),
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -141,17 +139,16 @@ class CppSource(CompiledSource):
     def _should_build(self) -> bool:
         return _should_build(self.files, self._out)
 
-    def _build_cmd(self, *, sanitize: bool = False) -> list[str]:
+    def _build_cmd(self) -> list[str]:
+        conf = Config.get().cpp
         cmd = [
-            Config.get().cpp.command,
-            *Config.get().cpp.flags,
+            conf.command,
+            *conf.flags,
             "-o",
             str(self._out),
         ]
         if self._include:
             cmd.extend(["-I", str(self._include)])
-        if sanitize:
-            cmd.extend(Config.get().cpp.sanitize_flags)
         cmd.extend(str(s) for s in self.files)
         return cmd
 
@@ -288,8 +285,7 @@ class RustSource(CompiledSource):
     def _should_build(self) -> bool:
         return _should_build([self._file], self._out)
 
-    def _build_cmd(self, *, sanitize: bool = False) -> list[str]:
-        del sanitize
+    def _build_cmd(self) -> list[str]:
         cmd = [
             Config.get().rust.command,
             *Config.get().rust.flags,
@@ -340,8 +336,7 @@ class JavaSource(CompiledSource):
     def _should_build(self) -> bool:
         return _should_build([self._source], self._outdir)
 
-    def _build_cmd(self, *, sanitize: bool = False) -> list[str]:
-        del sanitize
+    def _build_cmd(self) -> list[str]:
         return [Config.get().java.javac, "-d", str(self._outdir), str(self._source)]
 
 
@@ -360,8 +355,8 @@ class PythonSource(SourceCode):
     def __init__(self, file: Path) -> None:
         super().__init__(file)
 
-    def build(self, *, sanitize: bool = False, force: bool = False) -> Python3:
-        del force, sanitize
+    def build(self, *, force: bool = False) -> Python3:
+        del force
         return Python3(self._file)
 
 
