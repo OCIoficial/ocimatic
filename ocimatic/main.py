@@ -678,10 +678,10 @@ def check_setup() -> None:
     help="Generate configuration file for Ocimatic that can be used to override default commands.",
 )
 def setup() -> None:
-    import shutil
     from ocimatic import ui
     from ocimatic.config import Config
     import questionary
+    import tomlkit
 
     if Config.HOME_PATH.exists():
         ui.writeln(
@@ -697,7 +697,9 @@ def setup() -> None:
             return
         ui.writeln()
 
-    shutil.copy2(Config.DEFAULT_PATH, Config.HOME_PATH)
+    doc = Config.default_toml_document()
+    with Config.HOME_PATH.open("w") as f:
+        tomlkit.dump(doc, f)  # pyright: ignore[reportUnknownMemberType]
 
     ui.writeln(
         f"Configuration file created at '{Config.HOME_PATH}'.\n"
