@@ -97,7 +97,7 @@ class Testplan:
 
     def _validate_subtasks(
         self,
-        parsed: list[tuple[_SubtaskHeader, list[Item]]],
+        parsed: list[tuple[_SubtaskHeader, list[_Item]]],
     ) -> SortedDict[Stn, _Subtask] | ParseError:
         subtasks: SortedDict[Stn, _Subtask] = SortedDict()
         for i, (header, items) in enumerate(parsed, start=1):
@@ -228,12 +228,12 @@ class _Scanner:
 
 class _Parser:
     def __init__(self) -> None:
-        self.subtasks: list[tuple[_SubtaskHeader, list[Item]]] = []
+        self.subtasks: list[tuple[_SubtaskHeader, list[_Item]]] = []
         self.errors: list[ParseError] = []
 
     def parse(self, content: str) -> None:
         header = None
-        items: list[Item] = []
+        items: list[_Item] = []
         for lineno, line in enumerate(content.splitlines(), 1):
             scanner = _Scanner(lineno, line)
 
@@ -244,30 +244,29 @@ class _Parser:
                 number = int(m.group(1))
                 header = _SubtaskHeader(number=number, range=scanner.range(m))
                 items = []
-
-                self._expect_eol(scanner)
-                continue
-
-            if header is None:
+            elif header is None:
                 self.append_error(
                     scanner.line_range(),
                     "unexpected line before first subtask header",
                 )
                 continue
-
-            if m := scanner.scan(_Scanner.GROUP_RE):
-                group = _GroupName(name=m.group(0))
-                if (cmd := self._parse_command(group, scanner)) is not None:
-                    items.append(cmd)
-            elif m := scanner.scan(_Scanner.EXTENDS_RE):
-                items.append(_Extends(stn=Stn(int(m.group(1))), range=scanner.range(m)))
-            elif m := scanner.scan(_Scanner.VALIDATOR_RE):
-                items.append(_Validator(path=m.group(1), range=scanner.range(m)))
-
+            elif (item := self._parse_item(scanner)) is not None:
+                items.append(item)
             self._expect_eol(scanner)
 
         if header is not None:
             self.subtasks.append((header, items))
+
+    def _parse_item(self, scanner: _Scanner) -> _Item | None:
+        if m := scanner.scan(_Scanner.GROUP_RE):
+            group = _GroupName(name=m.group(0))
+            return self._parse_command(group, scanner)
+        elif m := scanner.scan(_Scanner.EXTENDS_RE):
+            return _Extends(stn=Stn(int(m.group(1))), range=scanner.range(m))
+        elif m := scanner.scan(_Scanner.VALIDATOR_RE):
+            return _Validator(path=m.group(1), range=scanner.range(m))
+        else:
+            return None
 
     def _parse_command(self, group: _GroupName, scanner: _Scanner) -> _Command | None:
         if not scanner.expect(";"):
@@ -336,7 +335,7 @@ class ParseError:
             return self.msg
 
 
-type Item = _Validator | _Extends | _Command
+type _Item = _Validator | _Extends | _Command
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
@@ -484,8 +483,8 @@ class _Copy(_Command):
             for file in files:
                 shutil.copy(file, cx.next_file(self._group))
             return _success_with_count_result(len(files))
-        except Exception:  # pylint: disable=broad-except
-            return Result.fail(short_msg="Error when copying file")
+        except Exception as e:
+            return Result.fail(short_msg="Error when copying file", long_msg=str(e))
 
     def has_magic(self) -> bool:
         return _Copy.magic_check.search(self._pattern) is not None
@@ -585,7 +584,7 @@ def _invalid_command_err_msg(cmd: str) -> str:
     extensions = typing.get_args(_Script.VALID_EXTENSIONS)
     return (
         f"invalid command `{cmd}`\n"
-        f"The command should be either `copy`, `echo` or a generator with one of the following extensions {extensions}"
+        f"The command should be either `copy`, `echo` or a generator script with one of the following extensions {extensions}"
     )
 
 
