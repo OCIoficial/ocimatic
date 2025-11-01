@@ -103,7 +103,7 @@ class Testplan:
         for i, (header, items) in enumerate(parsed, start=1):
             if i != header.number:
                 return ParseError(
-                    lineno=header.lineno,
+                    range=header.range,
                     msg=f"found {header}, but [Subtask {i}] was expected",
                 )
             sti = Stn(i)
@@ -114,7 +114,7 @@ class Testplan:
                     continue
                 if validator is not None:
                     return ParseError(
-                        lineno=item.lineno,
+                        range=validator.range,
                         msg="multiple @validator directives found for the same subtask.",
                     )
                 validator = item
@@ -139,20 +139,20 @@ class Testplan:
         for sti, st in subtasks.items():
             seen: set[Stn] = set()
             for extends in st.extends:
-                lineno = extends.lineno
+                range = extends.range
                 if extends.stn in seen:
                     return ParseError(
-                        lineno=lineno,
+                        range=range,
                         msg=f"cannot extends twice from the same subtask: `{extends}`",
                     )
                 if extends.stn not in subtasks:
                     return ParseError(
-                        lineno=lineno,
+                        range=range,
                         msg=f"invalid subtask {extends.stn}: `{extends}`",
                     )
                 if extends.stn == sti:
                     return ParseError(
-                        lineno=lineno,
+                        range=range,
                         msg=f"a subtask cannot extend itself: `{subtasks}`",
                     )
                 seen.add(extends.stn)
@@ -186,8 +186,19 @@ class _Scanner:
     def scan(self, pattern: re.Pattern[str]) -> re.Match[str] | None:
         if (m := pattern.match(self._line, pos=self._pos)) is not None:
             self._pos = m.end(0)
-        self._skip_comment()
+            self._skip_comment()
+
         return m
+
+    def range(self, m: re.Match[str]) -> Range:
+        start = Position(line=self._lineno, column=m.start(0))
+        end = Position(line=self._lineno, column=m.end(0))
+        return Range(start=start, end=end)
+
+    def line_range(self) -> Range:
+        start = Position(line=self._lineno, column=0)
+        end = Position(line=self._lineno, column=len(self._line))
+        return Range(start=start, end=end)
 
     def expect(self, c: str) -> bool:
         if self._pos < len(self._line) and self._line[self._pos] == c:
@@ -201,10 +212,10 @@ class _Scanner:
         if self._pos == len(self._line):
             msg = "unexpected end of line"
         else:
-            msg = (
-                f"unexpected token `{self._line[self._pos]}` at column {self._pos + 1}"
-            )
-        return ParseError(msg=msg, lineno=self.lineno)
+            msg = f"unexpected token `{self._line[self._pos]}`"
+        start = Position(line=self._lineno, column=self._pos)
+        end = Position(line=self._lineno, column=self._pos + 1)
+        return ParseError(msg=msg, range=Range(start=start, end=end))
 
     def _skip_comment(self) -> None:
         self._scan_inner(_Scanner.COMMENT_RE)
@@ -231,14 +242,17 @@ class _Parser:
                     self.subtasks.append((header, items))
 
                 number = int(m.group(1))
-                header = _SubtaskHeader(number=number, lineno=lineno)
+                header = _SubtaskHeader(number=number, range=scanner.range(m))
                 items = []
 
                 self._expect_eol(scanner)
                 continue
 
             if header is None:
-                self.append_error(lineno, "unexpected line before first subtask header")
+                self.append_error(
+                    scanner.line_range(),
+                    "unexpected line before first subtask header",
+                )
                 continue
 
             if m := scanner.scan(_Scanner.GROUP_RE):
@@ -246,9 +260,9 @@ class _Parser:
                 if (cmd := self._parse_command(group, scanner)) is not None:
                     items.append(cmd)
             elif m := scanner.scan(_Scanner.EXTENDS_RE):
-                items.append(_Extends(stn=Stn(int(m.group(1))), lineno=lineno))
+                items.append(_Extends(stn=Stn(int(m.group(1))), range=scanner.range(m)))
             elif m := scanner.scan(_Scanner.VALIDATOR_RE):
-                items.append(_Validator(path=m.group(1), lineno=lineno))
+                items.append(_Validator(path=m.group(1), range=scanner.range(m)))
 
             self._expect_eol(scanner)
 
@@ -271,7 +285,7 @@ class _Parser:
         if cmd == "copy":
             if len(args) > 2:
                 self.append_error(
-                    scanner.lineno,
+                    scanner.line_range(),
                     "the `copy` command expects exactly one argument.",
                 )
                 return None
@@ -287,7 +301,7 @@ class _Parser:
                 args,
             )
         else:
-            self.append_error(scanner.lineno, _invalid_command_err_msg(cmd))
+            self.append_error(scanner.range(m), _invalid_command_err_msg(cmd))
             return None
 
     def _parse_command_args(self, scanner: _Scanner) -> list[str] | None:
@@ -306,18 +320,18 @@ class _Parser:
         if not scanner.is_eol():
             self.errors.append(scanner.unexpected_token())
 
-    def append_error(self, lineno: int, msg: str) -> None:
-        self.errors.append(ParseError(lineno=lineno, msg=msg))
+    def append_error(self, range: Range, msg: str) -> None:
+        self.errors.append(ParseError(range=range, msg=msg))
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
 class ParseError:
-    lineno: int | None = None
+    range: Range | None = None
     msg: str
 
     def __str__(self) -> str:
-        if self.lineno:
-            return f"line {self.lineno}: {self.msg}"
+        if self.range:
+            return f"{self.range}: {self.msg}"
         else:
             return self.msg
 
@@ -326,9 +340,27 @@ type Item = _Validator | _Extends | _Command
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
+class Position:
+    line: int
+    column: int
+
+    def __str__(self) -> str:
+        return f"{self.line}:{self.column}"
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class Range:
+    start: Position
+    end: Position
+
+    def __str__(self) -> str:
+        return f"{self.start}-{self.end}"
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
 class _SubtaskHeader:
     number: int
-    lineno: int
+    range: Range
 
     def __str__(self) -> str:
         return f"[Subtask {self.number}]"
@@ -339,7 +371,7 @@ class _Validator:
     """A validator directive can be used to define an input validator for a subtask."""
 
     path: str
-    lineno: int
+    range: Range
 
     def __str__(self) -> str:
         return f"@validator {self.path}"
@@ -350,7 +382,7 @@ class _Extends:
     """An extends directive can be used to include all tests from another subtask."""
 
     stn: Stn
-    lineno: int
+    range: Range
 
     def __str__(self) -> str:
         return f"@extends subtask {self.stn}"
