@@ -160,8 +160,6 @@ class Testplan:
         if _has_cycles(subtasks):
             return ParseError(msg="the extends graph contains cycles")
 
-        return None
-
 
 class _Scanner:
     COMMENT_RE = re.compile(r"\s*(#.*)?")
@@ -270,12 +268,10 @@ class _Parser:
 
     def _parse_command(self, group: _GroupName, scanner: _Scanner) -> _Command | None:
         if not scanner.expect(";"):
-            self.errors.append(scanner.unexpected_token())
-            return None
+            return self.errors.append(scanner.unexpected_token())
 
         if (m := scanner.scan(_Scanner.WORD_RE)) is None:
-            self.errors.append(scanner.unexpected_token())
-            return None
+            return self.errors.append(scanner.unexpected_token())
         cmd = m.group(0)
 
         if (args := self._parse_command_args(scanner)) is None:
@@ -283,11 +279,10 @@ class _Parser:
 
         if cmd == "copy":
             if len(args) > 2:
-                self.append_error(
+                return self.append_error(
                     scanner.line_range(),
                     "the `copy` command expects exactly one argument.",
                 )
-                return None
             return _Copy(group, args[0])
         elif cmd == "echo":
             return _Echo(group, args)
@@ -300,8 +295,7 @@ class _Parser:
                 args,
             )
         else:
-            self.append_error(scanner.range(m), _invalid_command_err_msg(cmd))
-            return None
+            return self.append_error(scanner.range(m), _invalid_command_err_msg(cmd))
 
     def _parse_command_args(self, scanner: _Scanner) -> list[str] | None:
         args: list[str] = []
@@ -311,8 +305,7 @@ class _Parser:
             elif m := scanner.scan(_Scanner.WORD_RE):
                 args.append(m.group(0))
             else:
-                self.errors.append(scanner.unexpected_token())
-                return None
+                return self.errors.append(scanner.unexpected_token())
         return args
 
     def _expect_eol(self, scanner: _Scanner) -> None:
