@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import IntEnum
 import re
 import shutil
 import sys
@@ -161,67 +162,149 @@ class Testplan:
             return ParseError(msg="the extends graph contains cycles")
 
 
+class _TokenKind(IntEnum):
+    OpenBracket = 0
+    CloseBracket = 1
+    Directive = 2
+    Word = 3
+    String = 4
+    Int = 5
+    Eol = 6
+    Error = 7
+
+    def __str__(self) -> str:
+        match self:
+            case _TokenKind.OpenBracket:
+                return "["
+            case _TokenKind.CloseBracket:
+                return "]"
+            case _TokenKind.Directive:
+                return "directive"
+            case _TokenKind.Word:
+                return "word"
+            case _TokenKind.String:
+                return "string"
+            case _TokenKind.Int:
+                return "int"
+            case _TokenKind.Eol:
+                return "end of line"
+            case _TokenKind.Error:
+                return "error"
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class _Token:
+    range: Range
+    lexeme: str
+    kind: _TokenKind
+
+
+type _Peek = _TokenKind | set[_TokenKind] | str
+
+
 class _Scanner:
     COMMENT_RE = re.compile(r"\s*(#.*)?")
     HEADER_RE = re.compile(r"\[\s*Subtask\s+(\d+)\s*\]")
-    WORD_RE = re.compile(r"[a-zA-Z0-9_\./*-]+")
     STRING_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
-    GROUP_RE = re.compile(r"[a-zA-Z0-9_-]+")
     EXTENDS_RE = re.compile(r"@extends\s*subtask\s*(\d+)")
     VALIDATOR_RE = re.compile(r"@validator\s*(\S+)")
+
+    DIRECTIVE_RE = re.compile(r"@[a-z]+")
+    INT_RE = re.compile(r"\d+")
+    WORD_RE = re.compile(r"[a-zA-Z0-9_\./*-]+")
 
     def __init__(self, lineno: int, line: str) -> None:
         self._lineno = lineno
         self._pos = 0
         self._line = line
-        self._skip_comment()
+        self._hi: Position = Position(line=lineno, column=0)
+        self._scan()
+
+    def _scan(self) -> None:
+        if m := _Scanner.COMMENT_RE.match(self._line, pos=self._pos):
+            self._pos = m.end(0)
+
+        if self._pos == len(self._line):
+            kind, span = (_TokenKind.Eol, (self._pos, self._pos + 1))
+        elif self._line[self._pos] == "[":
+            kind, span = (_TokenKind.OpenBracket, (self._pos, self._pos + 1))
+        elif self._line[self._pos] == "]":
+            kind, span = (_TokenKind.CloseBracket, (self._pos, self._pos + 1))
+        elif m := _Scanner.DIRECTIVE_RE.match(self._line, pos=self._pos):
+            kind, span = (_TokenKind.Directive, m.span(0))
+        elif m := _Scanner.INT_RE.match(self._line, pos=self._pos):
+            kind, span = (_TokenKind.Int, m.span(0))
+        elif m := _Scanner.WORD_RE.match(self._line, pos=self._pos):
+            kind, span = (_TokenKind.Word, m.span(0))
+        elif m := _Scanner.STRING_RE.match(self._line, pos=self._pos):
+            kind, span = (_TokenKind.String, m.span(0))
+        else:
+            kind, span = (_TokenKind.Error, (self._pos, self._pos + 1))
+        self._pos = span[1]
+        self._next_token = _Token(
+            kind=kind,
+            lexeme=self._line[span[0] : span[1]],
+            range=Range(
+                start=Position(line=self._lineno, column=span[0]),
+                end=Position(line=self._lineno, column=span[1]),
+            ),
+        )
 
     def is_eol(self) -> bool:
-        if self._pos == len(self._line):
-            return True
-        return self._line[self._pos] == "\n"
+        return self._next_token.kind == _TokenKind.Eol
 
-    def scan(self, pattern: re.Pattern[str]) -> re.Match[str] | None:
-        if (m := pattern.match(self._line, pos=self._pos)) is not None:
-            self._pos = m.end(0)
-            self._skip_comment()
-
-        return m
-
-    def range(self, m: re.Match[str]) -> Range:
-        start = Position(line=self._lineno, column=m.start(0))
-        end = Position(line=self._lineno, column=m.end(0))
-        return Range(start=start, end=end)
-
-    def line_range(self) -> Range:
-        start = Position(line=self._lineno, column=0)
-        end = Position(line=self._lineno, column=len(self._line))
-        return Range(start=start, end=end)
-
-    def expect(self, c: str) -> bool:
-        if self._pos < len(self._line) and self._line[self._pos] == c:
-            self._pos += 1
-            self._skip_comment()
-            return True
+    def peek(self, peek: _Peek) -> bool:
+        if isinstance(peek, str):
+            return self._next_token.lexeme == peek
+        elif isinstance(peek, set):
+            return any(self._next_token.kind == k for k in peek)
         else:
-            return False
+            return self._next_token.kind == peek
 
-    def unexpected_token(self) -> ParseError:
-        if self._pos == len(self._line):
+    def next_if(self, p: _Peek) -> _Token | None:
+        if self.peek(p):
+            return self.next()
+
+    def next(self) -> _Token:
+        token = self._next_token
+        self._hi = token.range.end
+        self._scan()
+        return token
+
+    def expect(self, peek: _Peek, expected: set[str] | None = None) -> _Token:
+        if self.peek(peek):
+            return self.next()
+        else:
+            raise self.unexpected_token(expected or self._peek_to_expected(peek))
+
+    @staticmethod
+    def _peek_to_expected(peek: _Peek) -> set[str]:
+        if isinstance(peek, str):
+            return {peek}
+        elif isinstance(peek, set):
+            return {str(k) for k in peek}
+        else:
+            return {str(peek)}
+
+    def pos(self) -> Position:
+        """Return the start position of the next token."""
+        return self._next_token.range.start
+
+    def last_pos(self) -> Position:
+        """Return the end position of the previously yielded token."""
+        return self._hi
+
+    def unexpected_token(self, expected: set[str] | None = None) -> ParseError:
+        if expected:
+            if len(expected) == 1:
+                msg = f"expected '{next(iter(expected))}'"
+            else:
+                msg = f"expected one of {expected}"
+        elif self.is_eol():
             msg = "unexpected end of line"
         else:
-            msg = f"unexpected token `{self._line[self._pos]}`"
-        start = Position(line=self._lineno, column=self._pos)
-        end = Position(line=self._lineno, column=self._pos + 1)
-        return ParseError(msg=msg, range=Range(start=start, end=end))
-
-    def _skip_comment(self) -> None:
-        self._scan_inner(_Scanner.COMMENT_RE)
-
-    def _scan_inner(self, pattern: re.Pattern[str]) -> re.Match[str] | None:
-        if (m := pattern.match(self._line, pos=self._pos)) is not None:
-            self._pos = m.end(0)
-        return m
+            msg = f"unexpected token `{self._next_token.lexeme}`"
+        return ParseError(msg=msg, range=self._next_token.range)
 
 
 class Parser:
@@ -230,93 +313,131 @@ class Parser:
         self.errors: list[ParseError] = []
 
     def parse(self, content: str) -> None:
-        header = None
-        items: list[_Item] = []
         for lineno, line in enumerate(content.splitlines()):
             scanner = _Scanner(lineno, line)
 
-            if m := scanner.scan(_Scanner.HEADER_RE):
-                if header is not None:
-                    self.subtasks.append((header, items))
+            # Skip empty lines
+            if scanner.is_eol():
+                continue
 
-                number = int(m.group(1))
-                header = _SubtaskHeader(number=number, range=scanner.range(m))
-                items = []
-            elif (item := self._parse_item(scanner)) is not None:
-                items.append(item)
-                if header is None:
-                    self.append_error(
-                        scanner.line_range(),
-                        "unexpected item before first subtask",
-                    )
-            self._expect_eol(scanner)
+            try:
+                parsed = self._parse_line(scanner)
+                scanner.expect(_TokenKind.Eol)
+            except ParseError as err:
+                self.errors.append(err)
+                continue
 
-        if header is not None:
-            self.subtasks.append((header, items))
+            match parsed:
+                case _SubtaskHeader() as header:
+                    self.subtasks.append((header, []))
+                case item:
+                    if self.subtasks:
+                        self.subtasks[-1][1].append(item)
+                    else:
+                        self.errors.append(
+                            ParseError(
+                                msg="unexpected item before first subtask",
+                                range=item.range,
+                            ),
+                        )
 
-    def _parse_item(self, scanner: _Scanner) -> _Item | None:
-        if m := scanner.scan(_Scanner.GROUP_RE):
-            group = _GroupName(name=m.group(0))
-            return self._parse_command(group, scanner)
-        elif m := scanner.scan(_Scanner.EXTENDS_RE):
-            return _Extends(stn=Stn(int(m.group(1))), range=scanner.range(m))
-        elif m := scanner.scan(_Scanner.VALIDATOR_RE):
-            return _Validator(path=m.group(1), range=scanner.range(m))
+    def _parse_line(self, scanner: _Scanner) -> _SubtaskHeader | _Item:
+        if scanner.peek(_TokenKind.OpenBracket):
+            return self._parse_header(scanner)
+        elif scanner.peek(_TokenKind.Directive):
+            return self._parse_directive(scanner)
+        elif scanner.peek(_TokenKind.Word):
+            return self._parse_command(scanner)
         else:
-            return None
+            raise scanner.unexpected_token({"header", "directive", "command"})
 
-    def _parse_command(self, group: _GroupName, scanner: _Scanner) -> _Command | None:
-        if not scanner.expect(";"):
-            return self.errors.append(scanner.unexpected_token())
+    def _parse_header(self, scanner: _Scanner) -> _SubtaskHeader:
+        start = scanner.pos()
+        scanner.expect(_TokenKind.OpenBracket)
+        scanner.expect("Subtask")
+        num = scanner.expect(_TokenKind.Int)
+        scanner.expect(_TokenKind.CloseBracket)
+        end = scanner.last_pos()
 
-        if (m := scanner.scan(_Scanner.WORD_RE)) is None:
-            return self.errors.append(scanner.unexpected_token())
-        cmd = m.group(0)
+        return _SubtaskHeader(number=int(num.lexeme), range=Range(start=start, end=end))
 
-        if (args := self._parse_command_args(scanner)) is None:
-            return None
+    def _parse_directive(self, scanner: _Scanner) -> _Extends | _Validator:
+        if scanner.peek("@extends"):
+            return self._parse_extends(scanner)
+        elif scanner.peek("@validator"):
+            return self._parse_validator(scanner)
+        else:
+            raise scanner.unexpected_token({"@extends", "@validator"})
 
-        if cmd == "copy":
-            if len(args) > 2:
-                return self.append_error(
-                    scanner.line_range(),
-                    "the `copy` command expects exactly one argument.",
+    def _parse_extends(self, scanner: _Scanner) -> _Extends:
+        start = scanner.pos()
+        scanner.expect("@extends")
+        scanner.expect("subtask")
+        num = scanner.expect(_TokenKind.Int)
+        end = scanner.last_pos()
+        return _Extends(stn=Stn(int(num.lexeme)), range=Range(start=start, end=end))
+
+    def _parse_validator(self, scanner: _Scanner) -> _Validator:
+        start = scanner.pos()
+        scanner.expect("@validator")
+        path = scanner.expect(_TokenKind.Word)
+        end = scanner.last_pos()
+
+        return _Validator(path=path.lexeme, range=Range(start=start, end=end))
+
+    def _parse_command(self, scanner: _Scanner) -> _Command:
+        start = scanner.pos()
+        group = self._validate_group_name(scanner.next())
+        scanner.expect(";")
+        cmd_start = scanner.pos()
+        cmd = scanner.expect(_TokenKind.Word, {"copy", "echo", "script"})
+        args = self._parse_command_args(scanner)
+        end = scanner.last_pos()
+
+        range = Range(start=start, end=end)
+        if cmd.lexeme == "copy":
+            if len(args) != 1:
+                raise ParseError(
+                    msg="the `copy` command expects exactly one argument.",
+                    range=Range(start=cmd_start, end=end),
                 )
-            return _Copy(group, args[0])
-        elif cmd == "echo":
-            return _Echo(group, args)
-        elif (ext := Path(cmd).suffix) in (".py", ".cpp"):
+            return _Copy(group, args[0], range)
+        elif cmd.lexeme == "echo":
+            return _Echo(group, args, range)
+        elif (ext := Path(cmd.lexeme).suffix) in (".py", ".cpp"):
             # mypy can't tell `ext` is either `.py` or `.cpp` from the check above
             return _Script(
                 group,
-                cmd,
+                cmd.lexeme,
                 cast(_Script.VALID_EXTENSIONS, ext),  # pyright: ignore [reportUnnecessaryCast]
                 args,
+                range,
             )
         else:
-            return self.append_error(scanner.range(m), _invalid_command_err_msg(cmd))
+            raise _invalid_command_err(cmd)
 
-    def _parse_command_args(self, scanner: _Scanner) -> list[str] | None:
+    def _validate_group_name(self, group: _Token) -> _GroupName:
+        if _GroupName.RE.fullmatch(group.lexeme) is None:
+            raise ParseError(
+                msg=f"invalid group name: `{group.lexeme}`\nGroup name must match the following regular expression: `{_GroupName.RE.pattern}`",
+                range=group.range,
+            )
+        return _GroupName(group.lexeme)
+
+    def _parse_command_args(self, scanner: _Scanner) -> list[str]:
         args: list[str] = []
         while not scanner.is_eol():
-            if m := scanner.scan(_Scanner.STRING_RE):
-                args.append(m.group(1).encode().decode("unicode_escape"))
-            elif m := scanner.scan(_Scanner.WORD_RE):
-                args.append(m.group(0))
+            if t := scanner.next_if(_TokenKind.String):
+                args.append(t.lexeme.encode().decode("unicode_escape"))
+            elif t := scanner.next_if({_TokenKind.Word, _TokenKind.Int}):
+                args.append(t.lexeme)
             else:
-                return self.errors.append(scanner.unexpected_token())
+                raise scanner.unexpected_token()
         return args
 
-    def _expect_eol(self, scanner: _Scanner) -> None:
-        if not scanner.is_eol():
-            self.errors.append(scanner.unexpected_token())
 
-    def append_error(self, range: Range, msg: str) -> None:
-        self.errors.append(ParseError(range=range, msg=msg))
-
-
-@dataclass(kw_only=True, frozen=True, slots=True)
-class ParseError:
+@dataclass(kw_only=True, frozen=True)
+class ParseError(Exception):
     range: Range | None = None
     msg: str
 
@@ -379,8 +500,10 @@ class _Extends:
         return f"@extends subtask {self.stn}"
 
 
-@dataclass(kw_only=True, frozen=True, slots=True)
+@dataclass(frozen=True, slots=True)
 class _GroupName:
+    RE = re.compile(r"[a-zA-Z0-9_-]+")
+
     name: str
 
     def __str__(self) -> str:
@@ -448,8 +571,9 @@ class _CommandCtxt:
 
 
 class _Command(ABC):
-    def __init__(self, group: _GroupName) -> None:
+    def __init__(self, group: _GroupName, range: Range) -> None:
         self._group = group
+        self.range = range
 
     @abstractmethod
     def run(self, cx: _CommandCtxt) -> Result: ...
@@ -458,8 +582,8 @@ class _Command(ABC):
 class _Copy(_Command):
     magic_check = re.compile("([*?[])")
 
-    def __init__(self, group: _GroupName, pattern: str) -> None:
-        super().__init__(group)
+    def __init__(self, group: _GroupName, pattern: str, range: Range) -> None:
+        super().__init__(group, range)
         self._pattern = pattern
 
     def __str__(self) -> str:
@@ -483,8 +607,8 @@ class _Copy(_Command):
 
 
 class _Echo(_Command):
-    def __init__(self, group: _GroupName, args: list[str]) -> None:
-        super().__init__(group)
+    def __init__(self, group: _GroupName, args: list[str], range: Range) -> None:
+        super().__init__(group, range)
         self._args = args
 
     def __str__(self) -> str:
@@ -507,8 +631,9 @@ class _Script(_Command):
         filename: str,
         ext: VALID_EXTENSIONS,
         args: list[str],
+        range: Range,
     ) -> None:
-        super().__init__(group)
+        super().__init__(group, range)
         self._filename = filename
         self._args = args
         self._ext = ext
@@ -572,12 +697,13 @@ class _Script(_Command):
         return [f"{cx.dst_dir.name}-{self._group}-{idx}", *self._args]
 
 
-def _invalid_command_err_msg(cmd: str) -> str:
+def _invalid_command_err(cmd: _Token) -> ParseError:
     extensions = typing.get_args(_Script.VALID_EXTENSIONS)
-    return (
-        f"invalid command `{cmd}`\n"
+    msg = (
+        f"invalid command `{cmd.lexeme}`\n"
         f"The command should be either `copy`, `echo` or a generator script with one of the following extensions {extensions}"
     )
+    return ParseError(msg=msg, range=cmd.range)
 
 
 def _success_with_count_result(count: int) -> Result:
