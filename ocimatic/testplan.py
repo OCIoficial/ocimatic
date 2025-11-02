@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 from ocimatic import ui, utils
 from ocimatic.result import Error, Result, Status
@@ -59,7 +59,7 @@ class Testplan:
     def validators(self) -> SortedDict[Stn, Path | None]:
         basedir = self._path.parent
         return SortedDict(
-            (sti, Path(basedir, st.validator.path) if st.validator else None)
+            (sti, Path(basedir, st.validator.path.lexeme) if st.validator else None)
             for sti, st in self._subtasks.items()
         )
 
@@ -98,7 +98,7 @@ class Testplan:
 
     def _validate_subtasks(
         self,
-        parsed: list[tuple[_SubtaskHeader, list[_Item]]],
+        parsed: list[tuple[SubtaskHeader, list[Item]]],
     ) -> SortedDict[Stn, _Subtask] | ParseError:
         subtasks: SortedDict[Stn, _Subtask] = SortedDict()
         for i, (header, items) in enumerate(parsed, start=1):
@@ -111,7 +111,7 @@ class Testplan:
 
             validator = None
             for item in items:
-                if not isinstance(item, _Validator):
+                if not isinstance(item, Validator):
                     continue
                 if validator is not None:
                     return ParseError(
@@ -120,8 +120,8 @@ class Testplan:
                     )
                 validator = item
 
-            commands = [item for item in items if isinstance(item, _Command)]
-            extends = [item for item in items if isinstance(item, _Extends)]
+            commands = [item for item in items if isinstance(item, Command)]
+            extends = [item for item in items if isinstance(item, Extends)]
 
             subtask = _Subtask(self._dataset_dir, commands, extends, validator, sti)
 
@@ -193,7 +193,7 @@ class _TokenKind(IntEnum):
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
-class _Token:
+class Token:
     range: Range
     lexeme: str
     kind: _TokenKind
@@ -238,7 +238,7 @@ class _Scanner:
         else:
             kind, span = (_TokenKind.Error, (self._pos, self._pos + 1))
         self._pos = span[1]
-        self._next_token = _Token(
+        self._next_token = Token(
             kind=kind,
             lexeme=self._line[span[0] : span[1]],
             range=Range(
@@ -258,17 +258,17 @@ class _Scanner:
         else:
             return self._next_token.kind == peek
 
-    def next_if(self, p: _Peek) -> _Token | None:
+    def next_if(self, p: _Peek) -> Token | None:
         if self.peek(p):
             return self.next()
 
-    def next(self) -> _Token:
+    def next(self) -> Token:
         token = self._next_token
         self._hi = token.range.end
         self._advance()
         return token
 
-    def expect(self, peek: _Peek, expected: list[str] | None = None) -> _Token:
+    def expect(self, peek: _Peek, expected: list[str] | None = None) -> Token:
         if self.peek(peek):
             return self.next()
         else:
@@ -307,7 +307,7 @@ class _Scanner:
 
 class Parser:
     def __init__(self) -> None:
-        self.subtasks: list[tuple[_SubtaskHeader, list[_Item]]] = []
+        self.subtasks: list[tuple[SubtaskHeader, list[Item]]] = []
         self.errors: list[ParseError] = []
 
     def parse(self, content: str) -> None:
@@ -326,7 +326,7 @@ class Parser:
                 continue
 
             match parsed:
-                case _SubtaskHeader() as header:
+                case SubtaskHeader() as header:
                     self.subtasks.append((header, []))
                 case item:
                     if self.subtasks:
@@ -339,7 +339,7 @@ class Parser:
                             ),
                         )
 
-    def _parse_line(self, scanner: _Scanner) -> _SubtaskHeader | _Item:
+    def _parse_line(self, scanner: _Scanner) -> SubtaskHeader | Item:
         if scanner.peek(_TokenKind.OpenBracket):
             return self._parse_header(scanner)
         elif scanner.peek(_TokenKind.Directive):
@@ -349,7 +349,7 @@ class Parser:
         else:
             raise scanner.unexpected_token()
 
-    def _parse_header(self, scanner: _Scanner) -> _SubtaskHeader:
+    def _parse_header(self, scanner: _Scanner) -> SubtaskHeader:
         start = scanner.pos()
         scanner.expect(_TokenKind.OpenBracket)
         scanner.expect("Subtask")
@@ -357,9 +357,9 @@ class Parser:
         scanner.expect(_TokenKind.CloseBracket)
         end = scanner.last_pos()
 
-        return _SubtaskHeader(number=int(num.lexeme), range=Range(start=start, end=end))
+        return SubtaskHeader(number=int(num.lexeme), range=Range(start=start, end=end))
 
-    def _parse_directive(self, scanner: _Scanner) -> _Extends | _Validator:
+    def _parse_directive(self, scanner: _Scanner) -> Extends | Validator:
         if scanner.peek("@extends"):
             return self._parse_extends(scanner)
         elif scanner.peek("@validator"):
@@ -367,23 +367,23 @@ class Parser:
         else:
             raise scanner.unexpected_token(["@extends", "@validator"])
 
-    def _parse_extends(self, scanner: _Scanner) -> _Extends:
+    def _parse_extends(self, scanner: _Scanner) -> Extends:
         start = scanner.pos()
         scanner.expect("@extends")
         scanner.expect("subtask")
         num = scanner.expect(_TokenKind.Num)
         end = scanner.last_pos()
-        return _Extends(stn=Stn(int(num.lexeme)), range=Range(start=start, end=end))
+        return Extends(stn=Stn(int(num.lexeme)), range=Range(start=start, end=end))
 
-    def _parse_validator(self, scanner: _Scanner) -> _Validator:
+    def _parse_validator(self, scanner: _Scanner) -> Validator:
         start = scanner.pos()
         scanner.expect("@validator")
         path = scanner.expect(_TokenKind.Word, ["path"])
         end = scanner.last_pos()
 
-        return _Validator(path=path.lexeme, range=Range(start=start, end=end))
+        return Validator(path=path, range=Range(start=start, end=end))
 
-    def _parse_command(self, scanner: _Scanner) -> _Command:
+    def _parse_command(self, scanner: _Scanner) -> Command:
         start = scanner.pos()
         group = self._validate_group_name(scanner.next())
         scanner.expect(";")
@@ -399,28 +399,21 @@ class Parser:
                     msg="the `copy` command expects exactly one argument.",
                     range=Range(start=cmd_start, end=end),
                 )
-            return _Copy(group, args[0], range)
+            return Copy(group, args[0], range)
         elif cmd.lexeme == "echo":
-            return _Echo(group, args, range)
-        elif (ext := Path(cmd.lexeme).suffix) in (".py", ".cpp"):
-            # mypy can't tell `ext` is either `.py` or `.cpp` from the check above
-            return _Script(
-                group,
-                cmd.lexeme,
-                cast(_Script.VALID_EXTENSIONS, ext),  # pyright: ignore [reportUnnecessaryCast]
-                args,
-                range,
-            )
+            return Echo(group, args, range)
+        elif Path(cmd.lexeme).suffix in (".py", ".cpp"):
+            return Script(group, cmd, args, range)
         else:
             raise _invalid_command_err(cmd)
 
-    def _validate_group_name(self, group: _Token) -> _GroupName:
-        if _GroupName.RE.fullmatch(group.lexeme) is None:
+    def _validate_group_name(self, group: Token) -> GroupName:
+        if GroupName.RE.fullmatch(group.lexeme) is None:
             raise ParseError(
-                msg=f"invalid group name: `{group.lexeme}`\nGroup name must match the following regular expression: `{_GroupName.RE.pattern}`",
+                msg=f"invalid group name: `{group.lexeme}`\nGroup name must match the following regular expression: `{GroupName.RE.pattern}`",
                 range=group.range,
             )
-        return _GroupName(group.lexeme)
+        return GroupName(group.lexeme)
 
     def _parse_command_args(self, scanner: _Scanner) -> list[str]:
         args: list[str] = []
@@ -446,7 +439,7 @@ class ParseError(Exception):
             return self.msg
 
 
-type _Item = _Validator | _Extends | _Command
+type Item = Validator | Extends | Command
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
@@ -468,7 +461,7 @@ class Range:
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
-class _SubtaskHeader:
+class SubtaskHeader:
     number: int
     range: Range
 
@@ -477,18 +470,18 @@ class _SubtaskHeader:
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
-class _Validator:
+class Validator:
     """A validator directive can be used to define an input validator for a subtask."""
 
-    path: str
+    path: Token
     range: Range
 
     def __str__(self) -> str:
-        return f"@validator {self.path}"
+        return f"@validator {self.path.lexeme}"
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
-class _Extends:
+class Extends:
     """An extends directive can be used to include all tests from another subtask."""
 
     stn: Stn
@@ -499,7 +492,7 @@ class _Extends:
 
 
 @dataclass(frozen=True, slots=True)
-class _GroupName:
+class GroupName:
     RE = re.compile(r"[a-zA-Z0-9_-]+")
 
     name: str
@@ -512,9 +505,9 @@ class _Subtask:
     def __init__(
         self,
         dataset_dir: Path,
-        commands: list[_Command],
-        extends: list[_Extends],
-        validator: _Validator | None,
+        commands: list[Command],
+        extends: list[Extends],
+        validator: Validator | None,
         stn: Stn,
     ) -> None:
         self._dst_dir = Path(dataset_dir, f"st{stn}")
@@ -549,9 +542,9 @@ class _CommandCtxt:
     cwd: Path
     task_dir: Path
     dst_dir: Path
-    tests_in_group: Counter[_GroupName]
+    tests_in_group: Counter[GroupName]
 
-    def next_file(self, group: _GroupName) -> Path:
+    def next_file(self, group: GroupName) -> Path:
         self.tests_in_group[group] += 1
         idx = self.tests_in_group[group]
         return Path(self.dst_dir, f"{group}-{idx}.in")
@@ -559,17 +552,20 @@ class _CommandCtxt:
     def script_path(self, filename: str) -> Path:
         return self.cwd / filename
 
-    def load_script(self, filename: str, ext: _Script.VALID_EXTENSIONS) -> SourceCode:
+    def load_script(self, filename: str) -> SourceCode:
         path = self.script_path(filename)
-        match ext:
+        match path.suffix:
             case ".py":
                 return PythonSource(path)
             case ".cpp":
                 return CppSource(path)
+            case _:
+                # This is validated during parsing
+                raise ValueError(f"Unsupported file type: {path.suffix}")
 
 
-class _Command(ABC):
-    def __init__(self, group: _GroupName, range: Range) -> None:
+class Command(ABC):
+    def __init__(self, group: GroupName, range: Range) -> None:
         self._group = group
         self.range = range
 
@@ -577,10 +573,10 @@ class _Command(ABC):
     def run(self, cx: _CommandCtxt) -> Result: ...
 
 
-class _Copy(_Command):
+class Copy(Command):
     magic_check = re.compile("([*?[])")
 
-    def __init__(self, group: _GroupName, pattern: str, range: Range) -> None:
+    def __init__(self, group: GroupName, pattern: str, range: Range) -> None:
         super().__init__(group, range)
         self._pattern = pattern
 
@@ -601,11 +597,11 @@ class _Copy(_Command):
             return Result.fail(short_msg="Error when copying file", long_msg=str(e))
 
     def has_magic(self) -> bool:
-        return _Copy.magic_check.search(self._pattern) is not None
+        return Copy.magic_check.search(self._pattern) is not None
 
 
-class _Echo(_Command):
-    def __init__(self, group: _GroupName, args: list[str], range: Range) -> None:
+class Echo(Command):
+    def __init__(self, group: GroupName, args: list[str], range: Range) -> None:
         super().__init__(group, range)
         self._args = args
 
@@ -619,31 +615,28 @@ class _Echo(_Command):
             return _success_with_count_result(1)
 
 
-class _Script(_Command):
+class Script(Command):
     VALID_EXTENSIONS = Literal[".py", ".cpp"]
-    _ext: VALID_EXTENSIONS
 
     def __init__(
         self,
-        group: _GroupName,
-        filename: str,
-        ext: VALID_EXTENSIONS,
+        group: GroupName,
+        cmd: Token,
         args: list[str],
         range: Range,
     ) -> None:
         super().__init__(group, range)
-        self._filename = filename
+        self.cmd = cmd
         self._args = args
-        self._ext = ext
 
     def __str__(self) -> str:
         args = " ".join(self._args)
-        script = self._filename
+        script = self.cmd.lexeme
         return f"{script} {args}"
 
     @ui.work("gen", "{0}")
     def run(self, cx: _CommandCtxt) -> Result:
-        script = cx.load_script(self._filename, self._ext)
+        script = cx.load_script(self.cmd.lexeme)
         if isinstance(runnable := script.build(), BuildError):
             return Result.fail(
                 short_msg="failed to build generator",
@@ -678,7 +671,7 @@ class _Script(_Command):
         if ret != 0:
             msg = ret_code_to_str(ret)
             args_fmt = " ".join(args)
-            script_path = utils.relative_to_cwd(cx.script_path(self._filename))
+            script_path = utils.relative_to_cwd(cx.script_path(self.cmd.lexeme))
             cmd = f"$ {script_path} {args_fmt}"
             long_msg = f"{cmd}\n{process.stderr.read()}" if process.stderr else cmd
             return Result.fail(short_msg=msg, long_msg=long_msg)
@@ -695,8 +688,8 @@ class _Script(_Command):
         return [f"{cx.dst_dir.name}-{self._group}-{idx}", *self._args]
 
 
-def _invalid_command_err(cmd: _Token) -> ParseError:
-    extensions = typing.get_args(_Script.VALID_EXTENSIONS)
+def _invalid_command_err(cmd: Token) -> ParseError:
+    extensions = typing.get_args(Script.VALID_EXTENSIONS)
     msg = (
         f"invalid command `{cmd.lexeme}`\n"
         f"The command should be either `copy`, `echo` or a generator script with one of the following extensions {extensions}"
