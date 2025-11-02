@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from enum import IntEnum
 import re
 import shutil
 import sys
 import typing
-from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -199,7 +199,7 @@ class Token:
     kind: _TokenKind
 
 
-type _Peek = _TokenKind | set[_TokenKind] | str
+type _Peek = _TokenKind | list[_TokenKind] | str
 
 
 class _Scanner:
@@ -253,7 +253,7 @@ class _Scanner:
     def peek(self, peek: _Peek) -> bool:
         if isinstance(peek, str):
             return self._next_token.lexeme == peek
-        elif isinstance(peek, set):
+        elif isinstance(peek, list):
             return any(self._next_token.kind == k for k in peek)
         else:
             return self._next_token.kind == peek
@@ -278,7 +278,7 @@ class _Scanner:
     def _peek_to_expected(peek: _Peek) -> list[str]:
         if isinstance(peek, str):
             return [peek]
-        elif isinstance(peek, set):
+        elif isinstance(peek, list):
             return [str(k) for k in peek]
         else:
             return [str(peek)]
@@ -389,7 +389,7 @@ class Parser:
         scanner.expect(";")
         cmd_start = scanner.pos()
         cmd = scanner.expect(_TokenKind.Word, ["copy", "echo", "generator script"])
-        args = self._parse_command_args(scanner)
+        args = self._parse_args(scanner)
         end = scanner.last_pos()
 
         range = Range(start=start, end=end)
@@ -399,11 +399,11 @@ class Parser:
                     msg="the `copy` command expects exactly one argument.",
                     range=Range(start=cmd_start, end=end),
                 )
-            return Copy(group, args[0], range)
+            return Copy(group, range, args[0])
         elif cmd.lexeme == "echo":
-            return Echo(group, args, range)
+            return Echo(group, range, args)
         elif Path(cmd.lexeme).suffix in (".py", ".cpp"):
-            return Script(group, cmd, args, range)
+            return Script(group, range, cmd, args)
         else:
             raise _invalid_command_err(cmd)
 
@@ -415,12 +415,12 @@ class Parser:
             )
         return GroupName(group.lexeme)
 
-    def _parse_command_args(self, scanner: _Scanner) -> list[str]:
+    def _parse_args(self, scanner: _Scanner) -> list[str]:
         args: list[str] = []
         while not scanner.is_eol():
             if t := scanner.next_if(_TokenKind.String):
-                args.append(t.lexeme.encode().decode("unicode_escape"))
-            elif t := scanner.next_if({_TokenKind.Word, _TokenKind.Num}):
+                args.append(t.lexeme.strip('"').encode().decode("unicode_escape"))
+            elif t := scanner.next_if([_TokenKind.Word, _TokenKind.Num]):
                 args.append(t.lexeme)
             else:
                 raise scanner.unexpected_token()
@@ -564,73 +564,65 @@ class _CommandCtxt:
                 raise ValueError(f"Unsupported file type: {path.suffix}")
 
 
+@dataclass(frozen=True)
 class Command(ABC):
-    def __init__(self, group: GroupName, range: Range) -> None:
-        self._group = group
-        self.range = range
+    group: GroupName
+    range: Range
 
     @abstractmethod
     def run(self, cx: _CommandCtxt) -> Result: ...
 
 
+@dataclass(frozen=True)
 class Copy(Command):
     magic_check = re.compile("([*?[])")
 
-    def __init__(self, group: GroupName, pattern: str, range: Range) -> None:
-        super().__init__(group, range)
-        self._pattern = pattern
+    group: GroupName
+    pattern: str
 
     def __str__(self) -> str:
-        return self._pattern
+        return self.pattern
 
     @ui.work("copy", "{0}")
     def run(self, cx: _CommandCtxt) -> Result:
-        files = list(cx.task_dir.glob(self._pattern))
+        files = list(cx.task_dir.glob(self.pattern))
         if not files:
             msg = "No file matches the pattern" if self.has_magic() else "No such file"
             return Result.fail(short_msg=msg)
         try:
             for file in files:
-                shutil.copy(file, cx.next_file(self._group))
+                shutil.copy(file, cx.next_file(self.group))
             return _success_with_count_result(len(files))
         except Exception as e:
             return Result.fail(short_msg="Error when copying file", long_msg=str(e))
 
     def has_magic(self) -> bool:
-        return Copy.magic_check.search(self._pattern) is not None
+        return Copy.magic_check.search(self.pattern) is not None
 
 
+@dataclass(frozen=True)
 class Echo(Command):
-    def __init__(self, group: GroupName, args: list[str], range: Range) -> None:
-        super().__init__(group, range)
-        self._args = args
+    args: list[str]
 
     def __str__(self) -> str:
-        return str(self._args)
+        return str(self.args)
 
     @ui.work("echo", "{0}")
     def run(self, cx: _CommandCtxt) -> Result:
-        with cx.next_file(self._group).open("w") as test_file:
-            test_file.write(" ".join(self._args) + "\n")
+        with cx.next_file(self.group).open("w") as test_file:
+            test_file.write(" ".join(self.args) + "\n")
             return _success_with_count_result(1)
 
 
+@dataclass(frozen=True)
 class Script(Command):
     VALID_EXTENSIONS = Literal[".py", ".cpp"]
 
-    def __init__(
-        self,
-        group: GroupName,
-        cmd: Token,
-        args: list[str],
-        range: Range,
-    ) -> None:
-        super().__init__(group, range)
-        self.cmd = cmd
-        self._args = args
+    cmd: Token
+    args: list[str]
 
     def __str__(self) -> str:
-        args = " ".join(self._args)
+        args = " ".join(self.args)
         script = self.cmd.lexeme
         return f"{script} {args}"
 
@@ -661,7 +653,7 @@ class Script(Command):
                 else:
                     if current_file is None:
                         count += 1
-                        current_file = cx.next_file(self._group).open("w")
+                        current_file = cx.next_file(self.group).open("w")
                     current_file.write(char)
         finally:
             if current_file:
@@ -684,8 +676,8 @@ class Script(Command):
     def _args_with_seed(self, cx: _CommandCtxt) -> list[str]:
         # We seed the script with the next `idx`, this guarantees it is different
         # every time, even if the script generates more than one file.
-        idx = cx.tests_in_group[self._group] + 1
-        return [f"{cx.dst_dir.name}-{self._group}-{idx}", *self._args]
+        idx = cx.tests_in_group[self.group] + 1
+        return [f"{cx.dst_dir.name}-{self.group}-{idx}", *self.args]
 
 
 def _invalid_command_err(cmd: Token) -> ParseError:
