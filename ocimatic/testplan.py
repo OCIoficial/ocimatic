@@ -35,7 +35,7 @@ class Testplan:
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
 
-        parser = _Parser()
+        parser = Parser()
         parser.parse(self._path.read_text())
 
         err_msg = f"Error when parsing testplan: `{utils.relative_to_cwd(self._path)}`"
@@ -224,7 +224,7 @@ class _Scanner:
         return m
 
 
-class _Parser:
+class Parser:
     def __init__(self) -> None:
         self.subtasks: list[tuple[_SubtaskHeader, list[_Item]]] = []
         self.errors: list[ParseError] = []
@@ -232,7 +232,7 @@ class _Parser:
     def parse(self, content: str) -> None:
         header = None
         items: list[_Item] = []
-        for lineno, line in enumerate(content.splitlines(), 1):
+        for lineno, line in enumerate(content.splitlines()):
             scanner = _Scanner(lineno, line)
 
             if m := scanner.scan(_Scanner.HEADER_RE):
@@ -242,14 +242,13 @@ class _Parser:
                 number = int(m.group(1))
                 header = _SubtaskHeader(number=number, range=scanner.range(m))
                 items = []
-            elif header is None:
-                self.append_error(
-                    scanner.line_range(),
-                    "unexpected line before first subtask header",
-                )
-                continue
             elif (item := self._parse_item(scanner)) is not None:
                 items.append(item)
+                if header is None:
+                    self.append_error(
+                        scanner.line_range(),
+                        "unexpected item before first subtask",
+                    )
             self._expect_eol(scanner)
 
         if header is not None:
@@ -337,7 +336,7 @@ class Position:
     column: int
 
     def __str__(self) -> str:
-        return f"{self.line}:{self.column}"
+        return f"{self.line + 1}:{self.column + 1}"
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)

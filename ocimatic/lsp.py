@@ -2,22 +2,43 @@ from typing import Any
 from lsprotocol import types
 
 from pygls.lsp.server import LanguageServer
-import pygls.cli
+from pygls.workspace import TextDocument
+
+from ocimatic.testplan import Parser
+from ocimatic import testplan
 
 type URI = str
 type Version = int
 
 
-def start_server() -> None:
-    pygls.cli.start_server(server)
-
-
 class OcimaticServer(LanguageServer):
-    """Language server demonstrating "pull-model" diagnostics."""
-
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)  # pyright: ignore[reportUnknownMemberType]
         self.diagnostics: dict[URI, tuple[Version, list[types.Diagnostic]]] = {}
+
+    def parse(self, version: Version, doc: TextDocument) -> None:
+        parser = Parser()
+        parser.parse(doc.source)
+
+        diagnostics = [
+            types.Diagnostic(
+                range=map_range(error.range),
+                message=error.msg,
+                severity=types.DiagnosticSeverity.Error,
+            )
+            for error in parser.errors
+            if error.range is not None
+        ]
+
+        self.diagnostics[doc.uri] = (version, diagnostics)
+
+
+def map_position(pos: testplan.Position) -> types.Position:
+    return types.Position(line=pos.line, character=pos.column)
+
+
+def map_range(range: testplan.Range) -> types.Range:
+    return types.Range(start=map_position(range.start), end=map_position(range.end))
 
 
 server = OcimaticServer("ocimatic-lsp", "v1")
@@ -25,12 +46,14 @@ server = OcimaticServer("ocimatic-lsp", "v1")
 
 @server.feature(types.TEXT_DOCUMENT_DID_OPEN)
 def did_open(ls: OcimaticServer, params: types.DidOpenTextDocumentParams) -> None:
-    _doc = ls.workspace.get_text_document(params.text_document.uri)
+    doc = ls.workspace.get_text_document(params.text_document.uri)
+    ls.parse(params.text_document.version, doc)
 
 
 @server.feature(types.TEXT_DOCUMENT_DID_CHANGE)
 def did_change(ls: OcimaticServer, params: types.DidOpenTextDocumentParams) -> None:
-    _doc = ls.workspace.get_text_document(params.text_document.uri)
+    doc = ls.workspace.get_text_document(params.text_document.uri)
+    ls.parse(params.text_document.version, doc)
 
 
 @server.feature(
