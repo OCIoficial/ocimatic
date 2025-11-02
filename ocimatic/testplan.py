@@ -168,7 +168,7 @@ class _TokenKind(IntEnum):
     Directive = 2
     Word = 3
     String = 4
-    Int = 5
+    Num = 5
     Eol = 6
     Error = 7
 
@@ -184,8 +184,8 @@ class _TokenKind(IntEnum):
                 return "word"
             case _TokenKind.String:
                 return "string"
-            case _TokenKind.Int:
-                return "int"
+            case _TokenKind.Num:
+                return "number"
             case _TokenKind.Eol:
                 return "end of line"
             case _TokenKind.Error:
@@ -206,9 +206,6 @@ class _Scanner:
     COMMENT_RE = re.compile(r"\s*(#.*)?")
     HEADER_RE = re.compile(r"\[\s*Subtask\s+(\d+)\s*\]")
     STRING_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
-    EXTENDS_RE = re.compile(r"@extends\s*subtask\s*(\d+)")
-    VALIDATOR_RE = re.compile(r"@validator\s*(\S+)")
-
     DIRECTIVE_RE = re.compile(r"@[a-z]+")
     INT_RE = re.compile(r"\d+")
     WORD_RE = re.compile(r"[a-zA-Z0-9_\./*-]+")
@@ -218,9 +215,9 @@ class _Scanner:
         self._pos = 0
         self._line = line
         self._hi: Position = Position(line=lineno, column=0)
-        self._scan()
+        self._advance()
 
-    def _scan(self) -> None:
+    def _advance(self) -> None:
         if m := _Scanner.COMMENT_RE.match(self._line, pos=self._pos):
             self._pos = m.end(0)
 
@@ -233,7 +230,7 @@ class _Scanner:
         elif m := _Scanner.DIRECTIVE_RE.match(self._line, pos=self._pos):
             kind, span = (_TokenKind.Directive, m.span(0))
         elif m := _Scanner.INT_RE.match(self._line, pos=self._pos):
-            kind, span = (_TokenKind.Int, m.span(0))
+            kind, span = (_TokenKind.Num, m.span(0))
         elif m := _Scanner.WORD_RE.match(self._line, pos=self._pos):
             kind, span = (_TokenKind.Word, m.span(0))
         elif m := _Scanner.STRING_RE.match(self._line, pos=self._pos):
@@ -268,23 +265,23 @@ class _Scanner:
     def next(self) -> _Token:
         token = self._next_token
         self._hi = token.range.end
-        self._scan()
+        self._advance()
         return token
 
-    def expect(self, peek: _Peek, expected: set[str] | None = None) -> _Token:
+    def expect(self, peek: _Peek, expected: list[str] | None = None) -> _Token:
         if self.peek(peek):
             return self.next()
         else:
             raise self.unexpected_token(expected or self._peek_to_expected(peek))
 
     @staticmethod
-    def _peek_to_expected(peek: _Peek) -> set[str]:
+    def _peek_to_expected(peek: _Peek) -> list[str]:
         if isinstance(peek, str):
-            return {peek}
+            return [peek]
         elif isinstance(peek, set):
-            return {str(k) for k in peek}
+            return [str(k) for k in peek]
         else:
-            return {str(peek)}
+            return [str(peek)]
 
     def pos(self) -> Position:
         """Return the start position of the next token."""
@@ -294,12 +291,13 @@ class _Scanner:
         """Return the end position of the previously yielded token."""
         return self._hi
 
-    def unexpected_token(self, expected: set[str] | None = None) -> ParseError:
+    def unexpected_token(self, expected: list[str] | None = None) -> ParseError:
         if expected:
+            expected = [f"'{s}'" for s in expected]
             if len(expected) == 1:
-                msg = f"expected '{next(iter(expected))}'"
+                msg = f"expected {expected[0]}"
             else:
-                msg = f"expected one of {expected}"
+                msg = f"expected {', '.join(expected[:-1])} or {expected[-1]}"
         elif self.is_eol():
             msg = "unexpected end of line"
         else:
@@ -349,13 +347,13 @@ class Parser:
         elif scanner.peek(_TokenKind.Word):
             return self._parse_command(scanner)
         else:
-            raise scanner.unexpected_token({"header", "directive", "command"})
+            raise scanner.unexpected_token()
 
     def _parse_header(self, scanner: _Scanner) -> _SubtaskHeader:
         start = scanner.pos()
         scanner.expect(_TokenKind.OpenBracket)
         scanner.expect("Subtask")
-        num = scanner.expect(_TokenKind.Int)
+        num = scanner.expect(_TokenKind.Num)
         scanner.expect(_TokenKind.CloseBracket)
         end = scanner.last_pos()
 
@@ -367,20 +365,20 @@ class Parser:
         elif scanner.peek("@validator"):
             return self._parse_validator(scanner)
         else:
-            raise scanner.unexpected_token({"@extends", "@validator"})
+            raise scanner.unexpected_token(["@extends", "@validator"])
 
     def _parse_extends(self, scanner: _Scanner) -> _Extends:
         start = scanner.pos()
         scanner.expect("@extends")
         scanner.expect("subtask")
-        num = scanner.expect(_TokenKind.Int)
+        num = scanner.expect(_TokenKind.Num)
         end = scanner.last_pos()
         return _Extends(stn=Stn(int(num.lexeme)), range=Range(start=start, end=end))
 
     def _parse_validator(self, scanner: _Scanner) -> _Validator:
         start = scanner.pos()
         scanner.expect("@validator")
-        path = scanner.expect(_TokenKind.Word)
+        path = scanner.expect(_TokenKind.Word, ["path"])
         end = scanner.last_pos()
 
         return _Validator(path=path.lexeme, range=Range(start=start, end=end))
@@ -390,7 +388,7 @@ class Parser:
         group = self._validate_group_name(scanner.next())
         scanner.expect(";")
         cmd_start = scanner.pos()
-        cmd = scanner.expect(_TokenKind.Word, {"copy", "echo", "script"})
+        cmd = scanner.expect(_TokenKind.Word, ["copy", "echo", "generator script"])
         args = self._parse_command_args(scanner)
         end = scanner.last_pos()
 
@@ -429,7 +427,7 @@ class Parser:
         while not scanner.is_eol():
             if t := scanner.next_if(_TokenKind.String):
                 args.append(t.lexeme.encode().decode("unicode_escape"))
-            elif t := scanner.next_if({_TokenKind.Word, _TokenKind.Int}):
+            elif t := scanner.next_if({_TokenKind.Word, _TokenKind.Num}):
                 args.append(t.lexeme)
             else:
                 raise scanner.unexpected_token()
