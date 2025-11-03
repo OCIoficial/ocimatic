@@ -22,14 +22,32 @@ SYNTAX_ERROR = 1
 @dataclass
 class Testplan:
     version: Version
-    paths: list[tuple[types.Range, Path]]
+    paths: dict[Path, list[types.Range]]
     subtasks: list[tuple[testplan.SubtaskHeader, list[testplan.Item]]]
-    diagnostics: list[types.Diagnostic]
+    syntax_errors: list[types.Diagnostic]
 
     def path_at_position(self, pos: types.Position) -> Path | None:
-        for range, path in self.paths:
-            if range.start <= pos <= range.end:
-                return path
+        for path, ranges in self.paths.items():
+            for range in ranges:
+                if range.start <= pos <= range.end:
+                    return path
+
+    def all_diagnostics(self) -> list[types.Diagnostic]:
+        return [*self.syntax_errors, *self.file_not_founds()]
+
+    def file_not_founds(self) -> list[types.Diagnostic]:
+        return [
+            types.Diagnostic(
+                code=FILE_NOT_FOUND,
+                range=range,
+                message="file not found",
+                severity=types.DiagnosticSeverity.Error,
+                data=path,  # we recover the data in the quick fix
+            )
+            for path, ranges in self.paths.items()
+            if not path.exists()
+            for range in ranges
+        ]
 
 
 class OcimaticServer(LanguageServer):
@@ -44,46 +62,30 @@ class OcimaticServer(LanguageServer):
         if testplan_path := to_fs_path(doc.uri):
             paths = _find_paths(Path(testplan_path).parent, parser.subtasks)
         else:
-            paths = []
-
-        # Parse errors
-        diagnostics = [
-            types.Diagnostic(
-                code=SYNTAX_ERROR,
-                range=_map_range(error.range),
-                message=error.msg,
-                severity=types.DiagnosticSeverity.Error,
-            )
-            for error in parser.errors
-            if error.range is not None
-        ]
-
-        # File not founds
-        diagnostics.extend(
-            types.Diagnostic(
-                code=FILE_NOT_FOUND,
-                range=range,
-                message="file not found",
-                severity=types.DiagnosticSeverity.Error,
-                data=path,  # we recover the data in the quick fix
-            )
-            for range, path in paths
-            if not path.exists()
-        )
+            paths = {}
 
         self.testplans[doc.uri] = Testplan(
             version=version,
             paths=paths,
             subtasks=parser.subtasks,
-            diagnostics=diagnostics,
+            syntax_errors=[
+                types.Diagnostic(
+                    code=SYNTAX_ERROR,
+                    range=_map_range(error.range),
+                    message=error.msg,
+                    severity=types.DiagnosticSeverity.Error,
+                )
+                for error in parser.errors
+                if error.range is not None
+            ],
         )
 
 
 def _find_paths(
     parent: Path,
     subtasks: list[tuple[testplan.SubtaskHeader, list[testplan.Item]]],
-) -> list[tuple[types.Range, Path]]:
-    paths: list[tuple[types.Range, Path]] = []
+) -> dict[Path, list[types.Range]]:
+    paths: dict[Path, list[types.Range]] = {}
     for _, items in subtasks:
         for item in items:
             match item:
@@ -93,7 +95,8 @@ def _find_paths(
                     t = path
                 case _:
                     continue
-            paths.append((_map_range(t.range), Path(parent, t.lexeme)))
+            path = Path(parent, t.lexeme)
+            paths.setdefault(path, []).append(_map_range(t.range))
     return paths
 
 
@@ -124,7 +127,7 @@ def did_change(ls: OcimaticServer, params: types.DidOpenTextDocumentParams) -> N
     types.TEXT_DOCUMENT_DIAGNOSTIC,
     types.DiagnosticOptions(
         identifier="pull-diagnostics",
-        inter_file_dependencies=False,
+        inter_file_dependencies=True,
         workspace_diagnostics=False,
     ),
 )
@@ -142,7 +145,7 @@ def document_diagnostic(
         return types.RelatedUnchangedDocumentDiagnosticReport(result_id)
 
     return types.RelatedFullDocumentDiagnosticReport(
-        items=testplan.diagnostics,
+        items=testplan.all_diagnostics(),
         result_id=result_id,
     )
 
