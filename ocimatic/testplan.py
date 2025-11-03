@@ -585,7 +585,7 @@ class Copy(Command):
 
     @ui.work("copy", "{0}")
     def run(self, cx: _CommandCtxt) -> Result:
-        files = list(cx.task_dir.glob(self.pattern))
+        files = sorted(cx.task_dir.glob(self.pattern))
         if not files:
             msg = "No file matches the pattern" if self.has_magic() else "No such file"
             return Result.fail(short_msg=msg)

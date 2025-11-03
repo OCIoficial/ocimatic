@@ -11,9 +11,6 @@ export async function activate(_context: vscode.ExtensionContext) {
   // Client options
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "ocimatic-testplan" }],
-    synchronize: {
-      fileEvents: vscode.workspace.createFileSystemWatcher("**/*.testplan.txt"),
-    },
   };
 
   // Create and start the language client
