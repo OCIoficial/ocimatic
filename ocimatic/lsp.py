@@ -132,8 +132,6 @@ def document_diagnostic(
     ls: OcimaticServer,
     params: types.DocumentDiagnosticParams,
 ) -> types.DocumentDiagnosticReport | None:
-    # logging.info("%s", params)
-
     if (uri := params.text_document.uri) not in ls.testplans:
         return
 
@@ -179,18 +177,20 @@ def goto_definition(
     types.TEXT_DOCUMENT_CODE_ACTION,
     types.CodeActionOptions(code_action_kinds=[types.CodeActionKind.QuickFix]),
 )
-def code_actions(
-    ls: OcimaticServer,
-    params: types.CodeActionParams,
-) -> types.CodeAction | None:
+def code_actions(params: types.CodeActionParams) -> list[types.CodeAction] | None:
     for diagnostic in params.context.diagnostics:
         if (
             diagnostic.code == FILE_NOT_FOUND
             and isinstance(diagnostic.data, str)
             and (uri := from_fs_path(diagnostic.data))
         ):
-            return types.CodeAction(
-                title="create file",
-                edit=types.WorkspaceEdit(document_changes=[types.CreateFile(uri=uri)]),
-                diagnostics=[diagnostic],
-            )
+            return [
+                types.CodeAction(
+                    title="Create File",
+                    kind=types.CodeActionKind.QuickFix,
+                    edit=types.WorkspaceEdit(
+                        document_changes=[types.CreateFile(uri=uri)],
+                    ),
+                    diagnostics=[diagnostic],
+                ),
+            ]

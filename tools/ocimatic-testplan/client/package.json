@@ -1,0 +1,19 @@
+{
+  "name": "ocimatic-extension",
+  "description": "Support for ocimatic",
+  "license": "MIT",
+  "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OCIoficial/ocimatic"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.100.0"
+  }
+}
