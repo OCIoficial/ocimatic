@@ -204,10 +204,8 @@ type _Peek = _TokenKind | list[_TokenKind] | str
 
 class _Scanner:
     COMMENT_RE = re.compile(r"\s*(#.*)?")
-    HEADER_RE = re.compile(r"\[\s*Subtask\s+(\d+)\s*\]")
     STRING_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
     DIRECTIVE_RE = re.compile(r"@[a-z]+")
-    INT_RE = re.compile(r"\d+")
     WORD_RE = re.compile(r"[a-zA-Z0-9_\./*-]+")
 
     def __init__(self, lineno: int, line: str) -> None:
@@ -229,10 +227,11 @@ class _Scanner:
             kind, span = (_TokenKind.CloseBracket, (self._pos, self._pos + 1))
         elif m := _Scanner.DIRECTIVE_RE.match(self._line, pos=self._pos):
             kind, span = (_TokenKind.Directive, m.span(0))
-        elif m := _Scanner.INT_RE.match(self._line, pos=self._pos):
-            kind, span = (_TokenKind.Num, m.span(0))
         elif m := _Scanner.WORD_RE.match(self._line, pos=self._pos):
-            kind, span = (_TokenKind.Word, m.span(0))
+            if m.group(0).isnumeric():
+                kind, span = (_TokenKind.Num, m.span(0))
+            else:
+                kind, span = (_TokenKind.Word, m.span(0))
         elif m := _Scanner.STRING_RE.match(self._line, pos=self._pos):
             kind, span = (_TokenKind.String, m.span(0))
         else:
