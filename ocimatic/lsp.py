@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import fnmatch
 import logging
 from pathlib import Path
 from typing import Any
@@ -169,35 +168,11 @@ def initialized(ls: OcimaticServer, params: types.InitializeParams) -> None:
     )
 
 
-def _matches_watch_kind(change_type: types.FileChangeType, watch_kind: int) -> bool:
-    bit_value = 1 << (change_type.value - 1)  # 1→1, 2→2, 3→4
-    return (watch_kind & bit_value) != 0
-
-
-def _matches_watcher(ev: types.FileEvent, watcher: types.FileSystemWatcher) -> bool:
-    if not (kind := watcher.kind) or not _matches_watch_kind(ev.type, kind):
-        return False
-    if not (path := to_fs_path(ev.uri)):
-        return False
-    if not isinstance(pat := watcher.glob_pattern, str):
-        return False
-    if not fnmatch.fnmatch(path, pat):
-        return False
-    return False
-
-
-def _is_watched(ev: types.FileEvent) -> bool:
-    return any(_matches_watcher(ev, watcher) for watcher in WATCHERS)
-
-
 @server.feature(types.WORKSPACE_DID_CHANGE_WATCHED_FILES)
 async def did_change_watched_files(
     ls: OcimaticServer,
-    params: types.DidChangeWatchedFilesParams,
+    _params: types.DidChangeWatchedFilesParams,
 ) -> None:
-    # zed doesn't honor the watchers so we check here
-    if any(not _is_watched(f) for f in params.changes):
-        return
     await ls.workspace_diagnostic_refresh_async(None)
 
 
@@ -206,7 +181,7 @@ async def did_change_watched_files(
     types.DiagnosticRegistrationOptions(
         identifier="pull-diagnostics",
         inter_file_dependencies=False,
-        workspace_diagnostics=False,
+        workspace_diagnostics=True,
     ),
 )
 def document_diagnostic(
