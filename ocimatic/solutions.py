@@ -1,21 +1,21 @@
 from __future__ import annotations
 
+import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-import subprocess
-from typing import TextIO
-import re
+from typing import Protocol, Self, TextIO
 
 from ocimatic import ui, utils
 from ocimatic.checkers import Checker
 from ocimatic.dataset import (
     Dataset,
-    Outcome,
     DatasetResults,
     GroupResults,
+    Outcome,
     RunMode,
 )
-from ocimatic.result import Result, Status, Error
+from ocimatic.result import Error, Result, Status
 from ocimatic.source_code import (
     BuildError,
     CppSource,
@@ -108,7 +108,7 @@ class Solution:
         if not self.is_partial:
             return SortedDict((sti, Outcome.OK) for sti in dataset.subtasks())
 
-        if isinstance(comments := _parse_comments(self.source), Error):
+        if isinstance(comments := _parse_comments(self.source, ExpectedComment), Error):
             return comments
         match len(comments):
             case 0:
@@ -229,18 +229,25 @@ class Solution:
         return self._source
 
     def should_include_in_stats(self) -> bool:
-        return not isinstance(self.source, PythonSource)
+        if isinstance(comments := _parse_comments(self.source, IncludeInStats), Error):
+            comments = []
+        if len(comments) > 0:
+            return comments[0].value
+        else:
+            return not isinstance(self.source, PythonSource)
 
 
-def _parse_comments(source: SourceCode) -> list[ExpectedComment] | Error:
-    pattern = re.compile(r"\s*@ocimatic::expected\s+(.*)")
-    comments: list[ExpectedComment] = []
+def _parse_comments[T: Comment](source: SourceCode, t: type[T]) -> list[T] | Error:
+    pattern = re.compile(r"\s*@ocimatic::(\S+)\s+(.*)")
+
+    comments: list[T] = []
     for comment in source.comments_iter():
-        m = pattern.match(comment)
-        if not m:
+        if not (m := pattern.match(comment)):
             continue
-        parsed = ExpectedComment.parse(m.group(1))
-        if isinstance(parsed, Error):
+        if m.group(1) != t.name():
+            continue
+
+        if isinstance(parsed := t.parse(m.group(2)), Error):
             path = utils.relative_to_cwd(source.file)
             return Error(
                 f"Invalid comment `{m.group(0)}` in {path}\n" + parsed.msg,
@@ -250,14 +257,46 @@ def _parse_comments(source: SourceCode) -> list[ExpectedComment] | Error:
     return comments
 
 
+class Comment(Protocol):
+    @classmethod
+    def name(cls) -> str: ...
+
+    @classmethod
+    def parse(cls, s: str) -> Self | Error: ...
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class IncludeInStats:
+    value: bool
+
+    BOOL_RE = re.compile(r"\s*(true|false)\s*")
+
+    @classmethod
+    def name(cls) -> str:
+        return "include-in-stats"
+
+    @classmethod
+    def parse(cls, s: str) -> IncludeInStats | Error:
+        if not (m := IncludeInStats.BOOL_RE.match(s)):
+            return Error("Expected 'true' or 'false'")
+
+        return IncludeInStats(value=m.group(1) == "true")
+
+
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ExpectedComment:
+    """Expected outcome for each subtask."""
+
     ITEM_RE = re.compile(r"\s*st(\d+)\s*=\s*(\w+)\s*")
 
     subtasks: SortedDict[Stn, Outcome]
 
-    @staticmethod
-    def parse(s: str) -> ExpectedComment | Error:
+    @classmethod
+    def name(cls) -> str:
+        return "expected"
+
+    @classmethod
+    def parse(cls, s: str) -> ExpectedComment | Error:
         s = s.strip()
         if not s.startswith("[") or not s.endswith("]"):
             return Error("Content must be delimited by square brackets")
