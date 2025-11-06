@@ -1,21 +1,21 @@
-from dataclasses import dataclass
 import logging
+import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-import uuid
-from lsprotocol import types
 
+from lsprotocol import types
 from pygls.lsp.server import LanguageServer
+from pygls.uris import from_fs_path, to_fs_path
 from pygls.workspace import TextDocument
-from pygls.uris import to_fs_path, from_fs_path
 
 from ocimatic.testplan import (
-    Parser,
-    SubtaskHeader,
     Item,
-    Range,
+    Parser,
     Position,
+    Range,
     Script,
+    SubtaskHeader,
     Validator,
 )
 
@@ -42,6 +42,7 @@ class Testplan:
             for range in ranges:
                 if range.start <= pos <= range.end:
                     return path
+        return None
 
     def all_diagnostics(self) -> list[types.Diagnostic]:
         return [*self.syntax_errors, *self.file_not_founds()]
@@ -106,8 +107,7 @@ def _find_paths(
                     t = path
                 case _:
                     continue
-            path = Path(parent, t.lexeme)
-            paths.setdefault(path, []).append(_map_range(t.range))
+            paths.setdefault(Path(parent, t.lexeme), []).append(_map_range(t.range))
     return paths
 
 
@@ -189,7 +189,7 @@ def document_diagnostic(
     params: types.DocumentDiagnosticParams,
 ) -> types.DocumentDiagnosticReport | None:
     if (uri := params.text_document.uri) not in ls.testplans:
-        return
+        return None
 
     testplan = ls.testplans[uri]
 
@@ -220,16 +220,16 @@ def goto_definition(
     params: types.DefinitionParams,
 ) -> types.Location | None:
     if (testplan := ls.testplans.get(params.text_document.uri)) is None:
-        return
+        return None
 
     if (path := testplan.path_at_position(params.position)) is None:
-        return
+        return None
 
     if not path.exists():
-        return
+        return None
 
     if (target_uri := from_fs_path(str(path))) is None:
-        return
+        return None
 
     return types.Location(
         uri=target_uri,
@@ -261,3 +261,4 @@ def code_actions(params: types.CodeActionParams) -> list[types.CodeAction] | Non
                     diagnostics=[diagnostic],
                 ),
             ]
+    return None

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from enum import IntEnum
 import re
 import shutil
 import sys
 import typing
+from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
+from enum import IntEnum
 from pathlib import Path
 from typing import Literal
 
@@ -161,6 +161,8 @@ class Testplan:
         if _has_cycles(subtasks):
             return ParseError(msg="the extends graph contains cycles")
 
+        return None
+
 
 class _TokenKind(IntEnum):
     OpenBracket = 0
@@ -260,6 +262,8 @@ class _Scanner:
     def next_if(self, p: _Peek) -> Token | None:
         if self.peek(p):
             return self.next()
+        else:
+            return None
 
     def next(self) -> Token:
         token = self._next_token
