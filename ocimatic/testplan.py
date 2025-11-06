@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import re
-import shlex
 import shutil
 import sys
 import typing
 from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
+from enum import IntEnum
 from pathlib import Path
-from typing import ClassVar, Literal, cast
+from typing import Literal
 
 from ocimatic import ui, utils
 from ocimatic.result import Error, Result, Status
@@ -24,30 +24,29 @@ FS = chr(28)
 class Testplan:
     """Functionality to read and run a plan for generating dataset."""
 
-    COMMENT_RE = re.compile(r"([^#]*)(#.*)?", re.RegexFlag.DOTALL)
-
     def __init__(
         self,
-        directory: Path,
+        path: Path,
         task_directory: Path,
         dataset_directory: Path,
-        filename: str = "testplan.txt",
     ) -> None:
-        self._directory = directory
-        self._testplan_path = directory / filename
-        if not self._testplan_path.exists():
-            ui.fatal_error(
-                f'File not found: "{self._testplan_path}"',
-            )
+        self._path = path
+        if not self._path.exists():
+            ui.fatal_error(f'File not found: "{self._path}"')
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
 
-        subtasks = self._parse_file()
-        if isinstance(subtasks, ParseError):
-            ui.writeln(
-                f"Error when parsing testplan in `{utils.relative_to_cwd(self._testplan_path)}`",
-                ui.ERROR,
-            )
+        parser = Parser()
+        parser.parse(self._path.read_text())
+
+        err_msg = f"Error when parsing testplan: `{utils.relative_to_cwd(self._path)}`"
+        if len(parser.errors) > 0:
+            ui.writeln(err_msg, ui.ERROR)
+            ui.writeln(f"{parser.errors[0]}", ui.ERROR)
+            sys.exit(1)
+
+        if isinstance(subtasks := self._validate_subtasks(parser.subtasks), ParseError):
+            ui.writeln(err_msg, ui.ERROR)
             ui.writeln(f"{subtasks}", ui.ERROR)
             sys.exit(1)
 
@@ -58,8 +57,9 @@ class Testplan:
         return len(self._subtasks)
 
     def validators(self) -> SortedDict[Stn, Path | None]:
+        basedir = self._path.parent
         return SortedDict(
-            (sti, st.validator.path if st.validator else None)
+            (sti, Path(basedir, st.validator.path.lexeme) if st.validator else None)
             for sti, st in self._subtasks.items()
         )
 
@@ -85,7 +85,7 @@ class Testplan:
         for sti, st in self._subtasks.items():
             if stn is not None and stn != sti:
                 continue
-            status &= st.run()
+            status &= st.run(self._path.parent, self._task_directory)
 
         if sum(len(st.commands) for st in self._subtasks.values()) == 0:
             ui.show_message(
@@ -96,97 +96,42 @@ class Testplan:
 
         return status
 
-    def _parse_file(self) -> SortedDict[Stn, _Subtask] | ParseError:
+    def _validate_subtasks(
+        self,
+        parsed: list[tuple[SubtaskHeader, list[Item]]],
+    ) -> SortedDict[Stn, _Subtask] | ParseError:
         subtasks: SortedDict[Stn, _Subtask] = SortedDict()
-        sti = 0
-        for lineno, line in enumerate(self._testplan_path.open("r").readlines(), 1):
-            # Remove comments
-            m = Testplan.COMMENT_RE.fullmatch(line)
-            if m is None:
-                continue
-            line = m.group(1)
-
-            # Skip empty lines
-            line = line.strip()
-            if not line:
-                continue
-
-            if m := _Subtask.RE.fullmatch(line):
-                found_st = int(m.group(1))
-                sti += 1
-                if sti != found_st:
-                    return ParseError(
-                        lineno=lineno,
-                        msg=f"found [Subtask {found_st}], but [Subtask {sti}] was expected",
-                    )
-                subtasks[Stn(sti)] = _Subtask(self._dataset_dir, sti)
-            elif m := _Command.RE.fullmatch(line):
-                if sti == 0:
-                    return ParseError(
-                        lineno=lineno,
-                        msg="found command before declaring a subtask.",
-                    )
-                group = _GroupName.parse(m.group(1))
-                if isinstance(group, Error):
-                    return ParseError(lineno=lineno, msg=group.msg)
-                cmd = m.group(2)
-                args = _parse_args(m.group(3) or "")
-
-                command = self._parse_command(group, cmd, args, lineno)
-                if isinstance(command, ParseError):
-                    return command
-                subtasks[Stn(sti)].commands.append(command)
-            elif m := _Extends.RE.fullmatch(line):
-                subtasks[Stn(sti)].extends.append(
-                    _Extends(
-                        stn=Stn(int(m.group(1))),
-                        lineno=lineno,
-                    ),
+        for i, (header, items) in enumerate(parsed, start=1):
+            if i != header.number:
+                return ParseError(
+                    range=header.range,
+                    msg=f"found {header}, but [Subtask {i}] was expected",
                 )
-            elif m := _Validator.RE.fullmatch(line):
-                if subtasks[Stn(sti)].validator is not None:
+            sti = Stn(i)
+
+            validator = None
+            for item in items:
+                if not isinstance(item, Validator):
+                    continue
+                if validator is not None:
                     return ParseError(
-                        lineno=lineno,
+                        range=validator.range,
                         msg="multiple @validator directives found for the same subtask.",
                     )
-                subtasks[Stn(sti)].validator = _Validator(
-                    path=Path(self._directory, m.group(1)),
-                    lineno=lineno,
-                )
-            else:
-                return ParseError(lineno=lineno, msg=f"invalid line `{line}`")
-        validated = Testplan._validate_extends_graph(subtasks)
-        if isinstance(validated, ParseError):
-            return validated
-        return subtasks
+                validator = item
 
-    def _parse_command(
-        self,
-        group: _GroupName,
-        cmd: str,
-        args: list[str],
-        lineno: int,
-    ) -> _Command | ParseError:
-        if cmd == "copy":
-            if len(args) > 2:
-                return ParseError(
-                    lineno=lineno,
-                    msg="the `copy` command expects exactly one argument.",
-                )
-            return _Copy(group, self._task_directory, args[0])
-        elif cmd == "echo":
-            return _Echo(group, args)
-        elif (ext := Path(cmd).suffix) in (".py", ".cpp"):
-            # mypy can't tell `ext` is either `.py` or `.cpp` from the check above
-            return _Script(
-                group,
-                Path(self._directory, cmd),
-                cast(_Script.VALID_EXTENSIONS, ext),  # pyright: ignore [reportUnnecessaryCast]
-                args,
-                self._directory,
-            )
-        else:
-            return ParseError(lineno=lineno, msg=_invalid_command_err_msg(cmd))
+            commands = [item for item in items if isinstance(item, Command)]
+            extends = [item for item in items if isinstance(item, Extends)]
+
+            subtask = _Subtask(self._dataset_dir, commands, extends, validator, sti)
+
+            subtasks[sti] = subtask
+
+        error = Testplan._validate_extends_graph(subtasks)
+        if error is not None:
+            return error
+
+        return subtasks
 
     @staticmethod
     def _validate_extends_graph(
@@ -195,20 +140,20 @@ class Testplan:
         for sti, st in subtasks.items():
             seen: set[Stn] = set()
             for extends in st.extends:
-                lineno = extends.lineno
+                range = extends.range
                 if extends.stn in seen:
                     return ParseError(
-                        lineno=lineno,
+                        range=range,
                         msg=f"cannot extends twice from the same subtask: `{extends}`",
                     )
                 if extends.stn not in subtasks:
                     return ParseError(
-                        lineno=lineno,
+                        range=range,
                         msg=f"invalid subtask {extends.stn}: `{extends}`",
                     )
                 if extends.stn == sti:
                     return ParseError(
-                        lineno=lineno,
+                        range=range,
                         msg=f"a subtask cannot extend itself: `{subtasks}`",
                     )
                 seen.add(extends.stn)
@@ -219,197 +164,483 @@ class Testplan:
         return None
 
 
+class _TokenKind(IntEnum):
+    OpenBracket = 0
+    CloseBracket = 1
+    Directive = 2
+    Word = 3
+    String = 4
+    Num = 5
+    Eol = 6
+    Error = 7
+
+    def __str__(self) -> str:
+        match self:
+            case _TokenKind.OpenBracket:
+                return "["
+            case _TokenKind.CloseBracket:
+                return "]"
+            case _TokenKind.Directive:
+                return "directive"
+            case _TokenKind.Word:
+                return "word"
+            case _TokenKind.String:
+                return "string"
+            case _TokenKind.Num:
+                return "number"
+            case _TokenKind.Eol:
+                return "end of line"
+            case _TokenKind.Error:
+                return "error"
+
+
 @dataclass(kw_only=True, frozen=True, slots=True)
-class ParseError:
-    lineno: int | None = None
+class Token:
+    range: Range
+    lexeme: str
+    kind: _TokenKind
+
+
+type _Peek = _TokenKind | list[_TokenKind] | str
+
+
+class _Scanner:
+    COMMENT_RE = re.compile(r"\s*(#.*)?")
+    STRING_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
+    DIRECTIVE_RE = re.compile(r"@[a-z]+")
+    WORD_RE = re.compile(r"[a-zA-Z0-9_\./*-]+")
+
+    def __init__(self, lineno: int, line: str) -> None:
+        self._lineno = lineno
+        self._pos = 0
+        self._line = line
+        self._hi: Position = Position(line=lineno, column=0)
+        self._advance()
+
+    def _advance(self) -> None:
+        if m := _Scanner.COMMENT_RE.match(self._line, pos=self._pos):
+            self._pos = m.end(0)
+
+        if self._pos == len(self._line):
+            kind, span = (_TokenKind.Eol, (self._pos, self._pos + 1))
+        elif self._line[self._pos] == "[":
+            kind, span = (_TokenKind.OpenBracket, (self._pos, self._pos + 1))
+        elif self._line[self._pos] == "]":
+            kind, span = (_TokenKind.CloseBracket, (self._pos, self._pos + 1))
+        elif m := _Scanner.DIRECTIVE_RE.match(self._line, pos=self._pos):
+            kind, span = (_TokenKind.Directive, m.span(0))
+        elif m := _Scanner.WORD_RE.match(self._line, pos=self._pos):
+            if m.group(0).isnumeric():
+                kind, span = (_TokenKind.Num, m.span(0))
+            else:
+                kind, span = (_TokenKind.Word, m.span(0))
+        elif m := _Scanner.STRING_RE.match(self._line, pos=self._pos):
+            kind, span = (_TokenKind.String, m.span(0))
+        else:
+            kind, span = (_TokenKind.Error, (self._pos, self._pos + 1))
+        self._pos = span[1]
+        self._next_token = Token(
+            kind=kind,
+            lexeme=self._line[span[0] : span[1]],
+            range=Range(
+                start=Position(line=self._lineno, column=span[0]),
+                end=Position(line=self._lineno, column=span[1]),
+            ),
+        )
+
+    def is_eol(self) -> bool:
+        return self._next_token.kind == _TokenKind.Eol
+
+    def peek(self, peek: _Peek) -> bool:
+        if isinstance(peek, str):
+            return self._next_token.lexeme == peek
+        elif isinstance(peek, list):
+            return any(self._next_token.kind == k for k in peek)
+        else:
+            return self._next_token.kind == peek
+
+    def next_if(self, p: _Peek) -> Token | None:
+        if self.peek(p):
+            return self.next()
+        else:
+            return None
+
+    def next(self) -> Token:
+        token = self._next_token
+        self._hi = token.range.end
+        self._advance()
+        return token
+
+    def expect(self, peek: _Peek, expected: list[str] | None = None) -> Token:
+        if self.peek(peek):
+            return self.next()
+        else:
+            raise self.unexpected_token(expected or self._peek_to_expected(peek))
+
+    @staticmethod
+    def _peek_to_expected(peek: _Peek) -> list[str]:
+        if isinstance(peek, str):
+            return [peek]
+        elif isinstance(peek, list):
+            return [str(k) for k in peek]
+        else:
+            return [str(peek)]
+
+    def pos(self) -> Position:
+        """Return the start position of the next token."""
+        return self._next_token.range.start
+
+    def last_pos(self) -> Position:
+        """Return the end position of the previously yielded token."""
+        return self._hi
+
+    def unexpected_token(self, expected: list[str] | None = None) -> ParseError:
+        if expected:
+            expected = [f"'{s}'" for s in expected]
+            if len(expected) == 1:
+                msg = f"expected {expected[0]}"
+            else:
+                msg = f"expected {', '.join(expected[:-1])} or {expected[-1]}"
+        elif self.is_eol():
+            msg = "unexpected end of line"
+        else:
+            msg = f"unexpected token `{self._next_token.lexeme}`"
+        return ParseError(msg=msg, range=self._next_token.range)
+
+
+class Parser:
+    def __init__(self) -> None:
+        self.subtasks: list[tuple[SubtaskHeader, list[Item]]] = []
+        self.errors: list[ParseError] = []
+
+    def parse(self, content: str) -> None:
+        for lineno, line in enumerate(content.splitlines()):
+            scanner = _Scanner(lineno, line)
+
+            # Skip empty lines
+            if scanner.is_eol():
+                continue
+
+            try:
+                parsed = self._parse_line(scanner)
+                scanner.expect(_TokenKind.Eol)
+            except ParseError as err:
+                self.errors.append(err)
+                continue
+
+            match parsed:
+                case SubtaskHeader() as header:
+                    self.subtasks.append((header, []))
+                case item:
+                    if self.subtasks:
+                        self.subtasks[-1][1].append(item)
+                    else:
+                        self.errors.append(
+                            ParseError(
+                                msg="unexpected item before first subtask",
+                                range=item.range,
+                            ),
+                        )
+
+    def _parse_line(self, scanner: _Scanner) -> SubtaskHeader | Item:
+        if scanner.peek(_TokenKind.OpenBracket):
+            return self._parse_header(scanner)
+        elif scanner.peek(_TokenKind.Directive):
+            return self._parse_directive(scanner)
+        elif scanner.peek(_TokenKind.Word):
+            return self._parse_command(scanner)
+        else:
+            raise scanner.unexpected_token()
+
+    def _parse_header(self, scanner: _Scanner) -> SubtaskHeader:
+        start = scanner.pos()
+        scanner.expect(_TokenKind.OpenBracket)
+        scanner.expect("Subtask")
+        num = scanner.expect(_TokenKind.Num)
+        scanner.expect(_TokenKind.CloseBracket)
+        end = scanner.last_pos()
+
+        return SubtaskHeader(number=int(num.lexeme), range=Range(start=start, end=end))
+
+    def _parse_directive(self, scanner: _Scanner) -> Extends | Validator:
+        if scanner.peek("@extends"):
+            return self._parse_extends(scanner)
+        elif scanner.peek("@validator"):
+            return self._parse_validator(scanner)
+        else:
+            raise scanner.unexpected_token(["@extends", "@validator"])
+
+    def _parse_extends(self, scanner: _Scanner) -> Extends:
+        start = scanner.pos()
+        scanner.expect("@extends")
+        scanner.expect("subtask")
+        num = scanner.expect(_TokenKind.Num)
+        end = scanner.last_pos()
+        return Extends(stn=Stn(int(num.lexeme)), range=Range(start=start, end=end))
+
+    def _parse_validator(self, scanner: _Scanner) -> Validator:
+        start = scanner.pos()
+        scanner.expect("@validator")
+        path = scanner.expect(_TokenKind.Word, ["path"])
+        end = scanner.last_pos()
+
+        return Validator(path=path, range=Range(start=start, end=end))
+
+    def _parse_command(self, scanner: _Scanner) -> Command:
+        start = scanner.pos()
+        group = self._validate_group_name(scanner.next())
+        scanner.expect(";")
+        cmd_start = scanner.pos()
+        cmd = scanner.expect(_TokenKind.Word, ["copy", "echo", "generator script"])
+        args = self._parse_args(scanner)
+        end = scanner.last_pos()
+
+        range = Range(start=start, end=end)
+        if cmd.lexeme == "copy":
+            if len(args) != 1:
+                raise ParseError(
+                    msg="the `copy` command expects exactly one argument.",
+                    range=Range(start=cmd_start, end=end),
+                )
+            return Copy(group, range, args[0])
+        elif cmd.lexeme == "echo":
+            return Echo(group, range, args)
+        elif Path(cmd.lexeme).suffix in (".py", ".cpp"):
+            return Script(group, range, cmd, args)
+        else:
+            raise _invalid_command_err(cmd)
+
+    def _validate_group_name(self, group: Token) -> GroupName:
+        if GroupName.RE.fullmatch(group.lexeme) is None:
+            raise ParseError(
+                msg=f"invalid group name: `{group.lexeme}`\nGroup name must match the following regular expression: `{GroupName.RE.pattern}`",
+                range=group.range,
+            )
+        return GroupName(group.lexeme)
+
+    def _parse_args(self, scanner: _Scanner) -> list[str]:
+        args: list[str] = []
+        while not scanner.is_eol():
+            if t := scanner.next_if(_TokenKind.String):
+                args.append(t.lexeme.strip('"').encode().decode("unicode_escape"))
+            elif t := scanner.next_if([_TokenKind.Word, _TokenKind.Num]):
+                args.append(t.lexeme)
+            else:
+                raise scanner.unexpected_token()
+        return args
+
+
+@dataclass(kw_only=True, frozen=True)
+class ParseError(Exception):
+    range: Range | None = None
     msg: str
 
     def __str__(self) -> str:
-        if self.lineno:
-            return f"line {self.lineno}: {self.msg}"
+        if self.range:
+            return f"{self.range}: {self.msg}"
         else:
             return self.msg
 
 
+type Item = Validator | Extends | Command
+
+
 @dataclass(kw_only=True, frozen=True, slots=True)
-class _Validator:
-    """A validator directive can be used to define an input validator for a subtask."""
-
-    RE: ClassVar[re.Pattern[str]] = re.compile(
-        r"\s*@\s*validator\s*(\S+)\s*",
-    )
-
-    path: Path
-    lineno: int
+class Position:
+    line: int
+    column: int
 
     def __str__(self) -> str:
-        return f"@validator {self.path}"
+        return f"{self.line + 1}:{self.column + 1}"
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
-class _Extends:
+class Range:
+    start: Position
+    end: Position
+
+    def __str__(self) -> str:
+        return f"{self.start}-{self.end}"
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class SubtaskHeader:
+    number: int
+    range: Range
+
+    def __str__(self) -> str:
+        return f"[Subtask {self.number}]"
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class Validator:
+    """A validator directive can be used to define an input validator for a subtask."""
+
+    path: Token
+    range: Range
+
+    def __str__(self) -> str:
+        return f"@validator {self.path.lexeme}"
+
+
+@dataclass(kw_only=True, frozen=True, slots=True)
+class Extends:
     """An extends directive can be used to include all tests from another subtask."""
 
-    RE: ClassVar[re.Pattern[str]] = re.compile(
-        r"\s*@\s*extends\s*subtask\s*(\d+)\s*",
-    )
-
     stn: Stn
-    lineno: int
+    range: Range
 
     def __str__(self) -> str:
         return f"@extends subtask {self.stn}"
 
 
-@dataclass(kw_only=True, frozen=True, slots=True)
-class _GroupName:
-    RE: ClassVar[re.Pattern[str]] = re.compile(r"[a-zA-Z0-9_-]+")
+@dataclass(frozen=True, slots=True)
+class GroupName:
+    RE = re.compile(r"[a-zA-Z0-9_-]+")
 
     name: str
-
-    @staticmethod
-    def parse(name: str) -> _GroupName | Error:
-        if not _GroupName.RE.fullmatch(name):
-            return Error(
-                msg="invalid group name `{group_str}`. The group name should "
-                f"match the regex `{_GroupName.RE.pattern}`.",
-            )
-        return _GroupName(name=name)
 
     def __str__(self) -> str:
         return self.name
 
 
 class _Subtask:
-    RE = re.compile(r"\s*\[\s*Subtask\s+(\d+)\s*\]\s*")
-
-    def __init__(self, dataset_dir: Path, stn: int) -> None:
-        self._dir = Path(dataset_dir, f"st{stn}")
-        self.commands: list[_Command] = []
-        self.extends: list[_Extends] = []
-        self.validator: _Validator | None = None
-        self.parents: set[Stn] = set()
+    def __init__(
+        self,
+        dataset_dir: Path,
+        commands: list[Command],
+        extends: list[Extends],
+        validator: Validator | None,
+        stn: Stn,
+    ) -> None:
+        self._dst_dir = Path(dataset_dir, f"st{stn}")
+        self.extends = extends
+        self.validator = validator
+        self.commands = commands
 
     def __str__(self) -> str:
-        return str(self._dir.name)
+        return str(self._dst_dir.name)
 
     @ui.hd2("{0}")
-    def run(self) -> Status:
-        shutil.rmtree(self._dir, ignore_errors=True)
-        self._dir.mkdir(parents=True, exist_ok=True)
+    def run(self, cwd: Path, task_dir: Path) -> Status:
+        shutil.rmtree(self._dst_dir, ignore_errors=True)
+        self._dst_dir.mkdir(parents=True, exist_ok=True)
 
+        cx = _CommandCtxt(
+            cwd=cwd,
+            task_dir=task_dir,
+            tests_in_group=Counter(),
+            dst_dir=self._dst_dir,
+        )
         status = Status.success
-        tests_in_group: Counter[_GroupName] = Counter()
         for cmd in self.commands:
-            status &= cmd.run(self._dir, tests_in_group).status
+            status &= cmd.run(cx).status
         return status
 
 
-class _Command(ABC):
-    RE = re.compile(r"\s*([^;\s]+)\s*;\s*(\S+)(:?\s+(.*))?")
+@dataclass(kw_only=True)
+class _CommandCtxt:
+    """Context used to execute commands for a single subtask."""
 
-    def __init__(self, group: _GroupName) -> None:
-        self._group = group
+    cwd: Path
+    task_dir: Path
+    dst_dir: Path
+    tests_in_group: Counter[GroupName]
 
-    def _next_idx_in_group(self, tests_in_group: Counter[_GroupName]) -> int:
-        tests_in_group[self._group] += 1
-        return tests_in_group[self._group]
+    def next_file(self, group: GroupName) -> Path:
+        self.tests_in_group[group] += 1
+        idx = self.tests_in_group[group]
+        return Path(self.dst_dir, f"{group}-{idx}.in")
 
-    def dst_file(self, directory: Path, idx: int) -> Path:
-        return Path(directory, f"{self._group}-{idx}.in")
+    def script_path(self, filename: str) -> Path:
+        return self.cwd / filename
+
+    def load_script(self, filename: str) -> SourceCode:
+        path = self.script_path(filename)
+        match path.suffix:
+            case ".py":
+                return PythonSource(path)
+            case ".cpp":
+                return CppSource(path)
+            case _:
+                # This is validated during parsing
+                raise ValueError(f"Unsupported file type: {path.suffix}")
+
+
+@dataclass(frozen=True)
+class Command(ABC):
+    group: GroupName
+    range: Range
 
     @abstractmethod
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> Result:
-        raise NotImplementedError(
-            f"Class {self.__class__.__name__} doesn't implement run()",
-        )
+    def run(self, cx: _CommandCtxt) -> Result: ...
 
 
-class _Copy(_Command):
+@dataclass(frozen=True)
+class Copy(Command):
     magic_check = re.compile("([*?[])")
 
-    def __init__(self, group: _GroupName, dir: Path, pattern: str) -> None:
-        super().__init__(group)
-        self._dir = dir
-        self._pattern = pattern
+    group: GroupName
+    pattern: str
 
     def __str__(self) -> str:
-        return self._pattern
+        return self.pattern
 
     @ui.work("copy", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> Result:
-        files = list(self._dir.glob(self._pattern))
+    def run(self, cx: _CommandCtxt) -> Result:
+        files = sorted(cx.task_dir.glob(self.pattern))
         if not files:
             msg = "No file matches the pattern" if self.has_magic() else "No such file"
             return Result.fail(short_msg=msg)
         try:
             for file in files:
-                idx = self._next_idx_in_group(tests_in_group)
-                shutil.copy(file, self.dst_file(dst_dir, idx))
+                shutil.copy(file, cx.next_file(self.group))
             return _success_with_count_result(len(files))
-        except Exception:  # pylint: disable=broad-except
-            return Result.fail(short_msg="Error when copying file")
+        except Exception as e:
+            return Result.fail(short_msg="Error when copying file", long_msg=str(e))
 
     def has_magic(self) -> bool:
-        return _Copy.magic_check.search(self._pattern) is not None
+        return Copy.magic_check.search(self.pattern) is not None
 
 
-class _Echo(_Command):
-    def __init__(self, group: _GroupName, args: list[str]) -> None:
-        super().__init__(group)
-        self._args = args
+@dataclass(frozen=True)
+class Echo(Command):
+    args: list[str]
 
     def __str__(self) -> str:
-        return str(self._args)
+        return str(self.args)
 
     @ui.work("echo", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> Result:
-        idx = self._next_idx_in_group(tests_in_group)
-        with self.dst_file(dst_dir, idx).open("w") as test_file:
-            test_file.write(" ".join(self._args) + "\n")
+    def run(self, cx: _CommandCtxt) -> Result:
+        with cx.next_file(self.group).open("w") as test_file:
+            test_file.write(" ".join(self.args) + "\n")
             return _success_with_count_result(1)
 
 
-class _Script(_Command):
+@dataclass(frozen=True)
+class Script(Command):
     VALID_EXTENSIONS = Literal[".py", ".cpp"]
-    _ext: VALID_EXTENSIONS
 
-    def __init__(
-        self,
-        group: _GroupName,
-        path: Path,
-        ext: VALID_EXTENSIONS,
-        args: list[str],
-        cwd: Path,
-    ) -> None:
-        super().__init__(group)
-        self._cwd = cwd
-        self._args = args
-        self._script_path = path
-        self._ext = ext
+    cmd: Token
+    args: list[str]
 
     def __str__(self) -> str:
-        args = " ".join(self._args)
-        script = self._script_path.name
+        args = " ".join(self.args)
+        script = self.cmd.lexeme
         return f"{script} {args}"
 
     @ui.work("gen", "{0}")
-    def run(self, dst_dir: Path, tests_in_group: Counter[_GroupName]) -> Result:
-        script = self._load_script()
-        if not script:
-            return Result.fail(short_msg="script file not found")
-        build_result = script.build()
-        if isinstance(build_result, BuildError):
+    def run(self, cx: _CommandCtxt) -> Result:
+        script = cx.load_script(self.cmd.lexeme)
+        if isinstance(runnable := script.build(), BuildError):
             return Result.fail(
                 short_msg="failed to build generator",
-                long_msg=build_result.msg,
+                long_msg=runnable.msg,
             )
 
         count = 0
-        # We seed the script with the next `idx`, this guarantees it will be different next time.
-        args = self._args_with_seed(dst_dir, tests_in_group[self._group] + 1)
-        process = build_result.spawn(args, cwd=self._cwd)
-        if isinstance(process, Error):
+        args = self._args_with_seed(cx)
+        if isinstance(process := runnable.spawn(args, cwd=cx.cwd), Error):
             return Result.fail(
                 short_msg="error when running script",
                 long_msg=process.msg,
@@ -425,8 +656,7 @@ class _Script(_Command):
                 else:
                     if current_file is None:
                         count += 1
-                        idx = self._next_idx_in_group(tests_in_group)
-                        current_file = self.dst_file(dst_dir, idx).open("w")
+                        current_file = cx.next_file(self.group).open("w")
                     current_file.write(char)
         finally:
             if current_file:
@@ -436,7 +666,7 @@ class _Script(_Command):
         if ret != 0:
             msg = ret_code_to_str(ret)
             args_fmt = " ".join(args)
-            script_path = utils.relative_to_cwd(self._script_path)
+            script_path = utils.relative_to_cwd(cx.script_path(self.cmd.lexeme))
             cmd = f"$ {script_path} {args_fmt}"
             long_msg = f"{cmd}\n{process.stderr.read()}" if process.stderr else cmd
             return Result.fail(short_msg=msg, long_msg=long_msg)
@@ -446,25 +676,20 @@ class _Script(_Command):
 
         return _success_with_count_result(count)
 
-    def _load_script(self) -> SourceCode | None:
-        if not self._script_path.exists():
-            return None
-        match self._ext:
-            case ".py":
-                return PythonSource(self._script_path)
-            case ".cpp":
-                return CppSource(self._script_path)
-
-    def _args_with_seed(self, directory: Path, idx: int) -> list[str]:
-        return [f"{directory.name}-{self._group}-{idx}", *self._args]
+    def _args_with_seed(self, cx: _CommandCtxt) -> list[str]:
+        # We seed the script with the next `idx`, this guarantees it is different
+        # every time, even if the script generates more than one file.
+        idx = cx.tests_in_group[self.group] + 1
+        return [f"{cx.dst_dir.name}-{self.group}-{idx}", *self.args]
 
 
-def _invalid_command_err_msg(cmd: str) -> str:
-    extensions = typing.get_args(_Script.VALID_EXTENSIONS)
-    return (
-        f"invalid command `{cmd}`\n"
-        f"The command should be either `copy`, `echo` or a generator with one of the following extensions {extensions}"
+def _invalid_command_err(cmd: Token) -> ParseError:
+    extensions = typing.get_args(Script.VALID_EXTENSIONS)
+    msg = (
+        f"invalid command `{cmd.lexeme}`\n"
+        f"The command should be either `copy`, `echo` or a generator script with one of the following extensions {extensions}"
     )
+    return ParseError(msg=msg, range=cmd.range)
 
 
 def _success_with_count_result(count: int) -> Result:
@@ -473,11 +698,6 @@ def _success_with_count_result(count: int) -> Result:
         return Result.success(short_msg="1 test case generated")
     else:
         return Result.success(short_msg=f"{count} test cases generated")
-
-
-def _parse_args(args: str) -> list[str]:
-    args = args.strip()
-    return [a.encode().decode("unicode_escape") for a in shlex.split(args)]
 
 
 def _has_cycles(subtasks: SortedDict[Stn, _Subtask]) -> bool:

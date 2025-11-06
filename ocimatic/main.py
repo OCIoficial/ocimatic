@@ -711,6 +711,37 @@ def version() -> None:
     print(__version__)
 
 
+@cloup.command(
+    help="Run lsp server.",
+)
+@mutually_exclusive(
+    cloup.option("--tcp", help="start a TCP server", is_flag=True, default=False),
+    cloup.option("--ws", help="start a WebSocket server", is_flag=True, default=False),
+)
+@cloup.option(
+    "--host",
+    default="127.0.0.1",
+    help="bind to this address",
+    show_default=True,
+)
+@cloup.option(
+    "--port",
+    type=int,
+    default=8888,
+    help="bind to this port",
+    show_default=True,
+)
+def lsp(tcp: bool, ws: bool, host: str, port: int) -> None:  # noqa: FBT001
+    from ocimatic.lsp import server
+
+    if tcp:
+        server.start_tcp(host, port)
+    elif ws:
+        server.start_ws(host, port)
+    else:
+        server.start_io()
+
+
 SECTIONS = [
     cloup.Section(
         "Contest commands",
@@ -753,6 +784,7 @@ SECTIONS = [
             completion,
             check_setup,
             setup,
+            lsp,
         ],
     ),
 ]
