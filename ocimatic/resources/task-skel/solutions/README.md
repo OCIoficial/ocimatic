@@ -48,3 +48,19 @@ and fail subtask 2 with a wrong answer.
 
 Ocimatic will produce an error if a partial solution doesn't contain the comment or
 if the specification doesn't include all subtasks.
+
+## Correct Python solutions
+
+Python solutions included in the `correct` directory are special.
+By default they are not included in the runtime statistics used to calculate the
+time limit for a task.
+This is so the time is not artificially increased by a slow Python solution.
+By default, Ocimatic still checks that correct Python solution pass all subtasks,
+in particular that they don't give TLE.
+If a Python solution gives TLE with the time limit calculated from non-python
+solutions, you have two options:
+
+- You can include the solution in statistics by adding a comment `@ocimatic::include-in-stats true`.
+- You can add a `@ocimatic::expected` comment (in the same format used for partial solutions)
+  indicating that some of the subtasks should give TLE. This means that you accept that the solution
+  cannot get full score.

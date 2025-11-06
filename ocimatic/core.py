@@ -20,7 +20,7 @@ from click.shell_completion import CompletionItem
 from ocimatic import config, ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
-from ocimatic.result import Result, Status, Error
+from ocimatic.result import Error, Result, Status
 from ocimatic.solutions import Solution
 from ocimatic.source_code import (
     CppSource,
@@ -765,32 +765,25 @@ class Task:
                 ui.writeln()
                 _write_stats(stats)
 
-            if sol.is_partial:
-                if dataset_results.has_validation_errors():
-                    ui.writeln()
-                    ui.writeln(
-                        "The results don't match the solution's expected outcome.\n",
-                        ui.ERROR,
-                    )
-                    ui.writeln(
-                        "Subtasks with issues:",
-                        ui.ERROR,
-                    )
-                    for sti, err in dataset_results.validation.items():
-                        if isinstance(err, Error):
-                            ui.writeln(f" * {sti!r}: {err.msg}", ui.ERROR)
-                else:
-                    ui.writeln()
-                    ui.writeln(
-                        "Solution produced the expected results",
-                        ui.OK,
-                    )
+            if dataset_results.has_validation_errors():
+                ui.writeln()
+                ui.writeln(
+                    "The results don't match the solution's expected outcome.\n",
+                    ui.ERROR,
+                )
+                ui.writeln(
+                    "Subtasks with issues:",
+                    ui.ERROR,
+                )
+                for sti, err in dataset_results.validation.items():
+                    if isinstance(err, Error):
+                        ui.writeln(f" * {sti!r}: {err.msg}", ui.ERROR)
             else:
                 ui.writeln()
-                if dataset_results.check_all_correct():
-                    ui.writeln("Result: All test passed", ui.OK)
-                else:
-                    ui.writeln("Result: Some tests failed", ui.ERROR)
+                ui.writeln(
+                    "Solution produced the expected results",
+                    ui.OK,
+                )
 
     @ui.hd1("{0}", "Checking dataset", COLOR)
     def check_dataset(self) -> Status:
@@ -876,7 +869,7 @@ class Task:
                 self._checker,
                 RunMode.check_correct,
             )
-            if results is None or not results.check_all_correct():
+            if results is None or results.has_validation_errors():
                 failed.append(sol)
                 continue
             new_stats = results.runtime_stats()
@@ -898,10 +891,10 @@ class Task:
                 results = sol.run_on_dataset(
                     self._dataset,
                     self._checker,
-                    RunMode.check_correct,
+                    RunMode.check_partial,
                     timeout=timeout,
                 )
-                if results is None or not results.check_all_correct():
+                if results is None or results.has_validation_errors():
                     failed.append(sol)
 
         if failed:
