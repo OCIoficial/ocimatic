@@ -487,15 +487,6 @@ class DatasetResults:
     validation: SortedDict[Stn, Error | None]
     sample: list[TestResult] | None
 
-    def check_all_correct(self) -> bool:
-        """Return whether all test cases have a correct answer."""
-        for test in self._iter_all(include_sample=True):
-            if not isinstance(test.kind, TestResult.CheckerFinished):
-                return False
-            if not test.kind.is_correct():
-                return False
-        return True
-
     def has_validation_errors(self) -> bool:
         """Check whether some of the subtasks had a validation error."""
         return any(isinstance(e, Error) for e in self.validation.values())

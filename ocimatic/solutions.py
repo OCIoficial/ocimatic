@@ -105,20 +105,26 @@ class Solution:
         self,
         dataset: Dataset,
     ) -> SortedDict[Stn, Outcome] | Error:
-        if not self.is_partial:
-            return SortedDict((sti, Outcome.OK) for sti in dataset.subtasks())
-
         if isinstance(comments := _parse_comments(self.source, ExpectedComment), Error):
             return comments
         match len(comments):
             case 0:
-                return Error("Missing `@ocimatic::expected` comment")
+                if self.is_partial:
+                    return Error("Missing `@ocimatic::expected` comment")
+                else:
+                    return SortedDict((sti, Outcome.OK) for sti in dataset.subtasks())
             case 1:
                 expected = comments[0].subtasks
                 sts = set(expected.keys())
                 if sts != dataset.subtasks():
                     return Error(
                         f"Subtasks in comment don't match dataset\nexpected '{dataset.subtasks()}', got '{sts}'",
+                    )
+                if not self.is_partial and any(
+                    out not in [Outcome.OK, Outcome.TLE] for out in expected.values()
+                ):
+                    return Error(
+                        "Correct solutions can only be annotated with 'OK' or 'TLE'",
                     )
                 return expected
             case _:
