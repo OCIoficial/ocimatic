@@ -2,7 +2,7 @@
   "name": "ocimatic-testplan",
   "displayName": "ocimatic-testplan",
   "description": "",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "repository": "https://github.com/OCIoficial/ocimatic",
   "publisher": "nlehmann",
   "engines": {
@@ -43,11 +43,12 @@
     "typescript-eslint": "^8.39.0"
   },
   "scripts": {
-    "vscode:prepublish": "cd client && npm install && cd .. && npm run compile",
+    "vscode:prepublish": "cd client && npm ci && cd .. && npm run compile",
     "compile": "tsc -b",
     "watch": "tsc -b -w",
     "lint": "eslint",
-    "postinstall": "cd client && npm install",
-    "package": "vsce package"
+    "postinstall": "cd client && npm ci",
+    "package": "vsce package",
+    "release": "scripts/release.sh"
   }
 }
