@@ -164,7 +164,7 @@ class Testplan:
         return None
 
 
-class _TokenKind(IntEnum):
+class TokenKind(IntEnum):
     OpenBracket = 0
     CloseBracket = 1
     Directive = 2
@@ -176,21 +176,21 @@ class _TokenKind(IntEnum):
 
     def __str__(self) -> str:
         match self:
-            case _TokenKind.OpenBracket:
+            case TokenKind.OpenBracket:
                 return "["
-            case _TokenKind.CloseBracket:
+            case TokenKind.CloseBracket:
                 return "]"
-            case _TokenKind.Directive:
+            case TokenKind.Directive:
                 return "directive"
-            case _TokenKind.Word:
+            case TokenKind.Word:
                 return "word"
-            case _TokenKind.String:
+            case TokenKind.String:
                 return "string"
-            case _TokenKind.Num:
+            case TokenKind.Num:
                 return "number"
-            case _TokenKind.Eol:
+            case TokenKind.Eol:
                 return "end of line"
-            case _TokenKind.Error:
+            case TokenKind.Error:
                 return "error"
 
 
@@ -198,10 +198,10 @@ class _TokenKind(IntEnum):
 class Token:
     range: Range
     lexeme: str
-    kind: _TokenKind
+    kind: TokenKind
 
 
-type _Peek = _TokenKind | list[_TokenKind] | str
+type _Peek = TokenKind | list[TokenKind] | str
 
 
 class _Scanner:
@@ -222,22 +222,22 @@ class _Scanner:
             self._pos = m.end(0)
 
         if self._pos == len(self._line):
-            kind, span = (_TokenKind.Eol, (self._pos, self._pos + 1))
+            kind, span = (TokenKind.Eol, (self._pos, self._pos + 1))
         elif self._line[self._pos] == "[":
-            kind, span = (_TokenKind.OpenBracket, (self._pos, self._pos + 1))
+            kind, span = (TokenKind.OpenBracket, (self._pos, self._pos + 1))
         elif self._line[self._pos] == "]":
-            kind, span = (_TokenKind.CloseBracket, (self._pos, self._pos + 1))
+            kind, span = (TokenKind.CloseBracket, (self._pos, self._pos + 1))
         elif m := _Scanner.DIRECTIVE_RE.match(self._line, pos=self._pos):
-            kind, span = (_TokenKind.Directive, m.span(0))
+            kind, span = (TokenKind.Directive, m.span(0))
         elif m := _Scanner.WORD_RE.match(self._line, pos=self._pos):
             if m.group(0).isnumeric():
-                kind, span = (_TokenKind.Num, m.span(0))
+                kind, span = (TokenKind.Num, m.span(0))
             else:
-                kind, span = (_TokenKind.Word, m.span(0))
+                kind, span = (TokenKind.Word, m.span(0))
         elif m := _Scanner.STRING_RE.match(self._line, pos=self._pos):
-            kind, span = (_TokenKind.String, m.span(0))
+            kind, span = (TokenKind.String, m.span(0))
         else:
-            kind, span = (_TokenKind.Error, (self._pos, self._pos + 1))
+            kind, span = (TokenKind.Error, (self._pos, self._pos + 1))
         self._pos = span[1]
         self._next_token = Token(
             kind=kind,
@@ -249,7 +249,7 @@ class _Scanner:
         )
 
     def is_eol(self) -> bool:
-        return self._next_token.kind == _TokenKind.Eol
+        return self._next_token.kind == TokenKind.Eol
 
     def peek(self, peek: _Peek) -> bool:
         if isinstance(peek, str):
@@ -323,7 +323,7 @@ class Parser:
 
             try:
                 parsed = self._parse_line(scanner)
-                scanner.expect(_TokenKind.Eol)
+                scanner.expect(TokenKind.Eol)
             except ParseError as err:
                 self.errors.append(err)
                 continue
@@ -343,21 +343,21 @@ class Parser:
                         )
 
     def _parse_line(self, scanner: _Scanner) -> SubtaskHeader | Item:
-        if scanner.peek(_TokenKind.OpenBracket):
+        if scanner.peek(TokenKind.OpenBracket):
             return self._parse_header(scanner)
-        elif scanner.peek(_TokenKind.Directive):
+        elif scanner.peek(TokenKind.Directive):
             return self._parse_directive(scanner)
-        elif scanner.peek(_TokenKind.Word):
+        elif scanner.peek(TokenKind.Word):
             return self._parse_command(scanner)
         else:
             raise scanner.unexpected_token()
 
     def _parse_header(self, scanner: _Scanner) -> SubtaskHeader:
         start = scanner.pos()
-        scanner.expect(_TokenKind.OpenBracket)
+        scanner.expect(TokenKind.OpenBracket)
         scanner.expect("Subtask")
-        num = scanner.expect(_TokenKind.Num)
-        scanner.expect(_TokenKind.CloseBracket)
+        num = scanner.expect(TokenKind.Num)
+        scanner.expect(TokenKind.CloseBracket)
         end = scanner.last_pos()
 
         return SubtaskHeader(number=int(num.lexeme), range=Range(start=start, end=end))
@@ -374,14 +374,14 @@ class Parser:
         start = scanner.pos()
         scanner.expect("@extends")
         scanner.expect("subtask")
-        num = scanner.expect(_TokenKind.Num)
+        num = scanner.expect(TokenKind.Num)
         end = scanner.last_pos()
         return Extends(stn=Stn(int(num.lexeme)), range=Range(start=start, end=end))
 
     def _parse_validator(self, scanner: _Scanner) -> Validator:
         start = scanner.pos()
         scanner.expect("@validator")
-        path = scanner.expect(_TokenKind.Word, ["path"])
+        path = scanner.expect(TokenKind.Word, ["path"])
         end = scanner.last_pos()
 
         return Validator(path=path, range=Range(start=start, end=end))
@@ -391,7 +391,7 @@ class Parser:
         group = self._validate_group_name(scanner.next())
         scanner.expect(";")
         cmd_start = scanner.pos()
-        cmd = scanner.expect(_TokenKind.Word, ["copy", "echo", "generator script"])
+        cmd = scanner.expect(TokenKind.Word, ["copy", "echo", "generator script"])
         args = self._parse_args(scanner)
         end = scanner.last_pos()
 
@@ -421,9 +421,9 @@ class Parser:
     def _parse_args(self, scanner: _Scanner) -> list[str]:
         args: list[str] = []
         while not scanner.is_eol():
-            if t := scanner.next_if(_TokenKind.String):
+            if t := scanner.next_if(TokenKind.String):
                 args.append(t.lexeme.strip('"').encode().decode("unicode_escape"))
-            elif t := scanner.next_if([_TokenKind.Word, _TokenKind.Num]):
+            elif t := scanner.next_if([TokenKind.Word, TokenKind.Num]):
                 args.append(t.lexeme)
             else:
                 raise scanner.unexpected_token()
