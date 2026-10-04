@@ -9,7 +9,7 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from ocimatic import ui, utils
 from ocimatic.result import Error, Result, Status
@@ -317,6 +317,11 @@ class _Scanner:
 
 
 class Parser:
+    # Escape sequences allowed inside strings and the characters they stand for. In
+    # addition, `\xHH` stands for the character with code point HH (two hex digits).
+    _ESCAPES: ClassVar[dict[str, str]] = {'"': '"', "\\": "\\", "n": "\n", "t": "\t"}
+    _ESCAPE_RE = re.compile(r"\\(?:x([0-9a-fA-F]{2})|(.))")
+
     def __init__(self) -> None:
         self.subtasks: list[tuple[SubtaskHeader, list[Item]]] = []
         self.errors: list[ParseError] = []
@@ -439,12 +444,40 @@ class Parser:
         args: list[str] = []
         while not scanner.is_eol():
             if t := scanner.next_if(TokenKind.String):
-                args.append(t.lexeme.strip('"').encode().decode("unicode_escape"))
+                args.append(self._parse_string(t))
             elif t := scanner.next_if([TokenKind.Word, TokenKind.Num]):
                 args.append(t.lexeme)
             else:
                 raise scanner.unexpected_token()
         return args
+
+    def _parse_string(self, token: Token) -> str:
+        """Return the content of a string token with its escape sequences decoded."""
+        # The scanner guarantees the lexeme is delimited by quotes and that every
+        # backslash inside is followed by another character.
+        content = token.lexeme[1:-1]
+        line = token.range.start.line
+        offset = token.range.start.column + 1  # skip the opening quote
+
+        def unescape(m: re.Match[str]) -> str:
+            if (digits := m.group(1)) is not None:
+                return chr(int(digits, 16))
+            if (c := m.group(2)) in self._ESCAPES:
+                return self._ESCAPES[c]
+            col = offset + m.start()
+            if c == "x":
+                msg = "expected two hex digits after `\\x`"
+            else:
+                msg = f"invalid escape sequence `\\{c}`"
+            raise ParseError(
+                msg=msg,
+                range=Range(
+                    start=Position(line=line, column=col),
+                    end=Position(line=line, column=col + 2),
+                ),
+            )
+
+        return self._ESCAPE_RE.sub(unescape, content)
 
 
 @dataclass(kw_only=True, frozen=True)

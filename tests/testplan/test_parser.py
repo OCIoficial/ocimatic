@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import ANY
 
-import pytest
-
 from ocimatic.testplan import (
     Copy,
     Echo,
@@ -31,7 +29,6 @@ def test_valid_testplan() -> None:
           @extends subtask 1
     """)
 
-    # Ranges are wildcarded with `ANY`, so this only checks the parsed structure.
     assert subtasks == [
         (
             SubtaskHeader(number=1, range=ANY),
@@ -197,10 +194,6 @@ def test_blank_and_comment_lines_are_skipped() -> None:
     ]
 
 
-@pytest.mark.xfail(
-    raises=AssertionError,
-    reason="string escapes are decoded with `unicode_escape`, which mangles non-ASCII text",
-)
 def test_non_ascii_string() -> None:
     subtasks = assert_parses_ok(r"""
         [Subtask 1]
@@ -215,10 +208,6 @@ def test_non_ascii_string() -> None:
     ]
 
 
-@pytest.mark.xfail(
-    raises=UnicodeDecodeError,
-    reason="`strip('\"')` also removes the escaped quote, leaving a trailing backslash",
-)
 def test_escaped_quote_at_end_of_string() -> None:
     subtasks = assert_parses_ok(r"""
         [Subtask 1]
@@ -229,5 +218,59 @@ def test_escaped_quote_at_end_of_string() -> None:
         (
             SubtaskHeader(number=1, range=ANY),
             [Echo(group=GroupName("small"), args=['a"'], range=ANY)],
+        ),
+    ]
+
+
+def test_string_escapes() -> None:
+    subtasks = assert_parses_ok(r"""
+        [Subtask 1]
+          small ; echo "q\"q" "b\\s" "n\nn" "t\tt" "\\n"
+    """)
+
+    assert subtasks == [
+        (
+            SubtaskHeader(number=1, range=ANY),
+            [
+                Echo(
+                    group=GroupName("small"),
+                    args=['q"q', "b\\s", "n\nn", "t\tt", "\\n"],
+                    range=ANY,
+                ),
+            ],
+        ),
+    ]
+
+
+def test_invalid_escape_sequence() -> None:
+    assert_parse_errors(r"""
+        [Subtask 1]
+          small ; echo "a\qb"
+        #~               ^^ invalid escape sequence `\q`
+          small ; echo "\x4"
+        #~              ^^ expected two hex digits after `\x`
+          small ; echo "\xzz"
+        #~              ^^ expected two hex digits after `\x`
+    """)
+
+
+def test_hex_escapes() -> None:
+    subtasks = assert_parses_ok(r"""
+        [Subtask 1]
+          small ; echo "\x41\x6a" "\x7E" "\x411" "\\x41"
+    """)
+
+    assert subtasks == [
+        (
+            SubtaskHeader(number=1, range=ANY),
+            [
+                Echo(
+                    group=GroupName("small"),
+                    # Exactly two digits are consumed, and an escaped backslash
+                    # doesn't start an escape.
+                    args=["Aj", "~", "A1", "\\x41"],
+                    range=ANY,
+                ),
+            ],
         ),
     ]
