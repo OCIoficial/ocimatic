@@ -48,7 +48,6 @@
     "watch": "tsc -b -w",
     "lint": "eslint",
     "postinstall": "cd client && npm ci",
-    "package": "vsce package",
-    "release": "scripts/release.sh"
+    "package": "vsce package"
   }
 }
