@@ -65,10 +65,6 @@ def test_valid_testplan() -> None:
     ]
 
 
-@pytest.mark.xfail(
-    raises=ValueError,
-    reason="`Stn(0)` raises ValueError instead of the parser reporting a ParseError",
-)
 def test_extends_subtask_zero() -> None:
     assert_parse_errors(r"""
         [Subtask 1]

@@ -376,7 +376,13 @@ class Parser:
         scanner.expect("subtask")
         num = scanner.expect(TokenKind.Num)
         end = scanner.last_pos()
-        return Extends(stn=Stn(int(num.lexeme)), range=Range(start=start, end=end))
+        n = int(num.lexeme)
+        if n < 1:
+            raise ParseError(
+                msg="subtask number must be greater than or equal to 1",
+                range=num.range,
+            )
+        return Extends(stn=Stn(n), range=Range(start=start, end=end))
 
     def _parse_validator(self, scanner: _Scanner) -> Validator:
         start = scanner.pos()
