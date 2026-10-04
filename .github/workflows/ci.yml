@@ -13,30 +13,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4.1.1
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.2.0
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install .[dev]
+        run: uv sync --locked
 
       - name: mypy
-        run: |
-          mypy .
+        run: uv run mypy .
 
       - name: pyright
-        run: |
-          pyright .
+        run: uv run pyright .
 
       - name: ruff
         run: |
-          ruff check
-          ruff format --check
+          uv run ruff check
+          uv run ruff format --check
 
-  integration-test:
+  e2e-test:
     strategy:
       fail-fast: false
       matrix:
@@ -47,20 +41,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4.1.1
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.2.0
 
-      - name: Install ocimatic
-        run: pip install .
+      - name: Install dependencies
+        run: uv sync --locked
 
-      - name: Test ocimatic
-        run: |
-          ocimatic init contest --phase Test --typesetting typst
-          cd contest
-          ocimatic new-task task
-          cp ../tests/sample.java task/solutions/correct/
-          ocimatic run-testplan
-          ocimatic gen-expected
-          ocimatic check-dataset
+      - name: Run end-to-end tests
+        run: uv run pytest -m e2e
