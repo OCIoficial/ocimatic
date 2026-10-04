@@ -2,9 +2,7 @@
 
 Ocimatic is a tool for automating the work related to the creation of tasks for the Chilean Olympiad in Informatics (OCI).
 
-## For users
-
-### Installation
+## Installation
 
 1. With `pip`
 
@@ -18,7 +16,7 @@ Ocimatic is a tool for automating the work related to the creation of tasks for 
    uv tool install git+https://github.com/OCIoficial/ocimatic
    ```
 
-### Usage
+## Usage
 
 To get started, run the following command to display a summary of available subcommands and options:
 
@@ -31,37 +29,17 @@ that demonstrate various features of Ocimatic. Many directories also contain `RE
 documenting specific functionality. We recommend reading these README files and the comments in
 the sample files to learn how to use Ocimatic.
 
-## For developers
+## Editor support
 
-Ocimatic uses [uv](https://docs.astral.sh/uv/) for development. To set up the environment, run:
+There are VS Code and Zed extensions that provide syntax highlighting and language support for
+`testplan.txt` files. They need `ocimatic` in your `PATH` to run the language server.
 
-```bash
-uv sync
-```
+- **VS Code**: install [ocimatic-testplan](https://marketplace.visualstudio.com/items?itemName=nlehmann.ocimatic-testplan)
+  from the Marketplace.
+- **Zed**: clone [ocimatic-zed](https://github.com/OCIoficial/ocimatic-zed) and install it as a
+  [dev extension](https://zed.dev/docs/extensions/developing-extensions#developing-an-extension-locally).
 
-This creates a `.venv` with ocimatic installed in editable mode, so `uv run ocimatic` runs your
-local checkout.
+## Contributing
 
-### Tests
-
-Tests live in `tests/` and use [pytest](https://docs.pytest.org/).
-
-```bash
-uv run pytest           # unit tests
-uv run pytest -m e2e    # end-to-end tests
-```
-
-End-to-end tests need a full environment including `javac` and a C++ compiler 
-(`clang++` by default, configurable with `ocimatic setup`). They are excluded from 
-the default run.
-
-### Linting
-
-CI also runs the following checks:
-
-```bash
-uv run mypy .
-uv run pyright .
-uv run ruff check
-uv run ruff format --check
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setting up a development environment, running tests,
+and releasing.
