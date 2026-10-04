@@ -9,7 +9,7 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from ocimatic import ui, utils
 from ocimatic.result import Error, Result, Status
@@ -164,7 +164,7 @@ class Testplan:
         return None
 
 
-class _TokenKind(IntEnum):
+class TokenKind(IntEnum):
     OpenBracket = 0
     CloseBracket = 1
     Directive = 2
@@ -174,34 +174,38 @@ class _TokenKind(IntEnum):
     Eol = 6
     Error = 7
 
-    def __str__(self) -> str:
+    def describe(self) -> str:
+        """Describe the kind for error messages.
+
+        Kinds that match exact text are shown in backticks; the rest are plain descriptions.
+        """
         match self:
-            case _TokenKind.OpenBracket:
-                return "["
-            case _TokenKind.CloseBracket:
-                return "]"
-            case _TokenKind.Directive:
-                return "directive"
-            case _TokenKind.Word:
-                return "word"
-            case _TokenKind.String:
-                return "string"
-            case _TokenKind.Num:
-                return "number"
-            case _TokenKind.Eol:
+            case TokenKind.OpenBracket:
+                return "`[`"
+            case TokenKind.CloseBracket:
+                return "`]`"
+            case TokenKind.Directive:
+                return "a directive"
+            case TokenKind.Word:
+                return "a word"
+            case TokenKind.String:
+                return "a string"
+            case TokenKind.Num:
+                return "a number"
+            case TokenKind.Eol:
                 return "end of line"
-            case _TokenKind.Error:
-                return "error"
+            case TokenKind.Error:
+                return "an error"
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
 class Token:
     range: Range
     lexeme: str
-    kind: _TokenKind
+    kind: TokenKind
 
 
-type _Peek = _TokenKind | list[_TokenKind] | str
+type _Peek = TokenKind | list[TokenKind] | str
 
 
 class _Scanner:
@@ -222,22 +226,22 @@ class _Scanner:
             self._pos = m.end(0)
 
         if self._pos == len(self._line):
-            kind, span = (_TokenKind.Eol, (self._pos, self._pos + 1))
+            kind, span = (TokenKind.Eol, (self._pos, self._pos + 1))
         elif self._line[self._pos] == "[":
-            kind, span = (_TokenKind.OpenBracket, (self._pos, self._pos + 1))
+            kind, span = (TokenKind.OpenBracket, (self._pos, self._pos + 1))
         elif self._line[self._pos] == "]":
-            kind, span = (_TokenKind.CloseBracket, (self._pos, self._pos + 1))
+            kind, span = (TokenKind.CloseBracket, (self._pos, self._pos + 1))
         elif m := _Scanner.DIRECTIVE_RE.match(self._line, pos=self._pos):
-            kind, span = (_TokenKind.Directive, m.span(0))
+            kind, span = (TokenKind.Directive, m.span(0))
         elif m := _Scanner.WORD_RE.match(self._line, pos=self._pos):
             if m.group(0).isnumeric():
-                kind, span = (_TokenKind.Num, m.span(0))
+                kind, span = (TokenKind.Num, m.span(0))
             else:
-                kind, span = (_TokenKind.Word, m.span(0))
+                kind, span = (TokenKind.Word, m.span(0))
         elif m := _Scanner.STRING_RE.match(self._line, pos=self._pos):
-            kind, span = (_TokenKind.String, m.span(0))
+            kind, span = (TokenKind.String, m.span(0))
         else:
-            kind, span = (_TokenKind.Error, (self._pos, self._pos + 1))
+            kind, span = (TokenKind.Error, (self._pos, self._pos + 1))
         self._pos = span[1]
         self._next_token = Token(
             kind=kind,
@@ -249,7 +253,7 @@ class _Scanner:
         )
 
     def is_eol(self) -> bool:
-        return self._next_token.kind == _TokenKind.Eol
+        return self._next_token.kind == TokenKind.Eol
 
     def peek(self, peek: _Peek) -> bool:
         if isinstance(peek, str):
@@ -280,11 +284,11 @@ class _Scanner:
     @staticmethod
     def _peek_to_expected(peek: _Peek) -> list[str]:
         if isinstance(peek, str):
-            return [peek]
+            return [f"`{peek}`"]
         elif isinstance(peek, list):
-            return [str(k) for k in peek]
+            return [k.describe() for k in peek]
         else:
-            return [str(peek)]
+            return [peek.describe()]
 
     def pos(self) -> Position:
         """Return the start position of the next token."""
@@ -295,8 +299,12 @@ class _Scanner:
         return self._hi
 
     def unexpected_token(self, expected: list[str] | None = None) -> ParseError:
+        """Return an error for the next token.
+
+        Items in `expected` are used as given: exact text should be in backticks and
+        descriptions (e.g. "a path") should not.
+        """
         if expected:
-            expected = [f"'{s}'" for s in expected]
             if len(expected) == 1:
                 msg = f"expected {expected[0]}"
             else:
@@ -309,6 +317,11 @@ class _Scanner:
 
 
 class Parser:
+    # Escape sequences allowed inside strings and the characters they stand for. In
+    # addition, `\xHH` stands for the character with code point HH (two hex digits).
+    _ESCAPES: ClassVar[dict[str, str]] = {'"': '"', "\\": "\\", "n": "\n", "t": "\t"}
+    _ESCAPE_RE = re.compile(r"\\(?:x([0-9a-fA-F]{2})|(.))")
+
     def __init__(self) -> None:
         self.subtasks: list[tuple[SubtaskHeader, list[Item]]] = []
         self.errors: list[ParseError] = []
@@ -323,7 +336,7 @@ class Parser:
 
             try:
                 parsed = self._parse_line(scanner)
-                scanner.expect(_TokenKind.Eol)
+                scanner.expect(TokenKind.Eol)
             except ParseError as err:
                 self.errors.append(err)
                 continue
@@ -343,21 +356,21 @@ class Parser:
                         )
 
     def _parse_line(self, scanner: _Scanner) -> SubtaskHeader | Item:
-        if scanner.peek(_TokenKind.OpenBracket):
+        if scanner.peek(TokenKind.OpenBracket):
             return self._parse_header(scanner)
-        elif scanner.peek(_TokenKind.Directive):
+        elif scanner.peek(TokenKind.Directive):
             return self._parse_directive(scanner)
-        elif scanner.peek(_TokenKind.Word):
+        elif scanner.peek(TokenKind.Word):
             return self._parse_command(scanner)
         else:
             raise scanner.unexpected_token()
 
     def _parse_header(self, scanner: _Scanner) -> SubtaskHeader:
         start = scanner.pos()
-        scanner.expect(_TokenKind.OpenBracket)
+        scanner.expect(TokenKind.OpenBracket)
         scanner.expect("Subtask")
-        num = scanner.expect(_TokenKind.Num)
-        scanner.expect(_TokenKind.CloseBracket)
+        num = scanner.expect(TokenKind.Num)
+        scanner.expect(TokenKind.CloseBracket)
         end = scanner.last_pos()
 
         return SubtaskHeader(number=int(num.lexeme), range=Range(start=start, end=end))
@@ -368,20 +381,26 @@ class Parser:
         elif scanner.peek("@validator"):
             return self._parse_validator(scanner)
         else:
-            raise scanner.unexpected_token(["@extends", "@validator"])
+            raise scanner.unexpected_token(["`@extends`", "`@validator`"])
 
     def _parse_extends(self, scanner: _Scanner) -> Extends:
         start = scanner.pos()
         scanner.expect("@extends")
         scanner.expect("subtask")
-        num = scanner.expect(_TokenKind.Num)
+        num = scanner.expect(TokenKind.Num)
         end = scanner.last_pos()
-        return Extends(stn=Stn(int(num.lexeme)), range=Range(start=start, end=end))
+        n = int(num.lexeme)
+        if n < 1:
+            raise ParseError(
+                msg="subtask number must be greater than or equal to 1",
+                range=num.range,
+            )
+        return Extends(stn=Stn(n), range=Range(start=start, end=end))
 
     def _parse_validator(self, scanner: _Scanner) -> Validator:
         start = scanner.pos()
         scanner.expect("@validator")
-        path = scanner.expect(_TokenKind.Word, ["path"])
+        path = scanner.expect(TokenKind.Word, ["a path"])
         end = scanner.last_pos()
 
         return Validator(path=path, range=Range(start=start, end=end))
@@ -391,7 +410,10 @@ class Parser:
         group = self._validate_group_name(scanner.next())
         scanner.expect(";")
         cmd_start = scanner.pos()
-        cmd = scanner.expect(_TokenKind.Word, ["copy", "echo", "generator script"])
+        cmd = scanner.expect(
+            TokenKind.Word,
+            ["`copy`", "`echo`", "a generator script"],
+        )
         args = self._parse_args(scanner)
         end = scanner.last_pos()
 
@@ -421,13 +443,41 @@ class Parser:
     def _parse_args(self, scanner: _Scanner) -> list[str]:
         args: list[str] = []
         while not scanner.is_eol():
-            if t := scanner.next_if(_TokenKind.String):
-                args.append(t.lexeme.strip('"').encode().decode("unicode_escape"))
-            elif t := scanner.next_if([_TokenKind.Word, _TokenKind.Num]):
+            if t := scanner.next_if(TokenKind.String):
+                args.append(self._parse_string(t))
+            elif t := scanner.next_if([TokenKind.Word, TokenKind.Num]):
                 args.append(t.lexeme)
             else:
                 raise scanner.unexpected_token()
         return args
+
+    def _parse_string(self, token: Token) -> str:
+        """Return the content of a string token with its escape sequences decoded."""
+        # The scanner guarantees the lexeme is delimited by quotes and that every
+        # backslash inside is followed by another character.
+        content = token.lexeme[1:-1]
+        line = token.range.start.line
+        offset = token.range.start.column + 1  # skip the opening quote
+
+        def unescape(m: re.Match[str]) -> str:
+            if (digits := m.group(1)) is not None:
+                return chr(int(digits, 16))
+            if (c := m.group(2)) in self._ESCAPES:
+                return self._ESCAPES[c]
+            col = offset + m.start()
+            if c == "x":
+                msg = "expected two hex digits after `\\x`"
+            else:
+                msg = f"invalid escape sequence `\\{c}`"
+            raise ParseError(
+                msg=msg,
+                range=Range(
+                    start=Position(line=line, column=col),
+                    end=Position(line=line, column=col + 2),
+                ),
+            )
+
+        return self._ESCAPE_RE.sub(unescape, content)
 
 
 @dataclass(kw_only=True, frozen=True)
