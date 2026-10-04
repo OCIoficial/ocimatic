@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import ANY
 
-import pytest
-
 from ocimatic.testplan import (
     Copy,
     Echo,
@@ -73,4 +71,27 @@ def test_extends_subtask_zero() -> None:
           @extends subtask 00
         #~                 ^^ subtask number must be greater than or equal to 1
           small ; echo 1
+    """)
+
+
+def test_unknown_directive() -> None:
+    assert_parse_errors(r"""
+        [Subtask 1]
+          @extend subtask 1
+        #~^^^^^^^ expected `@extends` or `@validator`
+    """)
+
+
+def test_item_before_subtask() -> None:
+    assert_parse_errors(r"""
+          sample ; echo 1
+        #~^^^^^^^^^^^^^^^ unexpected item before first subtask
+    """)
+
+
+def test_unexpected_token() -> None:
+    assert_parse_errors(r"""
+        [Subtask 1]
+           ;
+        #~ ^ unexpected token `;`
     """)

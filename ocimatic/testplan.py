@@ -296,7 +296,7 @@ class _Scanner:
 
     def unexpected_token(self, expected: list[str] | None = None) -> ParseError:
         if expected:
-            expected = [f"'{s}'" for s in expected]
+            expected = [f"`{s}`" for s in expected]
             if len(expected) == 1:
                 msg = f"expected {expected[0]}"
             else:
