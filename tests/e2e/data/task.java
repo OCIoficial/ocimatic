@@ -1,4 +1,4 @@
-// File used for integration test in ci
+// Correct solution for the `task` created by the end-to-end test (class name must match the codename).
 
 import java.io.BufferedReader;
 import java.io.IOException;
