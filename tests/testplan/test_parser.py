@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import ANY
 
+import pytest
+
 from ocimatic.testplan import (
     Copy,
     Echo,
@@ -95,3 +97,137 @@ def test_unexpected_token() -> None:
            ;
         #~ ^ unexpected token `;`
     """)
+
+
+def test_header_errors() -> None:
+    assert_parse_errors(r"""
+          [Subtask]
+        #~        ^ expected a number
+          [Subtask 1
+        #~          ^ expected `]`
+          [subtask 1]
+        #~ ^^^^^^^ expected `Subtask`
+          [Subtask 1] x
+        #~            ^ expected end of line
+    """)
+
+
+def test_directive_errors() -> None:
+    assert_parse_errors(r"""
+        [Subtask 1]
+          @validator
+        #~          ^ expected a path
+          @extends 1
+        #~         ^ expected `subtask`
+          @extends subtask x
+        #~                 ^ expected a number
+    """)
+
+
+def test_command_errors() -> None:
+    assert_parse_errors(r"""
+        [Subtask 1]
+          a.b ; echo 1
+        #~^^^ invalid group name: `a.b`
+          small echo 1
+        #~      ^^^^ expected `;`
+          small ;
+        #~       ^ expected `copy`, `echo` or a generator script
+          small ; foo.sh
+        #~        ^^^^^^ invalid command `foo.sh`
+          small ; echo "abc
+        #~             ^ unexpected token `"`
+    """)
+
+
+def test_copy_expects_exactly_one_argument() -> None:
+    assert_parse_errors(r"""
+        [Subtask 1]
+          small ; copy
+        #~        ^^^^ the `copy` command expects exactly one argument.
+          small ; copy a b
+        #~        ^^^^^^^^ the `copy` command expects exactly one argument.
+    """)
+
+
+def test_command_arguments() -> None:
+    subtasks = assert_parses_ok(r"""
+        [Subtask 1]
+          quoted ; echo "a b"
+          escape ; echo "a\nb"
+          words ; echo -5 abc
+          comment ; echo 1 # trailing comment
+          cpp ; gen.cpp 1 2
+    """)
+
+    assert subtasks == [
+        (
+            SubtaskHeader(number=1, range=ANY),
+            [
+                Echo(group=GroupName("quoted"), args=["a b"], range=ANY),
+                Echo(group=GroupName("escape"), args=["a\nb"], range=ANY),
+                Echo(group=GroupName("words"), args=["-5", "abc"], range=ANY),
+                Echo(group=GroupName("comment"), args=["1"], range=ANY),
+                Script(
+                    group=GroupName("cpp"),
+                    cmd=Token(lexeme="gen.cpp", kind=TokenKind.Word, range=ANY),
+                    args=["1", "2"],
+                    range=ANY,
+                ),
+            ],
+        ),
+    ]
+
+
+def test_blank_and_comment_lines_are_skipped() -> None:
+    subtasks = assert_parses_ok(r"""
+        # leading comment
+
+        [Subtask 1]
+
+          # comment-only line
+          small ; echo 1
+    """)
+
+    assert subtasks == [
+        (
+            SubtaskHeader(number=1, range=ANY),
+            [Echo(group=GroupName("small"), args=["1"], range=ANY)],
+        ),
+    ]
+
+
+@pytest.mark.xfail(
+    raises=AssertionError,
+    reason="string escapes are decoded with `unicode_escape`, which mangles non-ASCII text",
+)
+def test_non_ascii_string() -> None:
+    subtasks = assert_parses_ok(r"""
+        [Subtask 1]
+          small ; echo "Ñandú"
+    """)
+
+    assert subtasks == [
+        (
+            SubtaskHeader(number=1, range=ANY),
+            [Echo(group=GroupName("small"), args=["Ñandú"], range=ANY)],
+        ),
+    ]
+
+
+@pytest.mark.xfail(
+    raises=UnicodeDecodeError,
+    reason="`strip('\"')` also removes the escaped quote, leaving a trailing backslash",
+)
+def test_escaped_quote_at_end_of_string() -> None:
+    subtasks = assert_parses_ok(r"""
+        [Subtask 1]
+          small ; echo "a\""
+    """)
+
+    assert subtasks == [
+        (
+            SubtaskHeader(number=1, range=ANY),
+            [Echo(group=GroupName("small"), args=['a"'], range=ANY)],
+        ),
+    ]

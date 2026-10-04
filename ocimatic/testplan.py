@@ -174,24 +174,28 @@ class TokenKind(IntEnum):
     Eol = 6
     Error = 7
 
-    def __str__(self) -> str:
+    def describe(self) -> str:
+        """Describe the kind for error messages.
+
+        Kinds that match exact text are shown in backticks; the rest are plain descriptions.
+        """
         match self:
             case TokenKind.OpenBracket:
-                return "["
+                return "`[`"
             case TokenKind.CloseBracket:
-                return "]"
+                return "`]`"
             case TokenKind.Directive:
-                return "directive"
+                return "a directive"
             case TokenKind.Word:
-                return "word"
+                return "a word"
             case TokenKind.String:
-                return "string"
+                return "a string"
             case TokenKind.Num:
-                return "number"
+                return "a number"
             case TokenKind.Eol:
                 return "end of line"
             case TokenKind.Error:
-                return "error"
+                return "an error"
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
@@ -280,11 +284,11 @@ class _Scanner:
     @staticmethod
     def _peek_to_expected(peek: _Peek) -> list[str]:
         if isinstance(peek, str):
-            return [peek]
+            return [f"`{peek}`"]
         elif isinstance(peek, list):
-            return [str(k) for k in peek]
+            return [k.describe() for k in peek]
         else:
-            return [str(peek)]
+            return [peek.describe()]
 
     def pos(self) -> Position:
         """Return the start position of the next token."""
@@ -295,8 +299,12 @@ class _Scanner:
         return self._hi
 
     def unexpected_token(self, expected: list[str] | None = None) -> ParseError:
+        """Return an error for the next token.
+
+        Items in `expected` are used as given: exact text should be in backticks and
+        descriptions (e.g. "a path") should not.
+        """
         if expected:
-            expected = [f"`{s}`" for s in expected]
             if len(expected) == 1:
                 msg = f"expected {expected[0]}"
             else:
@@ -368,7 +376,7 @@ class Parser:
         elif scanner.peek("@validator"):
             return self._parse_validator(scanner)
         else:
-            raise scanner.unexpected_token(["@extends", "@validator"])
+            raise scanner.unexpected_token(["`@extends`", "`@validator`"])
 
     def _parse_extends(self, scanner: _Scanner) -> Extends:
         start = scanner.pos()
@@ -387,7 +395,7 @@ class Parser:
     def _parse_validator(self, scanner: _Scanner) -> Validator:
         start = scanner.pos()
         scanner.expect("@validator")
-        path = scanner.expect(TokenKind.Word, ["path"])
+        path = scanner.expect(TokenKind.Word, ["a path"])
         end = scanner.last_pos()
 
         return Validator(path=path, range=Range(start=start, end=end))
@@ -397,7 +405,10 @@ class Parser:
         group = self._validate_group_name(scanner.next())
         scanner.expect(";")
         cmd_start = scanner.pos()
-        cmd = scanner.expect(TokenKind.Word, ["copy", "echo", "generator script"])
+        cmd = scanner.expect(
+            TokenKind.Word,
+            ["`copy`", "`echo`", "a generator script"],
+        )
         args = self._parse_args(scanner)
         end = scanner.last_pos()
 
