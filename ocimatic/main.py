@@ -11,6 +11,8 @@ from cloup.constraints import If, accept_none, mutually_exclusive
 # when cloup is computing completions.
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from cloup.typing import Decorator
     from ocimatic.core import CLI
     from ocimatic.result import Status
 
@@ -57,6 +59,17 @@ def _solution_completion(
             return []
 
     return inner
+
+
+def _subtask_option(*, help: str) -> Decorator:
+    """Declare the `--subtask` option, passed to the command as `subtask`."""
+    return cloup.option(
+        "--subtask",
+        "-st",
+        "subtask",
+        type=cloup.IntRange(min=1),
+        help=help,
+    )
 
 
 @cloup.command(help="Initialize a contest in a new directory.")
@@ -332,10 +345,7 @@ def normalize(cli: CLI) -> None:
 
 
 @cloup.command(help="Run the test plan.")
-@cloup.option(
-    "--subtask",
-    "-st",
-    type=cloup.IntRange(min=1),
+@_subtask_option(
     help="Only run the test plan for this subtask. "
     " This option can only be specified if there's a single target task.",
 )
@@ -364,7 +374,7 @@ def run_testplan(
             "A subtask can only be specified when there's a single target task.",
         )
 
-    stn = Stn(subtask) if subtask else None
+    stn = Stn(subtask) if subtask is not None else None
     failed = [task for task in tasks if task.run_testplan(stn=stn) == Status.fail]
     if len(failed) == 0 and gen_expected:
         failed = [task for task in tasks if task.gen_expected(stn=stn) == Status.fail]
@@ -393,12 +403,7 @@ detailed information about the failures.
 
 
 @cloup.command(help="Run input validators.")
-@cloup.option(
-    "--subtask",
-    "-st",
-    type=cloup.IntRange(min=1),
-    help="Only run validator for this subtask.",
-)
+@_subtask_option(help="Only run validator for this subtask.")
 @cloup.pass_obj
 def validate_input(cli: CLI, subtask: int | None) -> None:
     from ocimatic import ui
@@ -416,18 +421,15 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
 
     status = Status.success
     for task in tasks:
-        status &= task.validate_input(stn=Stn(subtask) if subtask else None)
+        status &= task.validate_input(
+            stn=Stn(subtask) if subtask is not None else None,
+        )
 
     exit_with_status(status)
 
 
 @cloup.command(help="Validate the format of expected output files.")
-@cloup.option(
-    "--subtask",
-    "-st",
-    type=int,
-    help="Only validate output for this subtask.",
-)
+@_subtask_option(help="Only validate output for this subtask.")
 @cloup.pass_obj
 def validate_output(cli: CLI, subtask: int | None) -> None:
     from ocimatic import ui
@@ -440,7 +442,9 @@ def validate_output(cli: CLI, subtask: int | None) -> None:
 
     status = Status.success
     for task in tasks:
-        status &= task.validate_output(stn=Stn(subtask) if subtask else None)
+        status &= task.validate_output(
+            stn=Stn(subtask) if subtask is not None else None,
+        )
 
     exit_with_status(status)
 
@@ -503,13 +507,7 @@ single_task = cloup.option(
 )
 @single_task
 @mutually_exclusive(
-    cloup.option(
-        "--subtask",
-        "-st",
-        "stn",
-        type=int,
-        help="Only run solution on the given subtask.",
-    ),
+    _subtask_option(help="Only run solution on the given subtask."),
     cloup.option(
         "--file",
         "-f",
@@ -529,7 +527,7 @@ def run_solution(
     cli: CLI,
     solution: str,
     task_name: str | None,
-    stn: int | None,
+    subtask: int | None,
     file: str | None,
     timeout: float | None,
 ) -> None:
@@ -551,7 +549,7 @@ def run_solution(
         task.run_solution(
             Path(solution),
             timeout=timeout or 3.0,
-            stn=Stn(stn) if stn else None,
+            stn=Stn(subtask) if subtask is not None else None,
         )
 
 
