@@ -3,9 +3,7 @@ from __future__ import annotations
 import math
 import random
 import re
-import shutil
 import string
-import subprocess
 import tempfile
 import zipfile
 from collections.abc import Iterable, Iterator
@@ -297,30 +295,47 @@ class Test:
 
     @ui.work("Normalize")
     def normalize(self) -> Result:
-        if not shutil.which("dos2unix"):
-            return Result.fail(short_msg="Cannot find dos2unix")
-        if not shutil.which("sed"):
-            return Result.fail(short_msg="Cannot find sed")
-        tounix_input = f'dos2unix "{self.in_path}"'
-        tounix_expected = f'dos2unix "{self.expected_path}"'
-        sed_input = f"sed -i -e '$a\\' \"{self.in_path}\""
-        sed_expected = "sed -i -e '$a\\' \"{sel.fexpected_path}\""
-        null = subprocess.DEVNULL
-        st = subprocess.call(tounix_input, stdout=null, stderr=null, shell=True)
-        st += subprocess.call(sed_input, stdout=null, stderr=null, shell=True)
-        if self.expected_path.exists():
-            st += subprocess.call(tounix_expected, stdout=null, stderr=null, shell=True)
-            st += subprocess.call(sed_expected, stdout=null, stderr=null, shell=True)
-        return Result(
-            status=Status.from_bool(st == 0),
-            short_msg="OK" if st == 0 else "FAILED",
-        )
+        """Normalize the input and expected output files with `normalize_content`.
+
+        Files are only written if their content changes.
+        """
+        changed = False
+        for path in [self.in_path, self.expected_path]:
+            if not path.exists():
+                continue
+            try:
+                content = path.read_bytes()
+                normalized = normalize_content(content)
+                if normalized != content:
+                    path.write_bytes(normalized)
+                    changed = True
+            except OSError as e:
+                return Result.fail(short_msg="FAILED", long_msg=str(e))
+        return Result.success(short_msg="normalized" if changed else "OK")
 
     def has_expected(self) -> bool:
         return self._expected_path.exists()
 
     def __lt__(self, other: Test) -> bool:
         return str(self) < str(other)
+
+
+_UTF8_BOM = b"\xef\xbb\xbf"
+
+
+def normalize_content(content: bytes) -> bytes:
+    """Normalize the content of a test file.
+
+    Removes a UTF-8 byte order mark, converts line endings (CRLF and lone CR) to LF, strips spaces
+    and tabs at the end of lines, removes empty lines at the end, and ends the content with exactly
+    one newline. Content that is empty after this becomes a single newline.
+    """
+    content = content.removeprefix(_UTF8_BOM)
+    content = content.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    lines = [line.rstrip(b" \t") for line in content.split(b"\n")]
+    while lines and not lines[-1]:
+        lines.pop()
+    return b"\n".join(lines) + b"\n"
 
 
 class _TestGroup:

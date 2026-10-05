@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -73,27 +72,20 @@ def test_archive_fails_when_a_statement_fails(
         assert Contest.load().archive() == Status.fail
 
 
-@pytest.mark.skipif(
-    shutil.which("dos2unix") is None or shutil.which("sed") is None,
-    reason="needs dos2unix and sed",
-)
-@pytest.mark.xfail(
-    reason="#1: the sed command for expected outputs isn't an f-string",
-    strict=True,
-)
-def test_normalize_succeeds(tmp_path: Path, use_env: UseEnv) -> None:
+def test_normalize_leaves_normalized_files_untouched(
+    tmp_path: Path,
+    use_env: UseEnv,
+) -> None:
     contest = make_contest(
         tmp_path,
-        TaskSpec(
-            codename="sum",
-            static=True,
-            testplan=ABSENT,
-            dataset={"st1/a.in": "1 2\r\n", "st1/a.sol": "3\r\n"},
-        ),
+        TaskSpec(codename="sum", static=True, testplan=ABSENT, dataset=STATIC_DATASET),
     )
+    in_path = contest / "sum" / "dataset" / "st1" / "a.in"
+    mtime = in_path.stat().st_mtime_ns
     with use_env(cwd=contest, contest_root=contest):
         [task] = Contest.load().tasks
         assert task.normalize() == Status.success
+    assert in_path.stat().st_mtime_ns == mtime
 
 
 def test_check_dataset_fails_when_correct_solutions_crash(
