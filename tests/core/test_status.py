@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ocimatic.core import load_contest
+from ocimatic.core import Contest
 from ocimatic.result import Status
 
 from ..conftest import UseEnv
@@ -25,7 +25,7 @@ def test_missing_solution_directories_load_as_empty(
     # Empty dicts mean `solutions/correct/` and `solutions/partial/` aren't created.
     contest = make_contest(tmp_path, TaskSpec(codename="sum", correct={}, partial={}))
     with use_env(cwd=contest, contest_root=contest):
-        [task] = load_contest().tasks
+        [task] = Contest.load().tasks
         assert task.run_testplan(stn=None) == Status.success
         # Without correct solutions there's nothing to generate expected output with.
         assert task.gen_expected() == Status.fail
@@ -34,21 +34,21 @@ def test_missing_solution_directories_load_as_empty(
 def test_compress_empty_dataset_fails(tmp_path: Path, use_env: UseEnv) -> None:
     contest = make_contest(tmp_path, TaskSpec(codename="sum"))
     with use_env(cwd=contest, contest_root=contest):
-        [task] = load_contest().tasks
+        [task] = Contest.load().tasks
         assert task.compress_dataset(random_sort=False) == Status.fail
 
 
 def test_build_statement_succeeds(tmp_path: Path, use_env: UseEnv) -> None:
     contest = make_contest(tmp_path, TaskSpec(codename="sum"))
     with use_env(cwd=contest, contest_root=contest):
-        [task] = load_contest().tasks
+        [task] = Contest.load().tasks
         assert task.build_statement() == Status.success
 
 
 def test_build_statement_fails_on_typst_error(tmp_path: Path, use_env: UseEnv) -> None:
     contest = make_contest(tmp_path, TaskSpec(codename="sum", statement="#broken(\n"))
     with use_env(cwd=contest, contest_root=contest):
-        [task] = load_contest().tasks
+        [task] = Contest.load().tasks
         assert task.build_statement() == Status.fail
 
 
@@ -70,7 +70,7 @@ def test_archive_fails_when_a_statement_fails(
     # `archive` writes `archive.zip` to the working directory.
     monkeypatch.chdir(tmp_path)
     with use_env(cwd=contest, contest_root=contest):
-        assert load_contest().archive() == Status.fail
+        assert Contest.load().archive() == Status.fail
 
 
 @pytest.mark.skipif(
@@ -92,7 +92,7 @@ def test_normalize_succeeds(tmp_path: Path, use_env: UseEnv) -> None:
         ),
     )
     with use_env(cwd=contest, contest_root=contest):
-        [task] = load_contest().tasks
+        [task] = Contest.load().tasks
         assert task.normalize() == Status.success
 
 
@@ -121,5 +121,5 @@ def test_check_dataset_fails_when_correct_solutions_crash(
         ),
     )
     with use_env(cwd=contest, contest_root=contest):
-        [task] = load_contest().tasks
+        [task] = Contest.load().tasks
         assert task.check_dataset() == Status.fail

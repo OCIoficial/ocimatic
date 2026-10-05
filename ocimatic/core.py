@@ -56,11 +56,6 @@ def find_contest_root(path: Path) -> Path | None:
     return curr_dir
 
 
-def load_contest() -> Contest:
-    """Load the contest of the current environment, failing if not inside a contest."""
-    return Contest(Env.get().require_contest_root())
-
-
 def current_task_dir() -> Path | None:
     """Return the directory directly below the contest root on the way to the current directory.
 
@@ -219,6 +214,11 @@ class Contest:
                 tasks.append((conf, dir))
         tasks.sort()
         return ((i, c, d) for i, (c, d) in enumerate(tasks))
+
+    @staticmethod
+    def load() -> Contest:
+        """Load the contest of the current environment, failing if not inside a contest."""
+        return Contest(Env.get().require_contest_root())
 
     @staticmethod
     def load_task_by_name(contest_dir: Path, task_name: str) -> Task | None:

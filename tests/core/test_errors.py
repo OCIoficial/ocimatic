@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ocimatic.core import load_contest
+from ocimatic.core import Contest
 from ocimatic.errors import OcimaticError
 
 from ..conftest import UseEnv
@@ -20,7 +20,7 @@ def test_missing_statement(tmp_path: Path, use_env: UseEnv) -> None:
         use_env(cwd=contest, contest_root=contest),
         pytest.raises(OcimaticError, match="statement file not found"),
     ):
-        load_contest()
+        Contest.load()
 
 
 def test_invalid_task_config(tmp_path: Path, use_env: UseEnv) -> None:
@@ -29,7 +29,7 @@ def test_invalid_task_config(tmp_path: Path, use_env: UseEnv) -> None:
         use_env(cwd=contest, contest_root=contest),
         pytest.raises(OcimaticError, match="Failed to load task config") as exc_info,
     ):
-        load_contest()
+        Contest.load()
     assert exc_info.value.details
 
 
@@ -39,7 +39,7 @@ def test_missing_testplan(tmp_path: Path, use_env: UseEnv) -> None:
         use_env(cwd=contest, contest_root=contest),
         pytest.raises(OcimaticError, match="File not found"),
     ):
-        load_contest()
+        Contest.load()
 
 
 def test_all_testplan_errors_are_reported(tmp_path: Path, use_env: UseEnv) -> None:
@@ -58,7 +58,7 @@ def test_all_testplan_errors_are_reported(tmp_path: Path, use_env: UseEnv) -> No
         use_env(cwd=contest, contest_root=contest),
         pytest.raises(OcimaticError, match="Error when parsing testplan") as exc_info,
     ):
-        load_contest()
+        Contest.load()
     details = exc_info.value.details
     assert details is not None
     assert "subtask number must be greater than or equal to 1" in details
