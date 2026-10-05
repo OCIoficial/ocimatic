@@ -162,7 +162,7 @@ def run_server(port: int) -> None:
 
     from ocimatic import core, server
 
-    server.run(Path(sys.argv[0]), core.load_contest(), port)
+    server.run(Path(sys.argv[0]), core.Contest.load(), port)
 
 
 @cloup.command(
@@ -186,7 +186,7 @@ def sync_resources() -> None:
     ).ask()
     if answer is not True:
         return
-    core.load_contest().sync_resources()
+    core.Contest.load().sync_resources()
 
 
 @cloup.command(help="Generate the problemset PDF.")
@@ -194,7 +194,7 @@ def sync_resources() -> None:
 def problemset() -> Status:
     from ocimatic import core
 
-    return core.load_contest().build_problemset()
+    return core.Contest.load().build_problemset()
 
 
 @cloup.command(
@@ -205,7 +205,7 @@ def problemset() -> Status:
 def archive() -> Status:
     from ocimatic import core
 
-    return core.load_contest().archive()
+    return core.Contest.load().archive()
 
 
 def _validate_task_name(ctx: click.Context, param: click.Argument, value: str) -> str:
@@ -220,7 +220,7 @@ def _validate_task_name(ctx: click.Context, param: click.Argument, value: str) -
 def new_task(name: str) -> None:
     from ocimatic import core
 
-    core.new_task(core.load_contest(), name)
+    core.new_task(core.Contest.load(), name)
 
 
 @cloup.command(
@@ -240,7 +240,7 @@ def check_dataset() -> Status:
     from ocimatic.result import Status
 
     with Env.override(verbosity=Verbosity.quiet):
-        tasks = core.select_tasks(core.load_contest())
+        tasks = core.select_tasks(core.Contest.load())
         failed = [task for task in tasks if task.check_dataset() == Status.fail]
         if len(tasks) > 1:
             ui.writeln()
@@ -299,7 +299,7 @@ def gen_expected(solution: str | None, sample: bool) -> Status:  # noqa: FBT001
     from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
 
-    tasks = core.select_tasks(core.load_contest())
+    tasks = core.select_tasks(core.Contest.load())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
@@ -346,7 +346,7 @@ def build_statement() -> Status:
     from ocimatic.result import Status
 
     status = Status.success
-    for task in core.select_tasks(core.load_contest()):
+    for task in core.select_tasks(core.Contest.load()):
         status &= task.build_statement()
     return status
 
@@ -365,7 +365,7 @@ def compress_dataset(random_sort: bool) -> Status:  # noqa: FBT001
     from ocimatic.result import Status
 
     status = Status.success
-    for task in core.select_tasks(core.load_contest()):
+    for task in core.select_tasks(core.Contest.load()):
         status &= task.compress_dataset(random_sort=random_sort)
     return status
 
@@ -377,7 +377,7 @@ def normalize() -> Status:
     from ocimatic.result import Status
 
     status = Status.success
-    for task in core.select_tasks(core.load_contest()):
+    for task in core.select_tasks(core.Contest.load()):
         status &= task.normalize()
     return status
 
@@ -404,7 +404,7 @@ def run_testplan(
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
-    tasks = core.select_tasks(core.load_contest())
+    tasks = core.select_tasks(core.Contest.load())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
@@ -453,7 +453,7 @@ def validate_input(subtask: int | None) -> Status:
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
-    tasks = core.select_tasks(core.load_contest())
+    tasks = core.select_tasks(core.Contest.load())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
@@ -480,7 +480,7 @@ def validate_output(subtask: int | None) -> Status:
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
-    tasks = core.select_tasks(core.load_contest())
+    tasks = core.select_tasks(core.Contest.load())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
@@ -500,7 +500,7 @@ def score_params() -> Status:
     from ocimatic.result import Status
 
     status = Status.success
-    for task in core.select_tasks(core.load_contest()):
+    for task in core.select_tasks(core.Contest.load()):
         status &= task.score_params()
     return status
 
@@ -509,7 +509,7 @@ def score_params() -> Status:
 def list_solutions() -> None:
     from ocimatic import core
 
-    tasks = core.select_tasks(core.load_contest())
+    tasks = core.select_tasks(core.Contest.load())
 
     for task in tasks:
         task.list_solutions()
@@ -519,7 +519,7 @@ def list_solutions() -> None:
 def coverage() -> None:
     from ocimatic import core
 
-    tasks = core.select_tasks(core.load_contest())
+    tasks = core.select_tasks(core.Contest.load())
 
     for task in tasks:
         task.coverage()
@@ -576,7 +576,7 @@ def run_solution(
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
-    task = core.select_task(core.load_contest(), task_name)
+    task = core.select_task(core.Contest.load(), task_name)
     if not task:
         raise OcimaticError("You have to be inside a task to run this command.")
     if file is not None:
@@ -606,7 +606,7 @@ def build(solution: str, task_name: str | None) -> Status:
     from ocimatic import core
     from ocimatic.errors import OcimaticError
 
-    task = core.select_task(core.load_contest(), task_name)
+    task = core.select_task(core.Contest.load(), task_name)
     if not task:
         raise OcimaticError("You have to be inside a task to run this command.")
     return task.build_solution(Path(solution))

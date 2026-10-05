@@ -56,11 +56,6 @@ def find_contest_root(path: Path) -> Path | None:
     return curr_dir
 
 
-def load_contest() -> Contest:
-    """Load the contest of the current environment, failing if not inside a contest."""
-    return Contest(Env.get().require_contest_root())
-
-
 def current_task_dir() -> Path | None:
     """Return the directory directly below the contest root on the way to the current directory.
 
@@ -219,6 +214,11 @@ class Contest:
                 tasks.append((conf, dir))
         tasks.sort()
         return ((i, c, d) for i, (c, d) in enumerate(tasks))
+
+    @staticmethod
+    def load() -> Contest:
+        """Load the contest of the current environment, failing if not inside a contest."""
+        return Contest(Env.get().require_contest_root())
 
     @staticmethod
     def load_task_by_name(contest_dir: Path, task_name: str) -> Task | None:
@@ -863,7 +863,7 @@ class Task:
         failed: list[Solution] = []
 
         ui.writeln("Running correct solutions included in stats", ui.INFO)
-        stats = RuntimeStats.unit()
+        stats: RuntimeStats | None = None
         for sol in included:
             results = sol.run_on_dataset(
                 self._dataset,
@@ -875,7 +875,13 @@ class Task:
                 continue
             new_stats = results.runtime_stats()
             assert new_stats
-            stats += new_stats
+            stats = new_stats if stats is None else stats + new_stats
+
+        # If every solution included in the stats failed, there are no running times to compute a
+        # timeout from, so the solutions excluded from the stats can't be run either.
+        if stats is None:
+            _write_failed_correct_solutions(failed)
+            return None
 
         ui.writeln()
         _write_stats(stats)
@@ -899,20 +905,7 @@ class Task:
                     failed.append(sol)
 
         if failed:
-            ui.write(
-                """
-Summary
--------
-Some correct solutions failed to run or produced wrong results. Run them individually with
-`ocimatic run` to get more information.
-
-Solutions with issues:
-""",
-                ui.RED,
-            )
-
-            for sol in failed:
-                ui.writeln(" * " + str(sol), ui.RED)
+            _write_failed_correct_solutions(failed)
             return None
 
         ui.writeln()
@@ -1213,6 +1206,22 @@ def _match_lines(
 
 def _number_to_letter(num: int) -> str:
     return chr(ord("A") + num)
+
+
+def _write_failed_correct_solutions(failed: list[Solution]) -> None:
+    ui.write(
+        """
+Summary
+-------
+Some correct solutions failed to run or produced wrong results. Run them individually with
+`ocimatic run` to get more information.
+
+Solutions with issues:
+""",
+        ui.RED,
+    )
+    for sol in failed:
+        ui.writeln(" * " + str(sol), ui.RED)
 
 
 def _write_stats(stats: RuntimeStats) -> None:
