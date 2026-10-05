@@ -51,26 +51,33 @@ def _solution_completion(
         param: click.Parameter,
         incomplete: str,
     ) -> list[CompletionItem]:
+        from pathlib import Path
+
+        from ocimatic.config import Config
+        from ocimatic.env import Env
         from ocimatic.core import CLI
 
         try:
             del param
-            data = CLI.find_contest_root()
-            if not data:
+            cwd = Path.cwd()
+            root = CLI.find_contest_root(cwd)
+            if root is None:
                 return []
 
-            task_name: str | None = ctx.params.get("task_name")
+            # Completion never builds or runs anything, so the default configuration is enough.
+            with Env.use(Env(config=Config(), cwd=cwd, contest_root=root)):
+                task_name: str | None = ctx.params.get("task_name")
 
-            task = None
-            if task_name is not None:
-                task = CLI.load_task_by_name(data[0], task_name)
-            elif data[1] is not None:
-                task = CLI.load_task_by_dir(data[0], data[1])
+                task = None
+                if task_name is not None:
+                    task = CLI.load_task_by_name(root, task_name)
+                elif (last_dir := CLI().last_dir) is not None:
+                    task = CLI.load_task_by_dir(root, last_dir)
 
-            if not task:
-                return []
+                if not task:
+                    return []
 
-            return task.solution_completion(incomplete, partial=partial)
+                return task.solution_completion(incomplete, partial=partial)
         except Exception:
             return []
 
@@ -230,36 +237,37 @@ Runs multiple validations on the dataset:\n
 @_exits_with_status
 def check_dataset(cli: CLI) -> Status:
     from ocimatic import ui
+    from ocimatic.env import Env, Verbosity
     from ocimatic.result import Status
 
-    ui.set_verbosity(ui.Verbosity.quiet)
-    tasks = cli.select_tasks()
-    failed = [task for task in tasks if task.check_dataset() == Status.fail]
-    if len(tasks) > 1:
-        ui.writeln()
-        if failed:
-            ui.writeln(
-                "------------------------------------------------",
-                ui.ERROR,
-            )
-            ui.writeln(
-                "Some tasks have issues that need to be resolved.",
-                ui.ERROR,
-            )
+    with Env.override(verbosity=Verbosity.quiet):
+        tasks = cli.select_tasks()
+        failed = [task for task in tasks if task.check_dataset() == Status.fail]
+        if len(tasks) > 1:
             ui.writeln()
-            ui.writeln("Tasks with issues:", ui.ERROR)
-            for task in failed:
-                ui.writeln(f" * {task.name}", ui.ERROR)
-            ui.writeln(
-                "------------------------------------------------",
-                ui.ERROR,
-            )
-        else:
-            ui.writeln("--------------------", ui.OK)
-            ui.writeln("| No issues found! |", ui.OK)
-            ui.writeln("--------------------", ui.OK)
+            if failed:
+                ui.writeln(
+                    "------------------------------------------------",
+                    ui.ERROR,
+                )
+                ui.writeln(
+                    "Some tasks have issues that need to be resolved.",
+                    ui.ERROR,
+                )
+                ui.writeln()
+                ui.writeln("Tasks with issues:", ui.ERROR)
+                for task in failed:
+                    ui.writeln(f" * {task.name}", ui.ERROR)
+                ui.writeln(
+                    "------------------------------------------------",
+                    ui.ERROR,
+                )
+            else:
+                ui.writeln("--------------------", ui.OK)
+                ui.writeln("| No issues found! |", ui.OK)
+                ui.writeln("--------------------", ui.OK)
 
-    return Status.fail if failed else Status.success
+        return Status.fail if failed else Status.success
 
 
 @cloup.command(
@@ -289,47 +297,48 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> Status:  # noq
     from pathlib import Path
 
     from ocimatic import ui
+    from ocimatic.env import Env, Verbosity
     from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
 
     tasks = cli.select_tasks()
-    if len(tasks) > 1:
-        ui.set_verbosity(ui.Verbosity.quiet)
+    with Env.override(
+        verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
+    ):
+        if solution is not None and len(tasks) > 1:
+            raise OcimaticError(
+                "A solution can only be specified when there's a single target task.",
+            )
 
-    if solution is not None and len(tasks) > 1:
-        raise OcimaticError(
-            "A solution can only be specified when there's a single target task.",
-        )
+        solution_path = Path(solution) if solution else None
 
-    solution_path = Path(solution) if solution else None
+        failed = [
+            task
+            for task in tasks
+            if task.gen_expected(sample=sample, solution=solution_path) == Status.fail
+        ]
 
-    failed = [
-        task
-        for task in tasks
-        if task.gen_expected(sample=sample, solution=solution_path) == Status.fail
-    ]
-
-    if len(tasks) > 1 and len(failed) > 0:
-        ui.writeln(
-            """
+        if len(tasks) > 1 and len(failed) > 0:
+            ui.writeln(
+                """
 --------------------------------------------------------
 Failed to generate expected output for some of the tasks.
 
 Tasks with issues:""",
-            ui.ERROR,
-        )
-        for t in failed:
-            ui.writeln(f" * {t}", ui.ERROR)
-        ui.writeln(
-            """
+                ui.ERROR,
+            )
+            for t in failed:
+                ui.writeln(f" * {t}", ui.ERROR)
+            ui.writeln(
+                """
 To investigate further, run `ocimatic gen-expected`
 inside the corresponding task directory to get detailed
 information about the failures.
 --------------------------------------------------------
 """,
-            ui.ERROR,
-        )
-    return Status.fail if failed else Status.success
+                ui.ERROR,
+            )
+        return Status.fail if failed else Status.success
 
 
 @cloup.command(help="Build the statement PDF.")
@@ -394,45 +403,48 @@ def run_testplan(
     gen_expected: bool,  # noqa: FBT001
 ) -> Status:
     from ocimatic import ui
+    from ocimatic.env import Env, Verbosity
     from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
     tasks = cli.select_tasks()
-    if len(tasks) > 1:
-        ui.set_verbosity(ui.Verbosity.quiet)
+    with Env.override(
+        verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
+    ):
+        if subtask is not None and len(tasks) > 1:
+            raise OcimaticError(
+                "A subtask can only be specified when there's a single target task.",
+            )
 
-    if subtask is not None and len(tasks) > 1:
-        raise OcimaticError(
-            "A subtask can only be specified when there's a single target task.",
-        )
+        stn = Stn(subtask) if subtask is not None else None
+        failed = [task for task in tasks if task.run_testplan(stn=stn) == Status.fail]
+        if len(failed) == 0 and gen_expected:
+            failed = [
+                task for task in tasks if task.gen_expected(stn=stn) == Status.fail
+            ]
 
-    stn = Stn(subtask) if subtask is not None else None
-    failed = [task for task in tasks if task.run_testplan(stn=stn) == Status.fail]
-    if len(failed) == 0 and gen_expected:
-        failed = [task for task in tasks if task.gen_expected(stn=stn) == Status.fail]
-
-    if len(tasks) > 1 and len(failed) > 0:
-        ui.writeln(
-            """
+        if len(tasks) > 1 and len(failed) > 0:
+            ui.writeln(
+                """
 ----------------------------------------------------
 Testplan failed for some of the tasks.
 
 Tasks with issues:""",
-            ui.ERROR,
-        )
-        for t in failed:
-            ui.writeln(f" * {t}", ui.ERROR)
-        ui.writeln(
-            """
+                ui.ERROR,
+            )
+            for t in failed:
+                ui.writeln(f" * {t}", ui.ERROR)
+            ui.writeln(
+                """
 To investigate further, run `ocimatic run-testplan`
 inside the corresponding task directory to get
 detailed information about the failures.
 ----------------------------------------------------
 """,
-            ui.ERROR,
-        )
-    return Status.fail if failed else Status.success
+                ui.ERROR,
+            )
+        return Status.fail if failed else Status.success
 
 
 @cloup.command(help="Run input validators.")
@@ -440,27 +452,27 @@ detailed information about the failures.
 @cloup.pass_obj
 @_exits_with_status
 def validate_input(cli: CLI, subtask: int | None) -> Status:
-    from ocimatic import ui
+    from ocimatic.env import Env, Verbosity
     from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
     tasks = cli.select_tasks()
-    if len(tasks) > 1:
-        ui.set_verbosity(ui.Verbosity.quiet)
+    with Env.override(
+        verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
+    ):
+        if subtask is not None and len(tasks) > 1:
+            raise OcimaticError(
+                "A subtask can only be specified when there's a single target task.",
+            )
 
-    if subtask is not None and len(tasks) > 1:
-        raise OcimaticError(
-            "A subtask can only be specified when there's a single target task.",
-        )
+        status = Status.success
+        for task in tasks:
+            status &= task.validate_input(
+                stn=Stn(subtask) if subtask is not None else None,
+            )
 
-    status = Status.success
-    for task in tasks:
-        status &= task.validate_input(
-            stn=Stn(subtask) if subtask is not None else None,
-        )
-
-    return status
+        return status
 
 
 @cloup.command(help="Validate the format of expected output files.")
@@ -468,21 +480,21 @@ def validate_input(cli: CLI, subtask: int | None) -> Status:
 @cloup.pass_obj
 @_exits_with_status
 def validate_output(cli: CLI, subtask: int | None) -> Status:
-    from ocimatic import ui
+    from ocimatic.env import Env, Verbosity
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
     tasks = cli.select_tasks()
-    if len(tasks) > 1:
-        ui.set_verbosity(ui.Verbosity.quiet)
+    with Env.override(
+        verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
+    ):
+        status = Status.success
+        for task in tasks:
+            status &= task.validate_output(
+                stn=Stn(subtask) if subtask is not None else None,
+            )
 
-    status = Status.success
-    for task in tasks:
-        status &= task.validate_output(
-            stn=Stn(subtask) if subtask is not None else None,
-        )
-
-    return status
+        return status
 
 
 @cloup.command(help="Print score parameters for CMS.")
@@ -841,11 +853,19 @@ You can see more information about a command by calling it with --help/-h.
 )
 @cloup.pass_context
 def cli(ctx: click.Context) -> None:
+    from pathlib import Path
+
     from ocimatic.config import Config
+    from ocimatic.env import Env
     from ocimatic.core import CLI
 
+    # Don't load the config file for `setup`. This ensures we can run `ocimatic setup` even if
+    # there are issues with the config file.
+    config = Config() if ctx.invoked_subcommand == "setup" else Config.load()
+    cwd = Path.cwd()
+    ctx.with_resource(
+        Env.use(
+            Env(config=config, cwd=cwd, contest_root=CLI.find_contest_root(cwd)),
+        ),
+    )
     ctx.obj = CLI()
-    # Only initialize config if we are not running the `setup` command. This ensures we can
-    # run `ocimatic setup` even if there are issues with the config file.
-    if ctx.invoked_subcommand != "setup":
-        Config.initialize()

@@ -16,8 +16,6 @@ try:
 except PackageNotFoundError:
     __version__ = "not found"
 
-CONTEST_ROOT: Path = Path("/")
-
 
 def field[T](c: Callable[[], T]) -> T:
     return msgspec.field(default_factory=c)
@@ -53,7 +51,6 @@ class LatexConfig(msgspec.Struct, kw_only=True, frozen=True):
 
 
 class Config(msgspec.Struct, kw_only=True, frozen=True):
-    _value: ClassVar[Config | None] = None
     HOME_PATH: ClassVar[Path] = Path.home() / ".ocimatic.toml"
     TEMPLATE_PATH: ClassVar[Path] = (
         Path(__file__).parent / "resources" / "ocimatic.toml"
@@ -75,29 +72,26 @@ class Config(msgspec.Struct, kw_only=True, frozen=True):
         return doc
 
     @staticmethod
-    def initialize() -> None:
-        if Config._value:
-            return
-
+    def load() -> Config:
+        """Load the configuration from `HOME_PATH`, or return the defaults if it doesn't exist."""
         path = Config.HOME_PATH
-        if Config.HOME_PATH.exists():
-            try:
-                Config._value = msgspec.toml.decode(path.read_text(), type=Config)
-            except Exception as e:
-                raise OcimaticError(
-                    f"Failed to load configuration from {path}",
-                    details=f"{e}\n"
-                    "You can regenerate the default configuration with `ocimatic setup`.",
-                ) from e
-        else:
-            Config._value = Config()
+        if not path.exists():
+            return Config()
+        try:
+            return msgspec.toml.decode(path.read_text(), type=Config)
+        except Exception as e:
+            raise OcimaticError(
+                f"Failed to load configuration from {path}",
+                details=f"{e}\n"
+                "You can regenerate the default configuration with `ocimatic setup`.",
+            ) from e
 
     @staticmethod
     def get() -> Config:
-        assert Config._value, (
-            "Configuration not initialized. Call Config.initialize() before Config.get()."
-        )
-        return Config._value
+        """Return the configuration of the current environment."""
+        from ocimatic.env import Env
+
+        return Env.get().config
 
 
 def _merge_toml(doc: Any, data: Any) -> None:

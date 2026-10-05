@@ -17,9 +17,10 @@ import msgspec
 import tomlkit
 from click.shell_completion import CompletionItem
 
-from ocimatic import config, ui
+from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
+from ocimatic.env import Env
 from ocimatic.errors import OcimaticError
 from ocimatic.result import Error, Result, Status
 from ocimatic.solutions import Solution
@@ -42,26 +43,22 @@ class Typesetting(StrEnum):
 
 class CLI:
     def __init__(self) -> None:
-        self._data: tuple[Contest, Path | None] | None = None
+        self._contest: Contest | None = None
 
     @staticmethod
-    def find_contest_root() -> tuple[Path, Path | None] | None:
-        """Find the root of the contest.
+    def find_contest_root(start: Path) -> Path | None:
+        """Find the root of the contest containing `start`.
 
-        Returns the absolute path to the root of the contest and the last directory
-        before reaching the root (if there's one), this is used to find the target
-        task. Returns `None` if the function reaches the system root without finding
-        a contest.
+        Returns the closest directory containing the contest configuration file, starting at
+        `start` and going up, or `None` if the system root is reached without finding one.
         """
-        last_dir = None
-        curr_dir = Path.cwd()
+        curr_dir = start
         while not Path(curr_dir, ContestConfig.FILE_NAME).exists():
-            last_dir = curr_dir
-            curr_dir = curr_dir.parent
-            if curr_dir.samefile(last_dir):
+            parent = curr_dir.parent
+            if parent.samefile(curr_dir):
                 return None
-        config.CONTEST_ROOT = curr_dir
-        return (curr_dir, last_dir)
+            curr_dir = parent
+        return curr_dir
 
     @staticmethod
     def load_task_by_name(contest_dir: Path, task_name: str) -> Task | None:
@@ -77,21 +74,22 @@ class CLI:
 
     @property
     def contest(self) -> Contest:
-        (contest, _) = self._load()
-        return contest
+        if self._contest is None:
+            self._contest = Contest(Env.get().require_contest_root())
+        return self._contest
 
     @property
     def last_dir(self) -> Path | None:
-        (_, last_dir) = self._load()
-        return last_dir
+        """The directory directly below the contest root on the way to the current directory.
 
-    def _load(self) -> tuple[Contest, Path | None]:
-        if not self._data:
-            result = CLI.find_contest_root()
-            if not result:
-                raise OcimaticError("ocimatic was not called inside a contest.")
-            self._data = (Contest(result[0]), result[1])
-        return self._data
+        This is used to find the target task. It's `None` when the current directory is the
+        contest root itself.
+        """
+        root = Env.get().require_contest_root()
+        cwd = Env.get().cwd
+        if cwd == root or not cwd.is_relative_to(root):
+            return None
+        return root / cwd.relative_to(root).parts[0]
 
     def new_task(self, name: str) -> None:
         if Path(self.contest.directory, name).exists():
@@ -614,7 +612,7 @@ class Task:
             self._directory / "solutions" / "correct",
             self._directory / "solutions" / "partial",
             self._directory / "solutions",
-            Path.cwd(),
+            Env.get().cwd,
         ]:
             sol = Solution.load(self.codename, dir / path, self._managers_dir)
             if sol:
