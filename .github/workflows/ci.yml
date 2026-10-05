@@ -30,7 +30,7 @@ jobs:
           uv run ruff check
           uv run ruff format --check
 
-  e2e-test:
+  test:
     strategy:
       fail-fast: false
       matrix:
@@ -47,5 +47,10 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      - name: Run unit tests
+        run: uv run pytest
+
       - name: Run end-to-end tests
+        # Run them even if the unit tests failed, to see both results.
+        if: ${{ !cancelled() }}
         run: uv run pytest -m e2e
