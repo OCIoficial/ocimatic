@@ -1,8 +1,9 @@
 """Helpers for writing declarative testplan parser tests.
 
-A test input is a testplan written inline as a raw triple-quoted string. Expected errors are
-annotated below the offending line with `#~`, followed by carets marking the columns the error
-spans and the first line of the error message:
+A test input is a testplan written inline as a raw triple-quoted string, which is passed through
+`block` to remove its indentation. Expected errors are annotated below the offending line with
+`#~`, followed by carets marking the columns the error spans and the first line of the error
+message:
 
     assert_parse_errors(r'''
         [Subtask 1]
@@ -19,12 +20,13 @@ from __future__ import annotations
 
 import difflib
 import re
-import textwrap
 from collections.abc import Iterable
 
 import pytest
 
 from ocimatic.testplan import Item, Parser, ParseError, Position, Range, SubtaskHeader
+
+from ..text import block
 
 MARKER = "#~"
 _ANNOTATION_RE = re.compile(r"#~(\s*)(\^+)\s*(\S.*)")
@@ -37,16 +39,8 @@ class AnnotationError(Exception):
     """An annotation in a test input is malformed. This is a bug in the test, not the parser."""
 
 
-def dedent_source(src: str) -> str:
-    """Normalize an inline test input.
-
-    Removes the newline right after the opening quotes and the indentation shared by all lines.
-    """
-    return textwrap.dedent(src.removeprefix("\n"))
-
-
 def parse_annotations(src: str) -> list[Annotation]:
-    """Extract the expected errors from an already dedented source.
+    """Extract the expected errors from `src`.
 
     Each annotation applies to the closest line above it that isn't an annotation.
     """
@@ -60,7 +54,7 @@ def parse_annotations(src: str) -> list[Annotation]:
         where = f"line {lineno + 1}: {line!r}"
         if not line.startswith(MARKER):
             raise AnnotationError(
-                f"`{MARKER}` must be at the start of the line after dedenting, {where}",
+                f"`{MARKER}` must be at the start of the line, {where}",
             )
         if target is None:
             raise AnnotationError(f"annotation has no source line above it, {where}")
@@ -83,7 +77,7 @@ def assert_parses_ok(src: str) -> list[tuple[SubtaskHeader, list[Item]]]:
 
     `src` must not contain annotations.
     """
-    src = dedent_source(src)
+    src = block(src)
     if parse_annotations(src):
         raise AnnotationError(
             "`assert_parses_ok` expects no annotations, use `assert_parse_errors` instead",
@@ -98,7 +92,7 @@ def assert_parse_errors(src: str) -> None:
 
     `src` must contain at least one annotation.
     """
-    src = dedent_source(src)
+    src = block(src)
     expected = parse_annotations(src)
     if not expected:
         raise AnnotationError(

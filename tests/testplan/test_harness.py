@@ -9,12 +9,12 @@ import pytest
 
 from ocimatic.testplan import ParseError, Position, Range
 
+from ..text import block
 from .harness import (
     AnnotationError,
     assert_parse_errors,
     assert_parses_ok,
     check_errors,
-    dedent_source,
     parse_annotations,
 )
 
@@ -30,17 +30,27 @@ def _span(line: int, start: int, end: int) -> Range:
 
 
 def test_annotation_column_width_and_message() -> None:
-    src = "[Subtask 1]\n  foo bar\n#~    ^^^ some message\n"
+    src = block(r"""
+        [Subtask 1]
+          foo bar
+        #~    ^^^ some message
+    """)
     assert parse_annotations(src) == [(_span(1, 6, 9), "some message")]
 
 
 def test_annotation_trailing_whitespace_is_ignored() -> None:
+    # Written with escapes because editors strip trailing whitespace from source lines.
     src = "[Subtask 1]\n  foo\n#~  ^ msg   \n"
     assert parse_annotations(src) == [(_span(1, 4, 5), "msg")]
 
 
 def test_stacked_annotations_apply_to_the_same_line() -> None:
-    src = "[Subtask 1]\n  foo bar\n#~ ^ first\n#~     ^ second\n"
+    src = block(r"""
+        [Subtask 1]
+          foo bar
+        #~ ^ first
+        #~     ^ second
+    """)
     assert parse_annotations(src) == [
         (_span(1, 3, 4), "first"),
         (_span(1, 7, 8), "second"),
@@ -48,7 +58,13 @@ def test_stacked_annotations_apply_to_the_same_line() -> None:
 
 
 def test_annotations_apply_to_the_closest_source_line() -> None:
-    src = "[Subtask 1]\n  foo\n#~  ^ a\n  bar\n#~  ^ b\n"
+    src = block(r"""
+        [Subtask 1]
+          foo
+        #~  ^ a
+          bar
+        #~  ^ b
+    """)
     assert parse_annotations(src) == [
         (_span(1, 4, 5), "a"),
         (_span(3, 4, 5), "b"),
@@ -56,15 +72,19 @@ def test_annotations_apply_to_the_closest_source_line() -> None:
 
 
 def test_plain_comments_are_not_annotations() -> None:
-    src = "[Subtask 1]\n# ^ not an annotation\n  # also not\n"
+    src = block(r"""
+        [Subtask 1]
+        # ^ not an annotation
+          # also not
+    """)
     assert parse_annotations(src) == []
 
 
 # Dedent alignment
 
 
-def test_dedent_keeps_carets_aligned() -> None:
-    indented = dedent_source(r"""
+def test_block_keeps_carets_aligned() -> None:
+    indented = block(r"""
         [Subtask 1]
           foo bar
         #~    ^^^ msg
@@ -143,10 +163,35 @@ def test_check_errors_reports_errors_without_range() -> None:
 @pytest.mark.parametrize(
     "src",
     [
-        pytest.param("#~ ^ msg\n[Subtask 1]\n", id="first-line"),
-        pytest.param("[Subtask 1]\n#~ msg\n", id="no-carets"),
-        pytest.param("[Subtask 1]\n#~   ^\n", id="no-message"),
-        pytest.param("[Subtask 1]\n  foo\n  #~ ^ msg\n", id="indented-marker"),
+        pytest.param(
+            block(r"""
+                #~ ^ msg
+                [Subtask 1]
+            """),
+            id="first-line",
+        ),
+        pytest.param(
+            block(r"""
+                [Subtask 1]
+                #~ msg
+            """),
+            id="no-carets",
+        ),
+        pytest.param(
+            block(r"""
+                [Subtask 1]
+                #~   ^
+            """),
+            id="no-message",
+        ),
+        pytest.param(
+            block(r"""
+                [Subtask 1]
+                  foo
+                  #~ ^ msg
+            """),
+            id="indented-marker",
+        ),
     ],
 )
 def test_malformed_annotation(src: str) -> None:
@@ -156,9 +201,16 @@ def test_malformed_annotation(src: str) -> None:
 
 def test_assert_parses_ok_rejects_annotations() -> None:
     with pytest.raises(AnnotationError):
-        assert_parses_ok("[Subtask 1]\n  small ; echo 1\n#~        ^ msg\n")
+        assert_parses_ok(r"""
+            [Subtask 1]
+              small ; echo 1
+            #~        ^ msg
+        """)
 
 
 def test_assert_parse_errors_requires_annotations() -> None:
     with pytest.raises(AnnotationError):
-        assert_parse_errors("[Subtask 1]\n  small ; echo 1\n")
+        assert_parse_errors(r"""
+            [Subtask 1]
+              small ; echo 1
+        """)
