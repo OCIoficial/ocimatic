@@ -4,7 +4,7 @@ import re
 import sys
 from collections.abc import Callable, Generator
 from enum import Enum
-from typing import Literal, NoReturn, cast
+from typing import Literal, cast
 
 from colorama import Fore, Style
 
@@ -76,12 +76,6 @@ def flush() -> None:
 
 def writeln(text: str = "", color: str = RESET) -> None:
     write(text + "\n", color, flush=True)
-
-
-def fatal_error(message: str) -> NoReturn:
-    writeln(colorize(message, INFO + RED))
-    writeln()
-    sys.exit(1)
 
 
 def show_message(label: str, msg: str, color: str = INFO) -> None:

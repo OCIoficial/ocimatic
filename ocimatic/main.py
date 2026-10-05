@@ -100,6 +100,7 @@ def init(path: str, phase: str | None, typesetting: str | None) -> None:
     from pathlib import Path
 
     from ocimatic import ui
+    from ocimatic.errors import OcimaticError
     from ocimatic.core import CLI, Typesetting
     import questionary
 
@@ -132,11 +133,13 @@ def init(path: str, phase: str | None, typesetting: str | None) -> None:
         ui.writeln()
         contest_path = Path(Path.cwd(), path)
         if contest_path.exists():
-            ui.fatal_error("Couldn't create contest. Path already exists")
+            raise OcimaticError("Couldn't create contest. Path already exists")
         CLI.init_contest(contest_path, phase, Typesetting(typesetting))
         ui.show_message("Info", f"Contest [{path}] created", ui.OK)
+    except OcimaticError:
+        raise
     except Exception as exc:
-        ui.fatal_error(f"Couldn't create contest: {exc}.")
+        raise OcimaticError("Couldn't create contest.", details=str(exc)) from exc
 
 
 @cloup.command(
@@ -286,6 +289,7 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> Status:  # noq
     from pathlib import Path
 
     from ocimatic import ui
+    from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
 
     tasks = cli.select_tasks()
@@ -293,7 +297,7 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> Status:  # noq
         ui.set_verbosity(ui.Verbosity.quiet)
 
     if solution is not None and len(tasks) > 1:
-        ui.fatal_error(
+        raise OcimaticError(
             "A solution can only be specified when there's a single target task.",
         )
 
@@ -390,6 +394,7 @@ def run_testplan(
     gen_expected: bool,  # noqa: FBT001
 ) -> Status:
     from ocimatic import ui
+    from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
@@ -398,7 +403,7 @@ def run_testplan(
         ui.set_verbosity(ui.Verbosity.quiet)
 
     if subtask is not None and len(tasks) > 1:
-        ui.fatal_error(
+        raise OcimaticError(
             "A subtask can only be specified when there's a single target task.",
         )
 
@@ -436,6 +441,7 @@ detailed information about the failures.
 @_exits_with_status
 def validate_input(cli: CLI, subtask: int | None) -> Status:
     from ocimatic import ui
+    from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
@@ -444,7 +450,7 @@ def validate_input(cli: CLI, subtask: int | None) -> Status:
         ui.set_verbosity(ui.Verbosity.quiet)
 
     if subtask is not None and len(tasks) > 1:
-        ui.fatal_error(
+        raise OcimaticError(
             "A subtask can only be specified when there's a single target task.",
         )
 
@@ -558,12 +564,13 @@ def run_solution(
     from pathlib import Path
 
     from ocimatic import ui
+    from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
     task = cli.select_task(task_name)
     if not task:
-        ui.fatal_error("You have to be inside a task to run this command.")
+        raise OcimaticError("You have to be inside a task to run this command.")
     if file is not None:
         sol = task.load_solution_from_path(Path(solution))
         if not sol:
@@ -589,11 +596,11 @@ def run_solution(
 def build(cli: CLI, solution: str, task_name: str | None) -> Status:
     from pathlib import Path
 
-    from ocimatic import ui
+    from ocimatic.errors import OcimaticError
 
     task = cli.select_task(task_name)
     if not task:
-        ui.fatal_error("You have to be inside a task to run this command.")
+        raise OcimaticError("You have to be inside a task to run this command.")
     return task.build_solution(Path(solution))
 
 

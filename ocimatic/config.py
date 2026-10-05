@@ -9,7 +9,7 @@ from collections.abc import Callable
 import msgspec
 import tomlkit
 
-from ocimatic import ui
+from ocimatic.errors import OcimaticError
 
 try:
     __version__ = version("ocimatic")
@@ -84,10 +84,11 @@ class Config(msgspec.Struct, kw_only=True, frozen=True):
             try:
                 Config._value = msgspec.toml.decode(path.read_text(), type=Config)
             except Exception as e:
-                ui.fatal_error(
-                    f"Failed to load configuration from {path}: {e}\n"
+                raise OcimaticError(
+                    f"Failed to load configuration from {path}",
+                    details=f"{e}\n"
                     "You can regenerate the default configuration with `ocimatic setup`.",
-                )
+                ) from e
         else:
             Config._value = Config()
 

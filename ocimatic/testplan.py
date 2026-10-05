@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 import shutil
-import sys
 import typing
 from abc import ABC, abstractmethod
 from collections import Counter
@@ -12,6 +11,7 @@ from pathlib import Path
 from typing import ClassVar, Literal
 
 from ocimatic import ui, utils
+from ocimatic.errors import OcimaticError
 from ocimatic.result import Error, Result, Status
 from ocimatic.runnable import ret_code_to_str
 from ocimatic.source_code import BuildError, CppSource, PythonSource, SourceCode
@@ -32,7 +32,7 @@ class Testplan:
     ) -> None:
         self._path = path
         if not self._path.exists():
-            ui.fatal_error(f'File not found: "{self._path}"')
+            raise OcimaticError(f'File not found: "{self._path}"')
         self._task_directory = task_directory
         self._dataset_dir = dataset_directory
 
@@ -41,14 +41,10 @@ class Testplan:
 
         err_msg = f"Error when parsing testplan: `{utils.relative_to_cwd(self._path)}`"
         if len(parser.errors) > 0:
-            ui.writeln(err_msg, ui.ERROR)
-            ui.writeln(f"{parser.errors[0]}", ui.ERROR)
-            sys.exit(1)
+            raise OcimaticError(err_msg, details="\n".join(map(str, parser.errors)))
 
         if isinstance(subtasks := self._validate_subtasks(parser.subtasks), ParseError):
-            ui.writeln(err_msg, ui.ERROR)
-            ui.writeln(f"{subtasks}", ui.ERROR)
-            sys.exit(1)
+            raise OcimaticError(err_msg, details=str(subtasks))
 
         self._subtasks = subtasks
 

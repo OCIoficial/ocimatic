@@ -20,6 +20,7 @@ from click.shell_completion import CompletionItem
 from ocimatic import config, ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
+from ocimatic.errors import OcimaticError
 from ocimatic.result import Error, Result, Status
 from ocimatic.solutions import Solution
 from ocimatic.source_code import (
@@ -88,13 +89,13 @@ class CLI:
         if not self._data:
             result = CLI.find_contest_root()
             if not result:
-                ui.fatal_error("ocimatic was not called inside a contest.")
+                raise OcimaticError("ocimatic was not called inside a contest.")
             self._data = (Contest(result[0]), result[1])
         return self._data
 
     def new_task(self, name: str) -> None:
         if Path(self.contest.directory, name).exists():
-            ui.fatal_error("Cannot create task in existing directory.")
+            raise OcimaticError("Cannot create task in existing directory.")
         self.contest.new_task(name)
         ui.show_message("Info", f"Task [{name}] created", ui.OK)
 
@@ -144,7 +145,10 @@ class ContestConfig(msgspec.Struct, kw_only=True, frozen=True):
         try:
             conf = msgspec.toml.decode(path.read_text(), type=ContestConfig)
         except Exception as e:
-            ui.fatal_error(f"Failed to load contest config from {path}: {e}")
+            raise OcimaticError(
+                f"Failed to load contest config from {path}",
+                details=str(e),
+            ) from e
         return conf
 
 
@@ -454,7 +458,10 @@ class TaskConfig(msgspec.Struct, kw_only=True, frozen=True):
         try:
             conf = msgspec.toml.decode(path.read_text(), type=TaskConfig)
         except Exception as e:
-            ui.fatal_error(f"Failed to load task config from {path}: {e}")
+            raise OcimaticError(
+                f"Failed to load task config from {path}",
+                details=str(e),
+            ) from e
         return conf
 
     def __lt__(self, other: TaskConfig) -> bool:
@@ -1021,7 +1028,7 @@ Solutions with issues:
             generator = sols[0] if sols else None
 
         if not generator:
-            ui.fatal_error("solution not found")
+            raise OcimaticError("solution not found")
         if generator.gen_expected(self._dataset, stn=stn, sample=sample) == Status.fail:
             return Status.fail
 
@@ -1139,7 +1146,8 @@ class TypstStatement(Statement):
         codename: str,
     ) -> None:
         statement_path = directory / "statement.typ"
-        assert statement_path.exists(), f"{statement_path} does not exist"
+        if not statement_path.exists():
+            raise OcimaticError(f"statement file not found: `{statement_path}`")
         sys_inputs: dict[str, str] = {
             "OCIMATIC_PHASE": phase,
             "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),
@@ -1183,7 +1191,9 @@ class LatexStatement(Statement):
         num: int,
         codename: str,
     ) -> None:
-        assert (directory / "statement.tex").exists()
+        statement_path = directory / "statement.tex"
+        if not statement_path.exists():
+            raise OcimaticError(f"statement file not found: `{statement_path}`")
         env: dict[str, str] = {
             "OCIMATIC_PHASE": phase,
             "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),
