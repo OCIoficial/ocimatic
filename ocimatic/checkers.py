@@ -39,6 +39,9 @@ class Checker(ABC):
 
     @staticmethod
     def find_in_directory(dir: Path) -> Checker:
+        """Find a custom checker in `dir`, falling back to `DiffChecker` (also if `dir` is missing)."""
+        if not dir.is_dir():
+            return DiffChecker()
         for f in dir.iterdir():
             if f.name == "checker.cpp":
                 return CustomChecker(

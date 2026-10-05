@@ -8,7 +8,6 @@ from typing import Protocol, Self, TextIO
 
 from ocimatic import ui, utils
 from ocimatic.checkers import Checker
-from ocimatic.errors import OcimaticError
 from ocimatic.dataset import (
     Dataset,
     DatasetResults,
@@ -44,9 +43,9 @@ class Solution:
         directory: Path,
         managers_dir: Path,
     ) -> list[Solution]:
-        """Search for solutions in a directory."""
+        """Search for solutions in a directory. A missing directory has no solutions."""
         if not directory.is_dir():
-            raise OcimaticError(f"solutions directory not found: `{directory}`")
+            return []
         return [
             solution
             for file_path in directory.iterdir()
