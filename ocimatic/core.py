@@ -41,78 +41,60 @@ class Typesetting(StrEnum):
     LATEX = "latex"
 
 
-class CLI:
-    def __init__(self) -> None:
-        self._contest: Contest | None = None
+def find_contest_root(path: Path) -> Path | None:
+    """Find the root of the contest containing `path`.
 
-    @staticmethod
-    def find_contest_root(start: Path) -> Path | None:
-        """Find the root of the contest containing `start`.
-
-        Returns the closest directory containing the contest configuration file, starting at
-        `start` and going up, or `None` if the system root is reached without finding one.
-        """
-        curr_dir = start
-        while not Path(curr_dir, ContestConfig.FILE_NAME).exists():
-            parent = curr_dir.parent
-            if parent.samefile(curr_dir):
-                return None
-            curr_dir = parent
-        return curr_dir
-
-    @staticmethod
-    def load_task_by_name(contest_dir: Path, task_name: str) -> Task | None:
-        return Contest.load_task_by_name(contest_dir, task_name)
-
-    @staticmethod
-    def load_task_by_dir(contest_dir: Path, task_dir: Path) -> Task | None:
-        return Contest.load_task_by_dir(contest_dir, task_dir)
-
-    @staticmethod
-    def init_contest(dest: Path, phase: str, typesetting: Typesetting) -> None:
-        Contest.create_layout(dest, phase, typesetting)
-
-    @property
-    def contest(self) -> Contest:
-        if self._contest is None:
-            self._contest = Contest(Env.get().require_contest_root())
-        return self._contest
-
-    @property
-    def last_dir(self) -> Path | None:
-        """The directory directly below the contest root on the way to the current directory.
-
-        This is used to find the target task. It's `None` when the current directory is the
-        contest root itself.
-        """
-        root = Env.get().require_contest_root()
-        cwd = Env.get().cwd
-        if cwd == root or not cwd.is_relative_to(root):
+    Returns the closest directory containing the contest configuration file, starting at `path`
+    and going up, or `None` if the system root is reached without finding one.
+    """
+    curr_dir = path
+    while not Path(curr_dir, ContestConfig.FILE_NAME).exists():
+        parent = curr_dir.parent
+        if parent.samefile(curr_dir):
             return None
-        return root / cwd.relative_to(root).parts[0]
+        curr_dir = parent
+    return curr_dir
 
-    def new_task(self, name: str) -> None:
-        if Path(self.contest.directory, name).exists():
-            raise OcimaticError("Cannot create task in existing directory.")
-        self.contest.new_task(name)
-        ui.show_message("Info", f"Task [{name}] created", ui.OK)
 
-    def select_task(self, name: str | None) -> Task | None:
-        task = None
-        if name is not None:
-            task = self.contest.find_task_by_name(name)
-        elif self.last_dir:
-            task = self.contest.find_task_by_dir(self.last_dir)
-        return task
+def load_contest() -> Contest:
+    """Load the contest of the current environment, failing if not inside a contest."""
+    return Contest(Env.get().require_contest_root())
 
-    def select_tasks(self) -> list[Task]:
-        task = None
-        if self.last_dir:
-            task = self.contest.find_task_by_dir(self.last_dir)
-        if task is not None:
-            return [task]
-        else:
-            return self.contest.tasks
+
+def current_task_dir() -> Path | None:
+    """Return the directory directly below the contest root on the way to the current directory.
+
+    This is used to find the target task. It's `None` when the current directory is the contest
+    root itself.
+    """
+    root = Env.get().require_contest_root()
+    cwd = Env.get().cwd
+    if cwd == root or not cwd.is_relative_to(root):
+        return None
+    return root / cwd.relative_to(root).parts[0]
+
+
+def new_task(contest: Contest, name: str) -> None:
+    if Path(contest.directory, name).exists():
+        raise OcimaticError("Cannot create task in existing directory.")
+    contest.new_task(name)
+    ui.show_message("Info", f"Task [{name}] created", ui.OK)
+
+
+def select_task(contest: Contest, name: str | None) -> Task | None:
+    """Select a task by name, or the task containing the current directory if `name` is `None`."""
+    if name is not None:
+        return contest.find_task_by_name(name)
+    if (task_dir := current_task_dir()) is not None:
+        return contest.find_task_by_dir(task_dir)
+    return None
+
+
+def select_tasks(contest: Contest) -> list[Task]:
+    """Select the task containing the current directory, or all tasks if there's none."""
+    if (task := select_task(contest, None)) is not None:
+        return [task]
+    return contest.tasks
 
 
 class ContestConfig(msgspec.Struct, kw_only=True, frozen=True):

@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from cloup.typing import Decorator
-    from ocimatic.core import CLI
     from ocimatic.result import Status
 
 
@@ -55,12 +54,12 @@ def _solution_completion(
 
         from ocimatic.config import Config
         from ocimatic.env import Env
-        from ocimatic.core import CLI
+        from ocimatic.core import Contest, current_task_dir, find_contest_root
 
         try:
             del param
             cwd = Path.cwd()
-            root = CLI.find_contest_root(cwd)
+            root = find_contest_root(cwd)
             if root is None:
                 return []
 
@@ -70,9 +69,9 @@ def _solution_completion(
 
                 task = None
                 if task_name is not None:
-                    task = CLI.load_task_by_name(root, task_name)
-                elif (last_dir := CLI().last_dir) is not None:
-                    task = CLI.load_task_by_dir(root, last_dir)
+                    task = Contest.load_task_by_name(root, task_name)
+                elif (task_dir := current_task_dir()) is not None:
+                    task = Contest.load_task_by_dir(root, task_dir)
 
                 if not task:
                     return []
@@ -108,7 +107,7 @@ def init(path: str, phase: str | None, typesetting: str | None) -> None:
 
     from ocimatic import ui
     from ocimatic.errors import OcimaticError
-    from ocimatic.core import CLI, Typesetting
+    from ocimatic.core import Contest, Typesetting
     import questionary
 
     # Ask for phase if not provided
@@ -141,7 +140,7 @@ def init(path: str, phase: str | None, typesetting: str | None) -> None:
         contest_path = Path(Path.cwd(), path)
         if contest_path.exists():
             raise OcimaticError("Couldn't create contest. Path already exists")
-        CLI.init_contest(contest_path, phase, Typesetting(typesetting))
+        Contest.create_layout(contest_path, phase, Typesetting(typesetting))
         ui.show_message("Info", f"Contest [{path}] created", ui.OK)
     except OcimaticError:
         raise
@@ -157,14 +156,13 @@ def init(path: str, phase: str | None, typesetting: str | None) -> None:
     "and run a solution.",
 )
 @cloup.option("--port", "-p", default="9999", type=int)
-@cloup.pass_obj
-def run_server(cli: CLI, port: int) -> None:
+def run_server(port: int) -> None:
     import sys
     from pathlib import Path
 
-    from ocimatic import server
+    from ocimatic import core, server
 
-    server.run(Path(sys.argv[0]), cli.contest, port)
+    server.run(Path(sys.argv[0]), core.load_contest(), port)
 
 
 @cloup.command(
@@ -174,10 +172,9 @@ def run_server(cli: CLI, port: int) -> None:
     "in Ocimatic after a contest or a task has already been initialized. This is a risky operation. "
     "Don't use it unless you know what you are doing.",
 )
-@cloup.pass_obj
-def sync_resources(cli: CLI) -> None:
+def sync_resources() -> None:
     import questionary
-    from ocimatic import ui
+    from ocimatic import core, ui
 
     ui.writeln(
         "This will overwrite resource files in the contest and all tasks.",
@@ -189,24 +186,26 @@ def sync_resources(cli: CLI) -> None:
     ).ask()
     if answer is not True:
         return
-    cli.contest.sync_resources()
+    core.load_contest().sync_resources()
 
 
 @cloup.command(help="Generate the problemset PDF.")
-@cloup.pass_obj
 @_exits_with_status
-def problemset(cli: CLI) -> Status:
-    return cli.contest.build_problemset()
+def problemset() -> Status:
+    from ocimatic import core
+
+    return core.load_contest().build_problemset()
 
 
 @cloup.command(
     short_help="Create a zip archive of the contest.",
     help="Create a zip archive of the contest containing the statements and dataset.",
 )
-@cloup.pass_obj
 @_exits_with_status
-def archive(cli: CLI) -> Status:
-    return cli.contest.archive()
+def archive() -> Status:
+    from ocimatic import core
+
+    return core.load_contest().archive()
 
 
 def _validate_task_name(ctx: click.Context, param: click.Argument, value: str) -> str:
@@ -218,9 +217,10 @@ def _validate_task_name(ctx: click.Context, param: click.Argument, value: str) -
 
 @cloup.command(help="Create a new task.")
 @cloup.argument("name", help="Name of the task.", callback=_validate_task_name)
-@cloup.pass_obj
-def new_task(cli: CLI, name: str) -> None:
-    cli.new_task(name)
+def new_task(name: str) -> None:
+    from ocimatic import core
+
+    core.new_task(core.load_contest(), name)
 
 
 @cloup.command(
@@ -233,15 +233,14 @@ Runs multiple validations on the dataset:\n
  - Run all input validators.\n
 """,
 )
-@cloup.pass_obj
 @_exits_with_status
-def check_dataset(cli: CLI) -> Status:
-    from ocimatic import ui
+def check_dataset() -> Status:
+    from ocimatic import core, ui
     from ocimatic.env import Env, Verbosity
     from ocimatic.result import Status
 
     with Env.override(verbosity=Verbosity.quiet):
-        tasks = cli.select_tasks()
+        tasks = core.select_tasks(core.load_contest())
         failed = [task for task in tasks if task.check_dataset() == Status.fail]
         if len(tasks) > 1:
             ui.writeln()
@@ -291,17 +290,16 @@ def check_dataset(cli: CLI) -> Status:
     is_flag=True,
     default=False,
 )
-@cloup.pass_obj
 @_exits_with_status
-def gen_expected(cli: CLI, solution: str | None, sample: bool) -> Status:  # noqa: FBT001
+def gen_expected(solution: str | None, sample: bool) -> Status:  # noqa: FBT001
     from pathlib import Path
 
-    from ocimatic import ui
+    from ocimatic import core, ui
     from ocimatic.env import Env, Verbosity
     from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
 
-    tasks = cli.select_tasks()
+    tasks = core.select_tasks(core.load_contest())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
@@ -342,13 +340,13 @@ information about the failures.
 
 
 @cloup.command(help="Build the statement PDF.")
-@cloup.pass_obj
 @_exits_with_status
-def build_statement(cli: CLI) -> Status:
+def build_statement() -> Status:
+    from ocimatic import core
     from ocimatic.result import Status
 
     status = Status.success
-    for task in cli.select_tasks():
+    for task in core.select_tasks(core.load_contest()):
         status &= task.build_statement()
     return status
 
@@ -361,25 +359,25 @@ def build_statement(cli: CLI) -> Status:
     default=False,
     help="Add random prefix to output filenames to randomly sort testcases within a subtask",
 )
-@cloup.pass_obj
 @_exits_with_status
-def compress_dataset(cli: CLI, random_sort: bool) -> Status:  # noqa: FBT001
+def compress_dataset(random_sort: bool) -> Status:  # noqa: FBT001
+    from ocimatic import core
     from ocimatic.result import Status
 
     status = Status.success
-    for task in cli.select_tasks():
+    for task in core.select_tasks(core.load_contest()):
         status &= task.compress_dataset(random_sort=random_sort)
     return status
 
 
 @cloup.command(help="Normalize input and output files running dos2unix.")
-@cloup.pass_obj
 @_exits_with_status
-def normalize(cli: CLI) -> Status:
+def normalize() -> Status:
+    from ocimatic import core
     from ocimatic.result import Status
 
     status = Status.success
-    for task in cli.select_tasks():
+    for task in core.select_tasks(core.load_contest()):
         status &= task.normalize()
     return status
 
@@ -395,20 +393,18 @@ def normalize(cli: CLI) -> Status:
     default=False,
     help="Generate expected output after running testplan.",
 )
-@cloup.pass_obj
 @_exits_with_status
 def run_testplan(
-    cli: CLI,
     subtask: int | None,
     gen_expected: bool,  # noqa: FBT001
 ) -> Status:
-    from ocimatic import ui
+    from ocimatic import core, ui
     from ocimatic.env import Env, Verbosity
     from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
-    tasks = cli.select_tasks()
+    tasks = core.select_tasks(core.load_contest())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
@@ -449,15 +445,15 @@ detailed information about the failures.
 
 @cloup.command(help="Run input validators.")
 @_subtask_option(help="Only run validator for this subtask.")
-@cloup.pass_obj
 @_exits_with_status
-def validate_input(cli: CLI, subtask: int | None) -> Status:
+def validate_input(subtask: int | None) -> Status:
+    from ocimatic import core
     from ocimatic.env import Env, Verbosity
     from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
-    tasks = cli.select_tasks()
+    tasks = core.select_tasks(core.load_contest())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
@@ -477,14 +473,14 @@ def validate_input(cli: CLI, subtask: int | None) -> Status:
 
 @cloup.command(help="Validate the format of expected output files.")
 @_subtask_option(help="Only validate output for this subtask.")
-@cloup.pass_obj
 @_exits_with_status
-def validate_output(cli: CLI, subtask: int | None) -> Status:
+def validate_output(subtask: int | None) -> Status:
+    from ocimatic import core
     from ocimatic.env import Env, Verbosity
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
-    tasks = cli.select_tasks()
+    tasks = core.select_tasks(core.load_contest())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
@@ -498,30 +494,32 @@ def validate_output(cli: CLI, subtask: int | None) -> Status:
 
 
 @cloup.command(help="Print score parameters for CMS.")
-@cloup.pass_obj
 @_exits_with_status
-def score_params(cli: CLI) -> Status:
+def score_params() -> Status:
+    from ocimatic import core
     from ocimatic.result import Status
 
     status = Status.success
-    for task in cli.select_tasks():
+    for task in core.select_tasks(core.load_contest()):
         status &= task.score_params()
     return status
 
 
 @cloup.command(help="List all solutions.")
-@cloup.pass_obj
-def list_solutions(cli: CLI) -> None:
-    tasks = cli.select_tasks()
+def list_solutions() -> None:
+    from ocimatic import core
+
+    tasks = core.select_tasks(core.load_contest())
 
     for task in tasks:
         task.list_solutions()
 
 
 @cloup.command(help="Compute code coverage.")
-@cloup.pass_obj
-def coverage(cli: CLI) -> None:
-    tasks = cli.select_tasks()
+def coverage() -> None:
+    from ocimatic import core
+
+    tasks = core.select_tasks(core.load_contest())
 
     for task in tasks:
         task.coverage()
@@ -562,10 +560,8 @@ single_task = cloup.option(
     ),
     ["timeout"],
 )
-@cloup.pass_obj
 @_exits_with_status
 def run_solution(
-    cli: CLI,
     solution: str,
     task_name: str | None,
     subtask: int | None,
@@ -575,12 +571,12 @@ def run_solution(
     import sys
     from pathlib import Path
 
-    from ocimatic import ui
+    from ocimatic import core, ui
     from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
     from ocimatic.utils import Stn
 
-    task = cli.select_task(task_name)
+    task = core.select_task(core.load_contest(), task_name)
     if not task:
         raise OcimaticError("You have to be inside a task to run this command.")
     if file is not None:
@@ -603,14 +599,14 @@ def run_solution(
     help="A path to a solution. " + _SOLUTION_HELP,
     type=click.Path(),
 )
-@cloup.pass_obj
 @_exits_with_status
-def build(cli: CLI, solution: str, task_name: str | None) -> Status:
+def build(solution: str, task_name: str | None) -> Status:
     from pathlib import Path
 
+    from ocimatic import core
     from ocimatic.errors import OcimaticError
 
-    task = cli.select_task(task_name)
+    task = core.select_task(core.load_contest(), task_name)
     if not task:
         raise OcimaticError("You have to be inside a task to run this command.")
     return task.build_solution(Path(solution))
@@ -857,7 +853,7 @@ def cli(ctx: click.Context) -> None:
 
     from ocimatic.config import Config
     from ocimatic.env import Env
-    from ocimatic.core import CLI
+    from ocimatic.core import find_contest_root
 
     # Don't load the config file for `setup`. This ensures we can run `ocimatic setup` even if
     # there are issues with the config file.
@@ -865,7 +861,6 @@ def cli(ctx: click.Context) -> None:
     cwd = Path.cwd()
     ctx.with_resource(
         Env.use(
-            Env(config=config, cwd=cwd, contest_root=CLI.find_contest_root(cwd)),
+            Env(config=config, cwd=cwd, contest_root=find_contest_root(cwd)),
         ),
     )
-    ctx.obj = CLI()
