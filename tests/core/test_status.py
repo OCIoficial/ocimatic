@@ -96,11 +96,6 @@ def test_normalize_succeeds(tmp_path: Path, use_env: UseEnv) -> None:
         assert task.normalize() == Status.success
 
 
-@pytest.mark.xfail(
-    raises=OverflowError,
-    reason="#4: the timeout is computed from empty runtime stats",
-    strict=True,
-)
 def test_check_dataset_fails_when_correct_solutions_crash(
     tmp_path: Path,
     use_env: UseEnv,

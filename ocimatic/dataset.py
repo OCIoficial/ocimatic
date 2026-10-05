@@ -465,10 +465,6 @@ class RuntimeStats:
     max: float
     min: float
 
-    @staticmethod
-    def unit() -> RuntimeStats:
-        return RuntimeStats(max=float("-inf"), min=float("inf"))
-
     def set_limit(self) -> float:
         return math.ceil(self.max * 4) / 2
 
@@ -477,9 +473,6 @@ class RuntimeStats:
 
     def __add__(self, other: RuntimeStats) -> RuntimeStats:
         return RuntimeStats(max=max(self.max, other.max), min=min(self.min, other.min))
-
-    def __iadd__(self, other: RuntimeStats) -> RuntimeStats:
-        return self + other
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
