@@ -3,11 +3,11 @@ from __future__ import annotations
 import re
 import sys
 from collections.abc import Callable, Generator
-from enum import Enum
-from typing import Literal, NoReturn, cast
+from typing import Literal, cast
 
 from colorama import Fore, Style
 
+from ocimatic.env import Env, Verbosity
 from ocimatic.result import IntoWorkResult, Result, Status, WorkResult
 
 RESET: str = Style.RESET_ALL
@@ -39,19 +39,6 @@ _FAIL_CHAR = "x"
 _SUCCESS_CHAR = _success_char()
 
 
-class Verbosity(Enum):
-    quiet = 0
-    verbose = 2
-
-
-_verbosity = Verbosity.verbose
-
-
-def set_verbosity(verbosity: Verbosity) -> None:
-    global _verbosity
-    _verbosity = verbosity
-
-
 def colorize(text: str, color: str) -> str:
     return color + text + RESET
 
@@ -78,12 +65,6 @@ def writeln(text: str = "", color: str = RESET) -> None:
     write(text + "\n", color, flush=True)
 
 
-def fatal_error(message: str) -> NoReturn:
-    writeln(colorize(message, INFO + RED))
-    writeln()
-    sys.exit(1)
-
-
 def show_message(label: str, msg: str, color: str = INFO) -> None:
     # write(" %s \n" % colorize(label + ": " + str(msg), color))
     write(" {} \n".format(colorize(label + ": " + str(msg), color)))
@@ -100,7 +81,7 @@ def work[T: IntoWorkResult, **P](
             action = action_fmt.format(*args, **kwargs)
             _start_work(action, formatter.format(*args, **kwargs))
             result = func(*args, **kwargs)
-            _end_work(result.into_work_result(), _verbosity)
+            _end_work(result.into_work_result(), Env.get().verbosity)
             return result
 
         return wrapper
@@ -109,7 +90,7 @@ def work[T: IntoWorkResult, **P](
 
 
 def _start_work(action: str, msg: str, length: int = 80) -> None:
-    if _verbosity is Verbosity.quiet:
+    if Env.get().verbosity is Verbosity.quiet:
         return
     msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
     msg = " * [" + action + "] " + msg + "  "
@@ -208,13 +189,13 @@ def _fmt_header(
     msg: str | None,
     color: str | None = None,
 ) -> None:
-    if level == 1 or _verbosity is Verbosity.verbose:
+    if level == 1 or Env.get().verbosity is Verbosity.verbose:
         writeln()
     write(colorize(f"[{label}]", color or RESET))
     if msg:
         write(colorize(f" {msg}", color or RESET))
 
-    if level == 2 and _verbosity is Verbosity.quiet:
+    if level == 2 and Env.get().verbosity is Verbosity.quiet:
         write(" ", flush=True)
     else:
         writeln()
@@ -226,5 +207,5 @@ def _start_workhd(label: str, color: str | None = None) -> None:
 
 
 def _fmt_footer(level: Literal[1, 2]) -> None:
-    if level == 2 and _verbosity is Verbosity.quiet:
+    if level == 2 and Env.get().verbosity is Verbosity.quiet:
         writeln()

@@ -17,9 +17,11 @@ import msgspec
 import tomlkit
 from click.shell_completion import CompletionItem
 
-from ocimatic import config, ui
+from ocimatic import ui
 from ocimatic.checkers import Checker
 from ocimatic.dataset import Dataset, RunMode, RuntimeStats, Test
+from ocimatic.env import Env
+from ocimatic.errors import OcimaticError
 from ocimatic.result import Error, Result, Status
 from ocimatic.solutions import Solution
 from ocimatic.source_code import (
@@ -39,81 +41,60 @@ class Typesetting(StrEnum):
     LATEX = "latex"
 
 
-class CLI:
-    def __init__(self) -> None:
-        self._data: tuple[Contest, Path | None] | None = None
+def find_contest_root(path: Path) -> Path | None:
+    """Find the root of the contest containing `path`.
 
-    @staticmethod
-    def find_contest_root() -> tuple[Path, Path | None] | None:
-        """Find the root of the contest.
+    Returns the closest directory containing the contest configuration file, starting at `path`
+    and going up, or `None` if the system root is reached without finding one.
+    """
+    curr_dir = path
+    while not Path(curr_dir, ContestConfig.FILE_NAME).exists():
+        parent = curr_dir.parent
+        if parent.samefile(curr_dir):
+            return None
+        curr_dir = parent
+    return curr_dir
 
-        Returns the absolute path to the root of the contest and the last directory
-        before reaching the root (if there's one), this is used to find the target
-        task. Returns `None` if the function reaches the system root without finding
-        a contest.
-        """
-        last_dir = None
-        curr_dir = Path.cwd()
-        while not Path(curr_dir, ContestConfig.FILE_NAME).exists():
-            last_dir = curr_dir
-            curr_dir = curr_dir.parent
-            if curr_dir.samefile(last_dir):
-                return None
-        config.CONTEST_ROOT = curr_dir
-        return (curr_dir, last_dir)
 
-    @staticmethod
-    def load_task_by_name(contest_dir: Path, task_name: str) -> Task | None:
-        return Contest.load_task_by_name(contest_dir, task_name)
+def load_contest() -> Contest:
+    """Load the contest of the current environment, failing if not inside a contest."""
+    return Contest(Env.get().require_contest_root())
 
-    @staticmethod
-    def load_task_by_dir(contest_dir: Path, task_dir: Path) -> Task | None:
-        return Contest.load_task_by_dir(contest_dir, task_dir)
 
-    @staticmethod
-    def init_contest(dest: Path, phase: str, typesetting: Typesetting) -> None:
-        Contest.create_layout(dest, phase, typesetting)
+def current_task_dir() -> Path | None:
+    """Return the directory directly below the contest root on the way to the current directory.
 
-    @property
-    def contest(self) -> Contest:
-        (contest, _) = self._load()
-        return contest
+    This is used to find the target task. It's `None` when the current directory is the contest
+    root itself.
+    """
+    root = Env.get().require_contest_root()
+    cwd = Env.get().cwd
+    if cwd == root or not cwd.is_relative_to(root):
+        return None
+    return root / cwd.relative_to(root).parts[0]
 
-    @property
-    def last_dir(self) -> Path | None:
-        (_, last_dir) = self._load()
-        return last_dir
 
-    def _load(self) -> tuple[Contest, Path | None]:
-        if not self._data:
-            result = CLI.find_contest_root()
-            if not result:
-                ui.fatal_error("ocimatic was not called inside a contest.")
-            self._data = (Contest(result[0]), result[1])
-        return self._data
+def new_task(contest: Contest, name: str) -> None:
+    if Path(contest.directory, name).exists():
+        raise OcimaticError("Cannot create task in existing directory.")
+    contest.new_task(name)
+    ui.show_message("Info", f"Task [{name}] created", ui.OK)
 
-    def new_task(self, name: str) -> None:
-        if Path(self.contest.directory, name).exists():
-            ui.fatal_error("Cannot create task in existing directory.")
-        self.contest.new_task(name)
-        ui.show_message("Info", f"Task [{name}] created", ui.OK)
 
-    def select_task(self, name: str | None) -> Task | None:
-        task = None
-        if name is not None:
-            task = self.contest.find_task_by_name(name)
-        elif self.last_dir:
-            task = self.contest.find_task_by_dir(self.last_dir)
-        return task
+def select_task(contest: Contest, name: str | None) -> Task | None:
+    """Select a task by name, or the task containing the current directory if `name` is `None`."""
+    if name is not None:
+        return contest.find_task_by_name(name)
+    if (task_dir := current_task_dir()) is not None:
+        return contest.find_task_by_dir(task_dir)
+    return None
 
-    def select_tasks(self) -> list[Task]:
-        task = None
-        if self.last_dir:
-            task = self.contest.find_task_by_dir(self.last_dir)
-        if task is not None:
-            return [task]
-        else:
-            return self.contest.tasks
+
+def select_tasks(contest: Contest) -> list[Task]:
+    """Select the task containing the current directory, or all tasks if there's none."""
+    if (task := select_task(contest, None)) is not None:
+        return [task]
+    return contest.tasks
 
 
 class ContestConfig(msgspec.Struct, kw_only=True, frozen=True):
@@ -144,7 +125,10 @@ class ContestConfig(msgspec.Struct, kw_only=True, frozen=True):
         try:
             conf = msgspec.toml.decode(path.read_text(), type=ContestConfig)
         except Exception as e:
-            ui.fatal_error(f"Failed to load contest config from {path}: {e}")
+            raise OcimaticError(
+                f"Failed to load contest config from {path}",
+                details=str(e),
+            ) from e
         return conf
 
 
@@ -362,7 +346,7 @@ class Contest:
             return Result.fail(short_msg="FAILED", long_msg=str(exc))
 
     @ui.hd1("Creating archive", color=COLOR)
-    def archive(self) -> None:
+    def archive(self) -> Status:
         """Package statements and datasets of all tasks into a single zip file."""
         with tempfile.TemporaryDirectory() as tmpdir_str:
             tmpdir = Path(tmpdir_str)
@@ -374,18 +358,23 @@ class Contest:
                         f"Couldn't copy task {task.name} to archive.",
                         ui.ERROR,
                     )
-                    return
+                    return Status.fail
 
-            self._archive_problemset(tmpdir)
+            if self._archive_problemset(tmpdir) == Status.fail:
+                return Status.fail
 
             Path("archive.zip").unlink(missing_ok=True)
             shutil.make_archive("archive", "zip", tmpdir)
 
+            return Status.success
+
     @ui.hd1("Problemset", "Copy to archive")
-    def _archive_problemset(self, dest: Path) -> None:
-        self._build_problemset()
+    def _archive_problemset(self, dest: Path) -> Status:
+        if self._build_problemset() == Status.fail:
+            return Status.fail
         shutil.copy2(self._directory / f"{Sideness.TWOSIDE}.pdf", dest)
         shutil.copy2(self._directory / f"{Sideness.ONESIDE}.pdf", dest)
+        return Status.success
 
     @property
     def name(self) -> str:
@@ -449,7 +438,10 @@ class TaskConfig(msgspec.Struct, kw_only=True, frozen=True):
         try:
             conf = msgspec.toml.decode(path.read_text(), type=TaskConfig)
         except Exception as e:
-            ui.fatal_error(f"Failed to load task config from {path}: {e}")
+            raise OcimaticError(
+                f"Failed to load task config from {path}",
+                details=str(e),
+            ) from e
         return conf
 
     def __lt__(self, other: TaskConfig) -> bool:
@@ -602,7 +594,7 @@ class Task:
             self._directory / "solutions" / "correct",
             self._directory / "solutions" / "partial",
             self._directory / "solutions",
-            Path.cwd(),
+            Env.get().cwd,
         ]:
             sol = Solution.load(self.codename, dir / path, self._managers_dir)
             if sol:
@@ -659,9 +651,9 @@ class Task:
         return self._dataset.validate_output(stn)
 
     @ui.hd1("{0}", "Compressing dataset", COLOR)
-    def compress_dataset(self, *, random_sort: bool) -> None:
+    def compress_dataset(self, *, random_sort: bool) -> Status:
         """Compress dataset into a single file."""
-        self._dataset.compress(random_sort=random_sort)
+        return self._dataset.compress(random_sort=random_sort).status
 
     @property
     def name(self) -> str:
@@ -676,7 +668,7 @@ class Task:
         return self._statement
 
     @ui.hd1("{0}", "Score Params", COLOR)
-    def score_params(self) -> None:
+    def score_params(self) -> Status:
         counts = self._dataset.counts()
         scores = self._statement.get_scores()
         regexes = self._dataset.regexes()
@@ -688,7 +680,7 @@ class Task:
                 "subtasks in the dataset.",
                 ui.ERROR,
             )
-            return
+            return Status.fail
 
         if len(counts) == len(scores) == 1:
             ui.show_message("Sum", str(scores[Stn(1)] / counts[Stn(1)]))
@@ -705,6 +697,7 @@ class Task:
                 ],
             ),
         )
+        return Status.success
 
     @ui.hd1("{0}", "Solutions", COLOR)
     def list_solutions(self) -> None:
@@ -724,8 +717,8 @@ class Task:
             sol.coverage(self._dataset)
 
     @ui.hd1("{0}", "Normalizing", COLOR)
-    def normalize(self) -> None:
-        self._dataset.normalize()
+    def normalize(self) -> Status:
+        return self._dataset.normalize()
 
     @ui.hd1("{0}", "Running solution", COLOR)
     def run_solution(
@@ -733,11 +726,16 @@ class Task:
         solution: Path,
         timeout: float,
         stn: Stn | None,
-    ) -> None:
-        """Run a solution reporting outcome and running time."""
+    ) -> Status:
+        """Run a solution reporting outcome and running time.
+
+        Fails if the solution can't be found or built, or if its results don't match its
+        expected outcome. When running a single subtask, there's no expected outcome to check.
+        """
         sol = self.load_solution_from_path(solution)
         if not sol:
-            return ui.show_message("Error", "Solution not found", ui.ERROR)
+            ui.show_message("Error", "Solution not found", ui.ERROR)
+            return Status.fail
 
         if stn is not None:
             subtask_results = sol.run_on_subtask(
@@ -747,10 +745,11 @@ class Task:
                 timeout=timeout,
             )
             if not subtask_results:
-                return
+                return Status.fail
             if stats := subtask_results.runtime_stats():
                 ui.writeln()
                 _write_stats(stats)
+            return Status.success
         else:
             dataset_results = sol.run_on_dataset(
                 self._dataset,
@@ -759,7 +758,7 @@ class Task:
                 timeout=timeout,
             )
             if not dataset_results:
-                return
+                return Status.fail
 
             if stats := dataset_results.runtime_stats():
                 ui.writeln()
@@ -778,12 +777,14 @@ class Task:
                 for sti, err in dataset_results.validation.items():
                     if isinstance(err, Error):
                         ui.writeln(f" * {sti!r}: {err.msg}", ui.ERROR)
-            else:
-                ui.writeln()
-                ui.writeln(
-                    "Solution produced the expected results",
-                    ui.OK,
-                )
+                return Status.fail
+
+            ui.writeln()
+            ui.writeln(
+                "Solution produced the expected results",
+                ui.OK,
+            )
+            return Status.success
 
     @ui.hd1("{0}", "Checking dataset", COLOR)
     def check_dataset(self) -> Status:
@@ -964,12 +965,13 @@ Solutions with issues:
         return Status.success
 
     @ui.hd1("{0}", "Building solutions", COLOR)
-    def build_solution(self, solution: Path) -> None:
+    def build_solution(self, solution: Path) -> Status:
         """Force compilation of solutions."""
         sol = self.load_solution_from_path(solution)
         if not sol:
-            return ui.show_message("Error", "Solution not found", ui.ERROR)
-        sol.build()
+            ui.show_message("Error", "Solution not found", ui.ERROR)
+            return Status.fail
+        return sol.build().status
 
     @ui.hd1("{0}", "Generating expected output", COLOR)
     def gen_expected(
@@ -1006,7 +1008,7 @@ Solutions with issues:
             generator = sols[0] if sols else None
 
         if not generator:
-            ui.fatal_error("solution not found")
+            raise OcimaticError("solution not found")
         if generator.gen_expected(self._dataset, stn=stn, sample=sample) == Status.fail:
             return Status.fail
 
@@ -1016,9 +1018,9 @@ Solutions with issues:
         return Status.success
 
     @ui.hd1("{0}", "Building statement", COLOR)
-    def build_statement(self) -> None:
+    def build_statement(self) -> Status:
         """Generate pdf for the statement."""
-        self._statement.build()
+        return self._statement.build().status
 
     @ui.hd1("{0}", "Sync", COLOR)
     def sync_resources(self, typesetting: Typesetting) -> None:
@@ -1124,7 +1126,8 @@ class TypstStatement(Statement):
         codename: str,
     ) -> None:
         statement_path = directory / "statement.typ"
-        assert statement_path.exists(), f"{statement_path} does not exist"
+        if not statement_path.exists():
+            raise OcimaticError(f"statement file not found: `{statement_path}`")
         sys_inputs: dict[str, str] = {
             "OCIMATIC_PHASE": phase,
             "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),
@@ -1168,7 +1171,9 @@ class LatexStatement(Statement):
         num: int,
         codename: str,
     ) -> None:
-        assert (directory / "statement.tex").exists()
+        statement_path = directory / "statement.tex"
+        if not statement_path.exists():
+            raise OcimaticError(f"statement file not found: `{statement_path}`")
         env: dict[str, str] = {
             "OCIMATIC_PHASE": phase,
             "OCIMATIC_PROBLEM_NUMBER": _number_to_letter(num),

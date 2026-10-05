@@ -8,6 +8,7 @@ from typing import Protocol, Self, TextIO
 
 from ocimatic import ui, utils
 from ocimatic.checkers import Checker
+from ocimatic.errors import OcimaticError
 from ocimatic.dataset import (
     Dataset,
     DatasetResults,
@@ -44,7 +45,8 @@ class Solution:
         managers_dir: Path,
     ) -> list[Solution]:
         """Search for solutions in a directory."""
-        assert directory.is_dir()
+        if not directory.is_dir():
+            raise OcimaticError(f"solutions directory not found: `{directory}`")
         return [
             solution
             for file_path in directory.iterdir()
@@ -160,14 +162,15 @@ class Solution:
         )
 
     @ui.workhd("{0}", COLOR)
-    def run_on_input(self, input: Path | TextIO) -> ui.WorkHd[None]:
+    def run_on_input(self, input: Path | TextIO) -> ui.WorkHd[Status]:
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
             yield Result.fail(short_msg="Failed", long_msg=build_result.msg)
-            return None
+            return Status.fail
         else:
             yield Result.success(short_msg="OK")
         build_result.run_on_input(input)
+        return Status.success
 
     @ui.workhd("{0}", COLOR)
     def gen_expected(

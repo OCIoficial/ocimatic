@@ -5,13 +5,15 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Protocol, Self
 
-from ocimatic.config import CONTEST_ROOT
+from ocimatic.env import Env
 
 
 def relative_to_cwd(path: Path) -> str:
-    commonpath = Path(os.path.commonpath([path, Path.cwd()]))
-    if commonpath.is_relative_to(CONTEST_ROOT):
-        relpath = os.path.relpath(path, Path.cwd())
+    cwd = Env.get().cwd
+    root = Env.get().contest_root or Path(cwd.anchor)
+    commonpath = Path(os.path.commonpath([path, cwd]))
+    if commonpath.is_relative_to(root):
+        relpath = os.path.relpath(path, cwd)
         if not relpath.startswith("."):
             relpath = "." + os.path.sep + relpath
         return relpath
