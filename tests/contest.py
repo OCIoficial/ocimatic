@@ -146,4 +146,5 @@ def _write_dir(directory: Path, files: dict[str, str]) -> None:
 
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    # `newline=""` writes `\n` as is; otherwise Windows would turn it into `\r\n`.
+    path.write_text(content, encoding="utf-8", newline="")

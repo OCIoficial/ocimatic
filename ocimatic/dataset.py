@@ -699,9 +699,10 @@ class Dataset:
             for subtask in self._subtasks.values():
                 compressed += subtask.write_to_zip(zip, random_sort=random_sort)
 
-            if compressed == 0:
-                path.unlink()
-                return Result.fail("EMPTY DATASET")
+        # Delete the empty archive only after closing it: Windows can't delete an open file.
+        if compressed == 0:
+            path.unlink()
+            return Result.fail("EMPTY DATASET")
         return Result.success("OK")
 
     def counts(self) -> SortedDict[Stn, int]:
