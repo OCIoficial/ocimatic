@@ -296,11 +296,11 @@ class Test:
         return self._expected_path
 
     @ui.work("Normalize")
-    def normalize(self) -> WorkResult:
+    def normalize(self) -> Result:
         if not shutil.which("dos2unix"):
-            return WorkResult.fail(short_msg="Cannot find dos2unix")
+            return Result.fail(short_msg="Cannot find dos2unix")
         if not shutil.which("sed"):
-            return WorkResult.fail(short_msg="Cannot find sed")
+            return Result.fail(short_msg="Cannot find sed")
         tounix_input = f'dos2unix "{self.in_path}"'
         tounix_expected = f'dos2unix "{self.expected_path}"'
         sed_input = f"sed -i -e '$a\\' \"{self.in_path}\""
@@ -311,7 +311,7 @@ class Test:
         if self.expected_path.exists():
             st += subprocess.call(tounix_expected, stdout=null, stderr=null, shell=True)
             st += subprocess.call(sed_expected, stdout=null, stderr=null, shell=True)
-        return WorkResult(
+        return Result(
             status=Status.from_bool(st == 0),
             short_msg="OK" if st == 0 else "FAILED",
         )
@@ -330,9 +330,11 @@ class _TestGroup:
         self._name = name
         self._tests = sorted(tests)
 
-    def normalize(self) -> None:
+    def normalize(self) -> Status:
+        status = Status.success
         for test in self._tests:
-            test.normalize()
+            status &= test.normalize().status
+        return status
 
     def count(self) -> int:
         return len(self._tests)
@@ -712,10 +714,12 @@ class Dataset:
                 regexes[sti] = f"{joined}.*"
         return regexes
 
-    def normalize(self) -> None:
+    def normalize(self) -> Status:
+        status = Status.success
         for subtask in self._subtasks.values():
-            subtask.normalize()
-        self._sampledata.normalize()
+            status &= subtask.normalize()
+        status &= self._sampledata.normalize()
+        return status
 
     def check_all_have_expected(self) -> bool:
         for st in self._subtasks.values():

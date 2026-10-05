@@ -160,14 +160,15 @@ class Solution:
         )
 
     @ui.workhd("{0}", COLOR)
-    def run_on_input(self, input: Path | TextIO) -> ui.WorkHd[None]:
+    def run_on_input(self, input: Path | TextIO) -> ui.WorkHd[Status]:
         build_result = self._source.build()
         if isinstance(build_result, BuildError):
             yield Result.fail(short_msg="Failed", long_msg=build_result.msg)
-            return None
+            return Status.fail
         else:
             yield Result.success(short_msg="OK")
         build_result.run_on_input(input)
+        return Status.success
 
     @ui.workhd("{0}", COLOR)
     def gen_expected(

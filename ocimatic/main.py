@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, NoReturn
+import functools
+from typing import TYPE_CHECKING, Literal
 
 import click
 import cloup
@@ -24,6 +25,21 @@ _SOLUTION_HELP = (
     "'<task>/solutions/partial', '<task>/solutions/', and '<cwd>'. "
     "Here, <task> refers to the path of the current task and <cwd> to the current working directory."
 )
+
+
+def _exits_with_status[**P](f: Callable[P, Status]) -> Callable[P, None]:
+    @functools.wraps(f)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
+        import sys
+        from ocimatic.result import Status
+
+        match f(*args, **kwargs):
+            case Status.success:
+                sys.exit(0)
+            case Status.fail:
+                sys.exit(2)
+
+    return wrapper
 
 
 def _solution_completion(
@@ -168,9 +184,9 @@ def sync_resources(cli: CLI) -> None:
 
 @cloup.command(help="Generate the problemset PDF.")
 @cloup.pass_obj
-def problemset(cli: CLI) -> None:
-    status = cli.contest.build_problemset()
-    exit_with_status(status)
+@_exits_with_status
+def problemset(cli: CLI) -> Status:
+    return cli.contest.build_problemset()
 
 
 @cloup.command(
@@ -178,8 +194,9 @@ def problemset(cli: CLI) -> None:
     help="Create a zip archive of the contest containing the statements and dataset.",
 )
 @cloup.pass_obj
-def archive(cli: CLI) -> None:
-    cli.contest.archive()
+@_exits_with_status
+def archive(cli: CLI) -> Status:
+    return cli.contest.archive()
 
 
 def _validate_task_name(ctx: click.Context, param: click.Argument, value: str) -> str:
@@ -207,7 +224,8 @@ Runs multiple validations on the dataset:\n
 """,
 )
 @cloup.pass_obj
-def check_dataset(cli: CLI) -> None:
+@_exits_with_status
+def check_dataset(cli: CLI) -> Status:
     from ocimatic import ui
     from ocimatic.result import Status
 
@@ -238,8 +256,7 @@ def check_dataset(cli: CLI) -> None:
             ui.writeln("| No issues found! |", ui.OK)
             ui.writeln("--------------------", ui.OK)
 
-    if len(failed) > 0:
-        exit_with_status(Status.fail)
+    return Status.fail if failed else Status.success
 
 
 @cloup.command(
@@ -264,7 +281,8 @@ def check_dataset(cli: CLI) -> None:
     default=False,
 )
 @cloup.pass_obj
-def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa: FBT001
+@_exits_with_status
+def gen_expected(cli: CLI, solution: str | None, sample: bool) -> Status:  # noqa: FBT001
     from pathlib import Path
 
     from ocimatic import ui
@@ -291,7 +309,7 @@ def gen_expected(cli: CLI, solution: str | None, sample: bool) -> None:  # noqa:
         ui.writeln(
             """
 --------------------------------------------------------
-Failed to generate expeted output for some of the tasks.
+Failed to generate expected output for some of the tasks.
 
 Tasks with issues:""",
             ui.ERROR,
@@ -307,16 +325,19 @@ information about the failures.
 """,
             ui.ERROR,
         )
-        exit_with_status(Status.fail)
+    return Status.fail if failed else Status.success
 
 
 @cloup.command(help="Build the statement PDF.")
 @cloup.pass_obj
-def build_statement(cli: CLI) -> None:
-    tasks = cli.select_tasks()
+@_exits_with_status
+def build_statement(cli: CLI) -> Status:
+    from ocimatic.result import Status
 
-    for task in tasks:
-        task.build_statement()
+    status = Status.success
+    for task in cli.select_tasks():
+        status &= task.build_statement()
+    return status
 
 
 @cloup.command(help="Generate zip file with all test data.")
@@ -328,20 +349,26 @@ def build_statement(cli: CLI) -> None:
     help="Add random prefix to output filenames to randomly sort testcases within a subtask",
 )
 @cloup.pass_obj
-def compress_dataset(cli: CLI, random_sort: bool) -> None:  # noqa: FBT001
-    tasks = cli.select_tasks()
+@_exits_with_status
+def compress_dataset(cli: CLI, random_sort: bool) -> Status:  # noqa: FBT001
+    from ocimatic.result import Status
 
-    for task in tasks:
-        task.compress_dataset(random_sort=random_sort)
+    status = Status.success
+    for task in cli.select_tasks():
+        status &= task.compress_dataset(random_sort=random_sort)
+    return status
 
 
 @cloup.command(help="Normalize input and output files running dos2unix.")
 @cloup.pass_obj
-def normalize(cli: CLI) -> None:
-    tasks = cli.select_tasks()
+@_exits_with_status
+def normalize(cli: CLI) -> Status:
+    from ocimatic.result import Status
 
-    for task in tasks:
-        task.normalize()
+    status = Status.success
+    for task in cli.select_tasks():
+        status &= task.normalize()
+    return status
 
 
 @cloup.command(help="Run the test plan.")
@@ -356,11 +383,12 @@ def normalize(cli: CLI) -> None:
     help="Generate expected output after running testplan.",
 )
 @cloup.pass_obj
+@_exits_with_status
 def run_testplan(
     cli: CLI,
     subtask: int | None,
     gen_expected: bool,  # noqa: FBT001
-) -> None:
+) -> Status:
     from ocimatic import ui
     from ocimatic.result import Status
     from ocimatic.utils import Stn
@@ -399,13 +427,14 @@ detailed information about the failures.
 """,
             ui.ERROR,
         )
-        exit_with_status(Status.fail)
+    return Status.fail if failed else Status.success
 
 
 @cloup.command(help="Run input validators.")
 @_subtask_option(help="Only run validator for this subtask.")
 @cloup.pass_obj
-def validate_input(cli: CLI, subtask: int | None) -> None:
+@_exits_with_status
+def validate_input(cli: CLI, subtask: int | None) -> Status:
     from ocimatic import ui
     from ocimatic.result import Status
     from ocimatic.utils import Stn
@@ -425,13 +454,14 @@ def validate_input(cli: CLI, subtask: int | None) -> None:
             stn=Stn(subtask) if subtask is not None else None,
         )
 
-    exit_with_status(status)
+    return status
 
 
 @cloup.command(help="Validate the format of expected output files.")
 @_subtask_option(help="Only validate output for this subtask.")
 @cloup.pass_obj
-def validate_output(cli: CLI, subtask: int | None) -> None:
+@_exits_with_status
+def validate_output(cli: CLI, subtask: int | None) -> Status:
     from ocimatic import ui
     from ocimatic.result import Status
     from ocimatic.utils import Stn
@@ -446,16 +476,19 @@ def validate_output(cli: CLI, subtask: int | None) -> None:
             stn=Stn(subtask) if subtask is not None else None,
         )
 
-    exit_with_status(status)
+    return status
 
 
 @cloup.command(help="Print score parameters for CMS.")
 @cloup.pass_obj
-def score_params(cli: CLI) -> None:
-    tasks = cli.select_tasks()
+@_exits_with_status
+def score_params(cli: CLI) -> Status:
+    from ocimatic.result import Status
 
-    for task in tasks:
-        task.score_params()
+    status = Status.success
+    for task in cli.select_tasks():
+        status &= task.score_params()
+    return status
 
 
 @cloup.command(help="List all solutions.")
@@ -474,17 +507,6 @@ def coverage(cli: CLI) -> None:
 
     for task in tasks:
         task.coverage()
-
-
-def exit_with_status(status: Status) -> NoReturn:
-    import sys
-    from ocimatic.result import Status
-
-    match status:
-        case Status.success:
-            sys.exit(0)
-        case Status.fail:
-            sys.exit(2)
 
 
 single_task = cloup.option(
@@ -523,6 +545,7 @@ single_task = cloup.option(
     ["timeout"],
 )
 @cloup.pass_obj
+@_exits_with_status
 def run_solution(
     cli: CLI,
     solution: str,
@@ -530,11 +553,12 @@ def run_solution(
     subtask: int | None,
     file: str | None,
     timeout: float | None,
-) -> None:
+) -> Status:
     import sys
     from pathlib import Path
 
     from ocimatic import ui
+    from ocimatic.result import Status
     from ocimatic.utils import Stn
 
     task = cli.select_task(task_name)
@@ -543,14 +567,14 @@ def run_solution(
     if file is not None:
         sol = task.load_solution_from_path(Path(solution))
         if not sol:
-            return ui.show_message("Error", "Solution not found", ui.ERROR)
-        sol.run_on_input(sys.stdin if file == "-" else Path(file))
-    else:
-        task.run_solution(
-            Path(solution),
-            timeout=timeout or 3.0,
-            stn=Stn(subtask) if subtask is not None else None,
-        )
+            ui.show_message("Error", "Solution not found", ui.ERROR)
+            return Status.fail
+        return sol.run_on_input(sys.stdin if file == "-" else Path(file))
+    return task.run_solution(
+        Path(solution),
+        timeout=timeout or 3.0,
+        stn=Stn(subtask) if subtask is not None else None,
+    )
 
 
 @cloup.command(help="Build a solution.")
@@ -561,7 +585,8 @@ def run_solution(
     type=click.Path(),
 )
 @cloup.pass_obj
-def build(cli: CLI, solution: str, task_name: str | None) -> None:
+@_exits_with_status
+def build(cli: CLI, solution: str, task_name: str | None) -> Status:
     from pathlib import Path
 
     from ocimatic import ui
@@ -569,7 +594,7 @@ def build(cli: CLI, solution: str, task_name: str | None) -> None:
     task = cli.select_task(task_name)
     if not task:
         ui.fatal_error("You have to be inside a task to run this command.")
-    task.build_solution(Path(solution))
+    return task.build_solution(Path(solution))
 
 
 @cloup.command(
@@ -613,7 +638,8 @@ def completion(shell: Literal["bash", "zsh", "fish"]) -> None:
     short_help="Check if Ocimatic is correctly setup.",
     help="Check Ocimatic is correctly setup by running some commands.",
 )
-def check_setup() -> None:
+@_exits_with_status
+def check_setup() -> Status:
     import tempfile
     from pathlib import Path
 
@@ -662,7 +688,7 @@ def check_setup() -> None:
             ui.ERROR,
         )
 
-    exit_with_status(status)
+    return status
 
 
 @cloup.command(

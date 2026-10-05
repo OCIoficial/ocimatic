@@ -362,7 +362,7 @@ class Contest:
             return Result.fail(short_msg="FAILED", long_msg=str(exc))
 
     @ui.hd1("Creating archive", color=COLOR)
-    def archive(self) -> None:
+    def archive(self) -> Status:
         """Package statements and datasets of all tasks into a single zip file."""
         with tempfile.TemporaryDirectory() as tmpdir_str:
             tmpdir = Path(tmpdir_str)
@@ -374,18 +374,23 @@ class Contest:
                         f"Couldn't copy task {task.name} to archive.",
                         ui.ERROR,
                     )
-                    return
+                    return Status.fail
 
-            self._archive_problemset(tmpdir)
+            if self._archive_problemset(tmpdir) == Status.fail:
+                return Status.fail
 
             Path("archive.zip").unlink(missing_ok=True)
             shutil.make_archive("archive", "zip", tmpdir)
 
+            return Status.success
+
     @ui.hd1("Problemset", "Copy to archive")
-    def _archive_problemset(self, dest: Path) -> None:
-        self._build_problemset()
+    def _archive_problemset(self, dest: Path) -> Status:
+        if self._build_problemset() == Status.fail:
+            return Status.fail
         shutil.copy2(self._directory / f"{Sideness.TWOSIDE}.pdf", dest)
         shutil.copy2(self._directory / f"{Sideness.ONESIDE}.pdf", dest)
+        return Status.success
 
     @property
     def name(self) -> str:
@@ -659,9 +664,9 @@ class Task:
         return self._dataset.validate_output(stn)
 
     @ui.hd1("{0}", "Compressing dataset", COLOR)
-    def compress_dataset(self, *, random_sort: bool) -> None:
+    def compress_dataset(self, *, random_sort: bool) -> Status:
         """Compress dataset into a single file."""
-        self._dataset.compress(random_sort=random_sort)
+        return self._dataset.compress(random_sort=random_sort).status
 
     @property
     def name(self) -> str:
@@ -676,7 +681,7 @@ class Task:
         return self._statement
 
     @ui.hd1("{0}", "Score Params", COLOR)
-    def score_params(self) -> None:
+    def score_params(self) -> Status:
         counts = self._dataset.counts()
         scores = self._statement.get_scores()
         regexes = self._dataset.regexes()
@@ -688,7 +693,7 @@ class Task:
                 "subtasks in the dataset.",
                 ui.ERROR,
             )
-            return
+            return Status.fail
 
         if len(counts) == len(scores) == 1:
             ui.show_message("Sum", str(scores[Stn(1)] / counts[Stn(1)]))
@@ -705,6 +710,7 @@ class Task:
                 ],
             ),
         )
+        return Status.success
 
     @ui.hd1("{0}", "Solutions", COLOR)
     def list_solutions(self) -> None:
@@ -724,8 +730,8 @@ class Task:
             sol.coverage(self._dataset)
 
     @ui.hd1("{0}", "Normalizing", COLOR)
-    def normalize(self) -> None:
-        self._dataset.normalize()
+    def normalize(self) -> Status:
+        return self._dataset.normalize()
 
     @ui.hd1("{0}", "Running solution", COLOR)
     def run_solution(
@@ -733,11 +739,16 @@ class Task:
         solution: Path,
         timeout: float,
         stn: Stn | None,
-    ) -> None:
-        """Run a solution reporting outcome and running time."""
+    ) -> Status:
+        """Run a solution reporting outcome and running time.
+
+        Fails if the solution can't be found or built, or if its results don't match its
+        expected outcome. When running a single subtask, there's no expected outcome to check.
+        """
         sol = self.load_solution_from_path(solution)
         if not sol:
-            return ui.show_message("Error", "Solution not found", ui.ERROR)
+            ui.show_message("Error", "Solution not found", ui.ERROR)
+            return Status.fail
 
         if stn is not None:
             subtask_results = sol.run_on_subtask(
@@ -747,10 +758,11 @@ class Task:
                 timeout=timeout,
             )
             if not subtask_results:
-                return
+                return Status.fail
             if stats := subtask_results.runtime_stats():
                 ui.writeln()
                 _write_stats(stats)
+            return Status.success
         else:
             dataset_results = sol.run_on_dataset(
                 self._dataset,
@@ -759,7 +771,7 @@ class Task:
                 timeout=timeout,
             )
             if not dataset_results:
-                return
+                return Status.fail
 
             if stats := dataset_results.runtime_stats():
                 ui.writeln()
@@ -778,12 +790,14 @@ class Task:
                 for sti, err in dataset_results.validation.items():
                     if isinstance(err, Error):
                         ui.writeln(f" * {sti!r}: {err.msg}", ui.ERROR)
-            else:
-                ui.writeln()
-                ui.writeln(
-                    "Solution produced the expected results",
-                    ui.OK,
-                )
+                return Status.fail
+
+            ui.writeln()
+            ui.writeln(
+                "Solution produced the expected results",
+                ui.OK,
+            )
+            return Status.success
 
     @ui.hd1("{0}", "Checking dataset", COLOR)
     def check_dataset(self) -> Status:
@@ -964,12 +978,13 @@ Solutions with issues:
         return Status.success
 
     @ui.hd1("{0}", "Building solutions", COLOR)
-    def build_solution(self, solution: Path) -> None:
+    def build_solution(self, solution: Path) -> Status:
         """Force compilation of solutions."""
         sol = self.load_solution_from_path(solution)
         if not sol:
-            return ui.show_message("Error", "Solution not found", ui.ERROR)
-        sol.build()
+            ui.show_message("Error", "Solution not found", ui.ERROR)
+            return Status.fail
+        return sol.build().status
 
     @ui.hd1("{0}", "Generating expected output", COLOR)
     def gen_expected(
@@ -1016,9 +1031,9 @@ Solutions with issues:
         return Status.success
 
     @ui.hd1("{0}", "Building statement", COLOR)
-    def build_statement(self) -> None:
+    def build_statement(self) -> Status:
         """Generate pdf for the statement."""
-        self._statement.build()
+        return self._statement.build().status
 
     @ui.hd1("{0}", "Sync", COLOR)
     def sync_resources(self, typesetting: Typesetting) -> None:
