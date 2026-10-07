@@ -557,10 +557,10 @@ class Dataset:
                 for stn in [Stn(i)]
             )
         elif directory.exists():
+            subtask_dirs = sorted(d for d in directory.iterdir() if d.is_dir())
             self._subtasks = SortedDict(
                 (Stn(stn), Subtask(Stn(stn), [], d))
-                for stn, d in enumerate(sorted(directory.iterdir()), 1)
-                if d.is_dir()
+                for stn, d in enumerate(subtask_dirs, 1)
             )
         else:
             self._subtasks = SortedDict()

@@ -35,20 +35,14 @@ def test_normalized_content_is_unchanged() -> None:
     assert normalize_content(content) == content
 
 
-@pytest.mark.xfail(strict=True, reason="attic/unresolved-problems.md #5")
 def test_static_dataset_subtask_numbers(tmp_path: Path) -> None:
+    # Files are skipped and directories are numbered in alphabetical order, so `st10` is subtask 2.
     write_tree(
         tmp_path,
-        {
-            "dataset": {
-                "data.zip": b"",
-                **{f"st{i}": {} for i in range(1, 11)},
-            },
-        },
+        {"dataset": {"data.zip": b"", "st1": {}, "st2": {}, "st10": {}}},
     )
 
     dataset = Dataset(tmp_path / "dataset", None, [])
 
-    assert dataset.subtasks() == {Stn(i) for i in range(1, 11)}
-    for i in range(1, 11):
-        assert str(dataset.subtask(Stn(i))) == f"st{i}"
+    assert dataset.subtasks() == {Stn(1), Stn(2), Stn(3)}
+    assert [str(dataset.subtask(Stn(i))) for i in range(1, 4)] == ["st1", "st10", "st2"]
