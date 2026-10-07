@@ -670,6 +670,10 @@ class Task:
     @ui.hd1("{0}", "Score Params", COLOR)
     def score_params(self) -> Status:
         counts = self._dataset.counts()
+        if not counts:
+            ui.show_message("error", "the task has no subtasks.", ui.ERROR)
+            return Status.fail
+
         scores = self._statement.get_scores()
         regexes = self._dataset.regexes()
         assert regexes.keys() == counts.keys()
@@ -678,6 +682,14 @@ class Task:
                 "error",
                 "the number of subtasks in the statement doesn't match the number of "
                 "subtasks in the dataset.",
+                ui.ERROR,
+            )
+            return Status.fail
+
+        if empty := [str(stn) for stn, count in counts.items() if count == 0]:
+            ui.show_message(
+                "error",
+                f"subtasks without tests: {', '.join(empty)}.",
                 ui.ERROR,
             )
             return Status.fail

@@ -14,7 +14,7 @@ from click.testing import CliRunner, Result
 
 from ocimatic.main import cli
 
-from .contest import TaskSpec, make_contest
+from .contest import ABSENT, TaskSpec, make_contest
 from .text import block
 
 type RunCli = Callable[..., Result]
@@ -99,6 +99,61 @@ def test_score_params_fails_on_subtask_mismatch(
         ),
     )
     assert run_cli("score-params", cwd=contest / "sum").exit_code == 2
+
+
+def test_score_params_succeeds(tmp_path: Path, run_cli: RunCli) -> None:
+    contest = make_contest(tmp_path, TaskSpec(codename="sum"))
+    assert run_cli("run-testplan", cwd=contest / "sum").exit_code == 0
+    assert run_cli("score-params", cwd=contest / "sum").exit_code == 0
+
+
+def test_score_params_fails_on_subtask_without_tests(
+    tmp_path: Path,
+    run_cli: RunCli,
+) -> None:
+    # The testplan hasn't been run, so the task's single subtask has no tests.
+    contest = make_contest(tmp_path, TaskSpec(codename="sum"))
+    result = run_cli("score-params", cwd=contest / "sum")
+    assert result.exit_code == 2, result.output
+    assert "subtasks without tests: 1." in result.output
+
+
+def test_score_params_fails_on_some_subtask_without_tests(
+    tmp_path: Path,
+    run_cli: RunCli,
+) -> None:
+    contest = make_contest(
+        tmp_path,
+        TaskSpec(
+            codename="sum",
+            static=True,
+            testplan=ABSENT,
+            statement=block("""
+                #let subtask(points) = [Subtask (#points points)]
+                #subtask(40)
+                #subtask(60)
+            """),
+            dataset={"st1": {"a.in": "1 2\n", "a.sol": "3\n"}, "st2": {}},
+        ),
+    )
+    result = run_cli("score-params", cwd=contest / "sum")
+    assert result.exit_code == 2, result.output
+    assert "subtasks without tests: 2." in result.output
+
+
+def test_score_params_fails_without_subtasks(tmp_path: Path, run_cli: RunCli) -> None:
+    contest = make_contest(
+        tmp_path,
+        TaskSpec(
+            codename="sum",
+            static=True,
+            testplan=ABSENT,
+            statement="= Statement\n",
+        ),
+    )
+    result = run_cli("score-params", cwd=contest / "sum")
+    assert result.exit_code == 2, result.output
+    assert "the task has no subtasks." in result.output
 
 
 def test_outside_contest_is_an_error(tmp_path: Path, run_cli: RunCli) -> None:
