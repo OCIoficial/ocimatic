@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from ocimatic.dataset import normalize_content
+from ocimatic.dataset import Dataset, normalize_content
+from ocimatic.utils import Stn
+
+from .tree import write_tree
 
 
 @pytest.mark.parametrize(
@@ -28,3 +33,22 @@ def test_normalize_content(content: bytes, expected: bytes) -> None:
 def test_normalized_content_is_unchanged() -> None:
     content = b"1 2\n3\n"
     assert normalize_content(content) == content
+
+
+@pytest.mark.xfail(strict=True, reason="attic/unresolved-problems.md #5")
+def test_static_dataset_subtask_numbers(tmp_path: Path) -> None:
+    write_tree(
+        tmp_path,
+        {
+            "dataset": {
+                "data.zip": b"",
+                **{f"st{i}": {} for i in range(1, 11)},
+            },
+        },
+    )
+
+    dataset = Dataset(tmp_path / "dataset", None, [])
+
+    assert dataset.subtasks() == {Stn(i) for i in range(1, 11)}
+    for i in range(1, 11):
+        assert str(dataset.subtask(Stn(i))) == f"st{i}"

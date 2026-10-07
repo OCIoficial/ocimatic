@@ -65,7 +65,10 @@ def test_gen_expected_succeeds(tmp_path: Path, run_cli: RunCli) -> None:
 def test_gen_expected_fails_on_single_task(tmp_path: Path, run_cli: RunCli) -> None:
     contest = make_contest(
         tmp_path,
-        TaskSpec(codename="sum", correct={"crash.py": "raise SystemExit(1)\n"}),
+        TaskSpec(
+            codename="sum",
+            solutions={"correct/crash.py": "raise SystemExit(1)\n"},
+        ),
     )
     assert run_cli("run-testplan", cwd=contest / "sum").exit_code == 0
     assert run_cli("gen-expected", cwd=contest / "sum").exit_code == 2
