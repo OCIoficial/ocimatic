@@ -23,27 +23,71 @@ LOUD_GENERATOR = block("""
     print("1 2")
 """)
 
+# Writes three tests separated by `FS` (chr 28). An empty test between two `FS` is skipped.
+SPLITTING_GENERATOR = block("""
+    import sys
+    FS = chr(28)
+    sys.stdout.write("a\\n" + FS + FS + "b\\n" + FS + "c\\n")
+""")
 
-@pytest.mark.xfail(strict=True, reason="attic/unresolved-problems.md #6")
+# Writes a test and then fails.
+CRASHING_GENERATOR = block("""
+    import sys
+    print("1 2")
+    sys.exit(1)
+""")
+
+
 def test_generator_writing_a_lot_to_stderr_does_not_deadlock(tmp_path: Path) -> None:
-    contest = make_contest(
-        tmp_path,
+    contest = _make_contest_with_generator(tmp_path, LOUD_GENERATOR)
+
+    complete = _run_testplan(contest / "sum", tmp_path)
+
+    assert complete.returncode == 0, complete.stdout
+    assert read_tree(contest / "sum" / "dataset") == {"st1": {"rand-1.in": "1 2\n"}}
+
+
+def test_generator_output_is_split_on_fs(tmp_path: Path) -> None:
+    contest = _make_contest_with_generator(tmp_path, SPLITTING_GENERATOR)
+
+    complete = _run_testplan(contest / "sum", tmp_path)
+
+    assert complete.returncode == 0, complete.stdout
+    assert read_tree(contest / "sum" / "dataset") == {
+        "st1": {"rand-1.in": "a\n", "rand-2.in": "b\n", "rand-3.in": "c\n"},
+    }
+
+
+def test_failed_generator_writes_no_tests(tmp_path: Path) -> None:
+    contest = _make_contest_with_generator(tmp_path, CRASHING_GENERATOR)
+
+    complete = _run_testplan(contest / "sum", tmp_path)
+
+    assert complete.returncode == 2, complete.stdout
+    assert read_tree(contest / "sum" / "dataset") == {"st1": {}}
+
+
+def _make_contest_with_generator(root: Path, generator: str) -> Path:
+    return make_contest(
+        root,
         TaskSpec(
             codename="sum",
             testplan=block("""
                 [Subtask 1]
                   rand ; gen.py
             """),
-            files={"testplan/gen.py": LOUD_GENERATOR},
+            files={"testplan/gen.py": generator},
         ),
     )
 
-    # Run in a subprocess so the deadlock can be timed out: killing ocimatic closes the stderr pipe,
-    # which also ends the blocked generator.
+
+def _run_testplan(task: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    # Run in a subprocess so a deadlock can be timed out: killing ocimatic closes the stderr pipe,
+    # which also ends a blocked generator.
     try:
-        complete = subprocess.run(
+        return subprocess.run(
             [sys.executable, "-c", "import ocimatic; ocimatic.main()", "run-testplan"],
-            cwd=contest / "sum",
+            cwd=task,
             # Don't read the user's `~/.ocimatic.toml`.
             env={
                 **os.environ,
@@ -52,11 +96,9 @@ def test_generator_writing_a_lot_to_stderr_does_not_deadlock(tmp_path: Path) -> 
             },
             stdin=subprocess.DEVNULL,
             capture_output=True,
+            text=True,
             timeout=TIMEOUT,
             check=False,
         )
     except subprocess.TimeoutExpired:
         pytest.fail(f"`ocimatic run-testplan` didn't finish within {TIMEOUT} seconds")
-
-    assert complete.returncode == 0, complete.stdout
-    assert read_tree(contest / "sum" / "dataset") == {"st1": {"rand-1.in": "1 2\n"}}

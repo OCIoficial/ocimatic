@@ -684,43 +684,30 @@ class Script(Command):
                 long_msg=runnable.msg,
             )
 
-        count = 0
         args = self._args_with_seed(cx)
         if isinstance(process := runnable.spawn(args, cwd=cx.cwd), Error):
             return Result.fail(
                 short_msg="error when running script",
                 long_msg=process.msg,
             )
-        current_file = None
-        try:
-            assert process.stdout
-            while char := process.stdout.read(1):
-                if char == FS:
-                    if current_file:
-                        current_file.close()
-                        current_file = None
-                else:
-                    if current_file is None:
-                        count += 1
-                        current_file = cx.next_file(self.group).open("w")
-                    current_file.write(char)
-        finally:
-            if current_file:
-                current_file.close()
+        # `communicate` reads stdout and stderr together, so a generator that fills one pipe while we
+        # wait on the other can't deadlock.
+        stdout, stderr = process.communicate()
 
-        ret = process.wait()
-        if ret != 0:
-            msg = ret_code_to_str(ret)
+        if process.returncode != 0:
+            msg = ret_code_to_str(process.returncode)
             args_fmt = " ".join(args)
             script_path = utils.relative_to_cwd(cx.script_path(self.cmd.lexeme))
             cmd = f"$ {script_path} {args_fmt}"
-            long_msg = f"{cmd}\n{process.stderr.read()}" if process.stderr else cmd
-            return Result.fail(short_msg=msg, long_msg=long_msg)
+            return Result.fail(short_msg=msg, long_msg=f"{cmd}\n{stderr}")
 
-        if count == 0:
+        tests = [test for test in stdout.split(FS) if test]
+        if not tests:
             return Result.fail(short_msg="generator didn't produce any output")
+        for test in tests:
+            cx.next_file(self.group).write_text(test)
 
-        return _success_with_count_result(count)
+        return _success_with_count_result(len(tests))
 
     def _args_with_seed(self, cx: _CommandCtxt) -> list[str]:
         # We seed the script with the next `idx`, this guarantees it is different
