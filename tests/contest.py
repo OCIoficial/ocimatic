@@ -10,6 +10,7 @@ from enum import Enum, auto
 from pathlib import Path
 
 from .text import block
+from .tree import Tree, write_file, write_tree
 
 # A correct solution for the default task: print the sum of two numbers. Python solutions are
 # excluded from runtime stats by default, which `check-dataset` needs, so we include it explicitly.
@@ -17,6 +18,9 @@ SUM_PY = block("""
     # @ocimatic::include-in-stats true
     print(sum(map(int, input().split())))
 """)
+
+# The default solutions of a task, relative to `solutions/`.
+STANDARD_SOLUTIONS: Tree = {"correct/sum.py": SUM_PY}
 
 
 # `#subtask` is normally defined in `oci.typ`; define it here so the statement compiles alone.
@@ -54,8 +58,8 @@ class TaskSpec:
     """Description of a task.
 
     `task.toml`, the statement and the testplan have standard content by default and can be left
-    out with `ABSENT`. For the directories, only the given files are written: an empty dict creates
-    no directory. File contents are written exactly as given.
+    out with `ABSENT`. The directories are trees written with `write_tree`: only the given entries
+    are written, so an empty tree creates no directory. File contents are written exactly as given.
     """
 
     codename: str
@@ -72,26 +76,23 @@ class TaskSpec:
     testplan: str | Absent = STANDARD_TESTPLAN
     """Content of `testplan/testplan.txt`."""
 
-    managers: dict[str, str] = field(default_factory=dict[str, str])
+    managers: Tree = field(default_factory=dict[str, str])
     """Files inside `managers/`."""
 
-    correct: dict[str, str] = field(default_factory=lambda: {"sum.py": SUM_PY})
-    """Files inside `solutions/correct/`."""
+    solutions: Tree = field(default_factory=lambda: dict(STANDARD_SOLUTIONS))
+    """Files inside `solutions/`, e.g. `{"correct/sum.py": SUM_PY, "partial/slow.py": ...}`."""
 
-    partial: dict[str, str] = field(default_factory=dict[str, str])
-    """Files inside `solutions/partial/`."""
-
-    dataset: dict[str, str] = field(default_factory=dict[str, str])
+    dataset: Tree = field(default_factory=dict[str, str])
     """Files inside `dataset/`, e.g. `{"st1/a.in": "1 2\\n"}`."""
 
-    files: dict[str, str] = field(default_factory=dict[str, str])
+    files: Tree = field(default_factory=dict[str, str])
     """Any other files, relative to the task directory."""
 
 
 def make_contest(root: Path, *tasks: TaskSpec, phase: str = "Test") -> Path:
     """Write a minimal contest in `root / "contest"` and return its directory."""
     contest = root / "contest"
-    _write(
+    write_file(
         contest / "contest.toml",
         block(f"""
             [contest]
@@ -99,8 +100,8 @@ def make_contest(root: Path, *tasks: TaskSpec, phase: str = "Test") -> Path:
             typesetting = "typst"
         """),
     )
-    _write(contest / "titlepage.typ", "= Titlepage\n")
-    _write(contest / "general.typ", "= General\n")
+    write_file(contest / "titlepage.typ", "= Titlepage\n")
+    write_file(contest / "general.typ", "= General\n")
     for task in tasks:
         _make_task(contest / task.codename, task)
     return contest
@@ -111,7 +112,7 @@ def _make_task(directory: Path, task: TaskSpec) -> None:
     match task.task_toml:
         case Derived.DERIVED:
             static = "true" if task.static else "false"
-            _write(
+            write_file(
                 directory / "task.toml",
                 block(f"""
                     [task]
@@ -124,27 +125,15 @@ def _make_task(directory: Path, task: TaskSpec) -> None:
         case Absent.ABSENT:
             pass
         case content:
-            _write(directory / "task.toml", content)
-    _write_file(directory / "statement" / "statement.typ", task.statement)
-    _write_file(directory / "testplan" / "testplan.txt", task.testplan)
-    _write_dir(directory / "managers", task.managers)
-    _write_dir(directory / "solutions" / "correct", task.correct)
-    _write_dir(directory / "solutions" / "partial", task.partial)
-    _write_dir(directory / "dataset", task.dataset)
-    _write_dir(directory, task.files)
+            write_file(directory / "task.toml", content)
+    _write_optional(directory / "statement" / "statement.typ", task.statement)
+    _write_optional(directory / "testplan" / "testplan.txt", task.testplan)
+    write_tree(directory / "managers", task.managers)
+    write_tree(directory / "solutions", task.solutions)
+    write_tree(directory / "dataset", task.dataset)
+    write_tree(directory, task.files)
 
 
-def _write_file(path: Path, content: str | Absent) -> None:
+def _write_optional(path: Path, content: str | Absent) -> None:
     if content is not ABSENT:
-        _write(path, content)
-
-
-def _write_dir(directory: Path, files: dict[str, str]) -> None:
-    for name, content in files.items():
-        _write(directory / name, content)
-
-
-def _write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # `newline=""` writes `\n` as is; otherwise Windows would turn it into `\r\n`.
-    path.write_text(content, encoding="utf-8", newline="")
+        write_file(path, content)

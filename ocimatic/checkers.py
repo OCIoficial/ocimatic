@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 from ocimatic.runnable import RunSuccess
 from ocimatic.source_code import BuildError, CppSource, RustSource, SourceCode
@@ -53,7 +54,7 @@ class Checker(ABC):
 
 
 class DiffChecker(Checker):
-    """White diff checker."""
+    """White diff checker, matching CMS's default comparator (`cms/grading/steps/whitediff.py`)."""
 
     def run(
         self,
@@ -70,29 +71,59 @@ class DiffChecker(Checker):
         assert expected_path.exists()
         assert out_path.exists()
 
-        with out_path.open() as expected_file, expected_path.open() as output_file:
-            expected = expected_file.readlines()
-            out = output_file.readlines()
+        with out_path.open("rb") as out_file, expected_path.open("rb") as expected_file:
+            return _white_diff(out_file, expected_file)
 
-            _filter_trailing_empty_lines(expected)
-            _filter_trailing_empty_lines(out)
 
-            if len(out) != len(expected):
-                return CheckerSuccess(outcome=0.0)
+# The whitespace characters of CMS's white diff.
+_WHITES = b" \t\n\x0b\x0c\r"
 
-            # Lines must be equal up to whitespaces
-            for i, line in enumerate(expected):
-                if line.split() != out[i].split():
-                    return CheckerSuccess(outcome=0.0)
+# Lines longer than this are shortened in mismatch messages.
+_LENGTH_LIMIT = 100
+
+
+def _white_diff(out_file: BinaryIO, expected_file: BinaryIO) -> CheckerSuccess:
+    r"""Compare files line by line, ignoring differences in the number or kind of whitespace.
+
+    Lines end only at `\n`. Trailing lines that contain only whitespace are ignored.
+    """
+    line = 0
+    while True:
+        out = out_file.readline()
+        expected = expected_file.readline()
+        line += 1
+
+        if not out and not expected:
             return CheckerSuccess(outcome=1.0)
 
+        if not out or not expected:
+            # One file ended; the rest of the other one may only contain whitespace.
+            if out.strip(_WHITES):
+                return CheckerSuccess(outcome=0.0, msg="Contestant output too long")
+            if expected.strip(_WHITES):
+                return CheckerSuccess(outcome=0.0, msg="Contestant output too short")
+            continue
 
-def _filter_trailing_empty_lines(lines: list[str]) -> None:
-    for i in reversed(range(len(lines))):
-        if not lines[i].strip():
-            lines.pop(i)
-        else:
-            break
+        out = _canonicalize(out)
+        expected = _canonicalize(expected)
+        if out != expected:
+            return CheckerSuccess(
+                outcome=0.0,
+                msg=f"Expected `{_shorten(expected)}`, found `{_shorten(out)}` on line {line}",
+            )
+
+
+def _canonicalize(line: bytes) -> bytes:
+    """Strip whitespace at both ends and collapse each run of whitespace into a single space."""
+    for char in _WHITES[1:]:
+        line = line.replace(bytes([char]), b" ")
+    return b" ".join(token for token in line.split(b" ") if token)
+
+
+def _shorten(line: bytes) -> str:
+    if len(line) > _LENGTH_LIMIT:
+        line = line[:_LENGTH_LIMIT] + b"..."
+    return line.decode("utf-8", errors="backslashreplace")
 
 
 class CustomChecker(Checker):

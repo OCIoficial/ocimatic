@@ -14,15 +14,15 @@ from ..contest import ABSENT, TaskSpec, make_contest
 from ..text import block
 
 # A task with a static dataset that `check-dataset` accepts.
-STATIC_DATASET = {"st1/a.in": "1 2\n", "st1/a.sol": "3\n"}
+STATIC_DATASET = {"st1": {"a.in": "1 2\n", "a.sol": "3\n"}}
 
 
 def test_missing_solution_directories_load_as_empty(
     tmp_path: Path,
     use_env: UseEnv,
 ) -> None:
-    # Empty dicts mean `solutions/correct/` and `solutions/partial/` aren't created.
-    contest = make_contest(tmp_path, TaskSpec(codename="sum", correct={}, partial={}))
+    # An empty tree means `solutions/correct/` and `solutions/partial/` aren't created.
+    contest = make_contest(tmp_path, TaskSpec(codename="sum", solutions={}))
     with use_env(cwd=contest, contest_root=contest):
         [task] = Contest.load().tasks
         assert task.run_testplan(stn=None) == Status.success
@@ -99,8 +99,8 @@ def test_check_dataset_fails_when_correct_solutions_crash(
             static=True,
             testplan=ABSENT,
             dataset=STATIC_DATASET,
-            correct={
-                "crash.py": block("""
+            solutions={
+                "correct/crash.py": block("""
                     # @ocimatic::include-in-stats true
                     raise SystemExit(1)
                 """),

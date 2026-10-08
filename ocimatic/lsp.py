@@ -12,11 +12,14 @@ from pygls.workspace import TextDocument
 from ocimatic.testplan import (
     Item,
     Parser,
+    ParseError,
     Position,
     Range,
     Script,
+    SourceError,
     SubtaskHeader,
     Validator,
+    validate,
 )
 
 type URI = str
@@ -26,6 +29,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 FILE_NOT_FOUND = 0
 SYNTAX_ERROR = 1
+VALIDATION_ERROR = 2
 
 
 @dataclass
@@ -35,7 +39,8 @@ class Testplan:
     """All paths (i.e. files) in a testplan and the list of ranges they appear in."""
 
     subtasks: list[tuple[SubtaskHeader, list[Item]]]
-    syntax_errors: list[types.Diagnostic]
+    errors: list[types.Diagnostic]
+    """Syntax errors, or validation errors if the testplan parses."""
 
     def path_at_position(self, pos: types.Position) -> Path | None:
         for path, ranges in self.paths.items():
@@ -45,7 +50,7 @@ class Testplan:
         return None
 
     def all_diagnostics(self) -> list[types.Diagnostic]:
-        return [*self.syntax_errors, *self.file_not_founds()]
+        return [*self.errors, *self.file_not_founds()]
 
     def file_not_founds(self) -> list[types.Diagnostic]:
         return [
@@ -54,7 +59,7 @@ class Testplan:
                 range=range,
                 message="file not found",
                 severity=types.DiagnosticSeverity.Error,
-                data=path,  # we recover the data in the quick fix
+                data=str(path),  # we recover the data in the quick fix
             )
             for path, ranges in self.paths.items()
             if not path.exists()
@@ -76,18 +81,23 @@ class OcimaticServer(LanguageServer):
         else:
             paths = {}
 
+        # Validate only a testplan that parses, as the CLI does. Lines with syntax errors are missing
+        # from the parsed subtasks, which would make validation report misleading errors.
+        errors: list[SourceError] = [*parser.errors] or [*validate(parser.subtasks)]
         self.testplans[doc.uri] = Testplan(
             version=version,
             paths=paths,
             subtasks=parser.subtasks,
-            syntax_errors=[
+            errors=[
                 types.Diagnostic(
-                    code=SYNTAX_ERROR,
+                    code=SYNTAX_ERROR
+                    if isinstance(error, ParseError)
+                    else VALIDATION_ERROR,
                     range=_map_range(error.range),
                     message=error.msg,
                     severity=types.DiagnosticSeverity.Error,
                 )
-                for error in parser.errors
+                for error in errors
                 if error.range is not None
             ],
         )
@@ -129,14 +139,14 @@ def did_open(ls: OcimaticServer, params: types.DidOpenTextDocumentParams) -> Non
 
 
 @server.feature(types.TEXT_DOCUMENT_DID_CHANGE)
-def did_change(ls: OcimaticServer, params: types.DidOpenTextDocumentParams) -> None:
+def did_change(ls: OcimaticServer, params: types.DidChangeTextDocumentParams) -> None:
     doc = ls.workspace.get_text_document(params.text_document.uri)
     ls.parse(params.text_document.version, doc)
 
 
 @server.feature(types.TEXT_DOCUMENT_DID_CLOSE)
 def did_close(ls: OcimaticServer, params: types.DidCloseTextDocumentParams) -> None:
-    ls.testplans.pop(params.text_document.uri)
+    ls.testplans.pop(params.text_document.uri, None)
 
 
 WATCHERS = [
@@ -245,20 +255,22 @@ def goto_definition(
     types.CodeActionOptions(code_action_kinds=[types.CodeActionKind.QuickFix]),
 )
 def code_actions(params: types.CodeActionParams) -> list[types.CodeAction] | None:
+    # One action per missing file, fixing every diagnostic for that file in the range.
+    missing: dict[URI, tuple[Path, list[types.Diagnostic]]] = {}
     for diagnostic in params.context.diagnostics:
         if (
             diagnostic.code == FILE_NOT_FOUND
             and isinstance(diagnostic.data, str)
             and (uri := from_fs_path(diagnostic.data))
         ):
-            return [
-                types.CodeAction(
-                    title="Create File",
-                    kind=types.CodeActionKind.QuickFix,
-                    edit=types.WorkspaceEdit(
-                        document_changes=[types.CreateFile(uri=uri)],
-                    ),
-                    diagnostics=[diagnostic],
-                ),
-            ]
-    return None
+            missing.setdefault(uri, (Path(diagnostic.data), []))[1].append(diagnostic)
+
+    return [
+        types.CodeAction(
+            title=f"Create File `{path.name}`",
+            kind=types.CodeActionKind.QuickFix,
+            edit=types.WorkspaceEdit(document_changes=[types.CreateFile(uri=uri)]),
+            diagnostics=diagnostics,
+        )
+        for uri, (path, diagnostics) in missing.items()
+    ] or None

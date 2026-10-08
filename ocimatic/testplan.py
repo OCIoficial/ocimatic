@@ -43,10 +43,10 @@ class Testplan:
         if len(parser.errors) > 0:
             raise OcimaticError(err_msg, details="\n".join(map(str, parser.errors)))
 
-        if isinstance(subtasks := self._validate_subtasks(parser.subtasks), ParseError):
-            raise OcimaticError(err_msg, details=str(subtasks))
+        if errors := validate(parser.subtasks):
+            raise OcimaticError(err_msg, details="\n".join(map(str, errors)))
 
-        self._subtasks = subtasks
+        self._subtasks = self._build_subtasks(parser.subtasks)
 
     @property
     def subtasks(self) -> int:
@@ -92,72 +92,28 @@ class Testplan:
 
         return status
 
-    def _validate_subtasks(
+    def _build_subtasks(
         self,
         parsed: list[tuple[SubtaskHeader, list[Item]]],
-    ) -> SortedDict[Stn, _Subtask] | ParseError:
+    ) -> SortedDict[Stn, _Subtask]:
+        """Build the subtasks of a testplan that `validate` accepted."""
         subtasks: SortedDict[Stn, _Subtask] = SortedDict()
-        for i, (header, items) in enumerate(parsed, start=1):
-            if i != header.number:
-                return ParseError(
-                    range=header.range,
-                    msg=f"found {header}, but [Subtask {i}] was expected",
-                )
+        for i, (_, items) in enumerate(parsed, start=1):
             sti = Stn(i)
-
-            validator = None
-            for item in items:
-                if not isinstance(item, Validator):
-                    continue
-                if validator is not None:
-                    return ParseError(
-                        range=validator.range,
-                        msg="multiple @validator directives found for the same subtask.",
-                    )
-                validator = item
-
+            validator = next(
+                (item for item in items if isinstance(item, Validator)),
+                None,
+            )
             commands = [item for item in items if isinstance(item, Command)]
             extends = [item for item in items if isinstance(item, Extends)]
-
-            subtask = _Subtask(self._dataset_dir, commands, extends, validator, sti)
-
-            subtasks[sti] = subtask
-
-        error = Testplan._validate_extends_graph(subtasks)
-        if error is not None:
-            return error
-
+            subtasks[sti] = _Subtask(
+                self._dataset_dir,
+                commands,
+                extends,
+                validator,
+                sti,
+            )
         return subtasks
-
-    @staticmethod
-    def _validate_extends_graph(
-        subtasks: SortedDict[Stn, _Subtask],
-    ) -> ParseError | None:
-        for sti, st in subtasks.items():
-            seen: set[Stn] = set()
-            for extends in st.extends:
-                range = extends.range
-                if extends.stn in seen:
-                    return ParseError(
-                        range=range,
-                        msg=f"cannot extends twice from the same subtask: `{extends}`",
-                    )
-                if extends.stn not in subtasks:
-                    return ParseError(
-                        range=range,
-                        msg=f"invalid subtask {extends.stn}: `{extends}`",
-                    )
-                if extends.stn == sti:
-                    return ParseError(
-                        range=range,
-                        msg=f"a subtask cannot extend itself: `{subtasks}`",
-                    )
-                seen.add(extends.stn)
-
-        if _has_cycles(subtasks):
-            return ParseError(msg="the extends graph contains cycles")
-
-        return None
 
 
 class TokenKind(IntEnum):
@@ -417,7 +373,7 @@ class Parser:
         if cmd.lexeme == "copy":
             if len(args) != 1:
                 raise ParseError(
-                    msg="the `copy` command expects exactly one argument.",
+                    msg="the `copy` command expects exactly one argument",
                     range=Range(start=cmd_start, end=end),
                 )
             return Copy(group, range, args[0])
@@ -477,7 +433,9 @@ class Parser:
 
 
 @dataclass(kw_only=True, frozen=True)
-class ParseError(Exception):
+class SourceError(Exception):
+    """An error in a testplan, optionally pointing to where it is in the source."""
+
     range: Range | None = None
     msg: str
 
@@ -486,6 +444,16 @@ class ParseError(Exception):
             return f"{self.range}: {self.msg}"
         else:
             return self.msg
+
+
+@dataclass(kw_only=True, frozen=True)
+class ParseError(SourceError):
+    """A syntax error, found while parsing a single line."""
+
+
+@dataclass(kw_only=True, frozen=True)
+class ValidationError(SourceError):
+    """An error in a testplan that parses, found by `validate`."""
 
 
 type Item = Validator | Extends | Command
@@ -684,43 +652,30 @@ class Script(Command):
                 long_msg=runnable.msg,
             )
 
-        count = 0
         args = self._args_with_seed(cx)
         if isinstance(process := runnable.spawn(args, cwd=cx.cwd), Error):
             return Result.fail(
                 short_msg="error when running script",
                 long_msg=process.msg,
             )
-        current_file = None
-        try:
-            assert process.stdout
-            while char := process.stdout.read(1):
-                if char == FS:
-                    if current_file:
-                        current_file.close()
-                        current_file = None
-                else:
-                    if current_file is None:
-                        count += 1
-                        current_file = cx.next_file(self.group).open("w")
-                    current_file.write(char)
-        finally:
-            if current_file:
-                current_file.close()
+        # `communicate` reads stdout and stderr together, so a generator that fills one pipe while we
+        # wait on the other can't deadlock.
+        stdout, stderr = process.communicate()
 
-        ret = process.wait()
-        if ret != 0:
-            msg = ret_code_to_str(ret)
+        if process.returncode != 0:
+            msg = ret_code_to_str(process.returncode)
             args_fmt = " ".join(args)
             script_path = utils.relative_to_cwd(cx.script_path(self.cmd.lexeme))
             cmd = f"$ {script_path} {args_fmt}"
-            long_msg = f"{cmd}\n{process.stderr.read()}" if process.stderr else cmd
-            return Result.fail(short_msg=msg, long_msg=long_msg)
+            return Result.fail(short_msg=msg, long_msg=f"{cmd}\n{stderr}")
 
-        if count == 0:
+        tests = [test for test in stdout.split(FS) if test]
+        if not tests:
             return Result.fail(short_msg="generator didn't produce any output")
+        for test in tests:
+            cx.next_file(self.group).write_text(test)
 
-        return _success_with_count_result(count)
+        return _success_with_count_result(len(tests))
 
     def _args_with_seed(self, cx: _CommandCtxt) -> list[str]:
         # We seed the script with the next `idx`, this guarantees it is different
@@ -746,22 +701,75 @@ def _success_with_count_result(count: int) -> Result:
         return Result.success(short_msg=f"{count} test cases generated")
 
 
-def _has_cycles(subtasks: SortedDict[Stn, _Subtask]) -> bool:
+def validate(subtasks: list[tuple[SubtaskHeader, list[Item]]]) -> list[ValidationError]:
+    """Check a parsed testplan for errors that need the whole file, e.g. subtask numbering.
+
+    Subtasks are numbered by their position, so the checks after the first one still make sense
+    when a header has the wrong number.
+    """
+    errors: list[ValidationError] = []
+    for i, (header, items) in enumerate(subtasks, start=1):
+        if header.number != i:
+            errors.append(
+                ValidationError(
+                    range=header.range,
+                    msg=f"found {header}, but [Subtask {i}] was expected",
+                ),
+            )
+        validators = [item for item in items if isinstance(item, Validator)]
+        errors.extend(
+            ValidationError(
+                range=validator.range,
+                msg="multiple @validator directives found for the same subtask",
+            )
+            for validator in validators[1:]
+        )
+
+    stns = {Stn(i) for i in range(1, len(subtasks) + 1)}
+    graph: dict[Stn, list[Extends]] = {}
+    for i, (_, items) in enumerate(subtasks, start=1):
+        sti = Stn(i)
+        graph[sti] = []
+        seen: set[Stn] = set()
+        for extends in (item for item in items if isinstance(item, Extends)):
+            if extends.stn in seen:
+                msg = f"cannot extends twice from the same subtask: `{extends}`"
+            elif extends.stn not in stns:
+                msg = f"invalid subtask {extends.stn}: `{extends}`"
+            elif extends.stn == sti:
+                msg = f"a subtask cannot extend itself: `{extends}`"
+            else:
+                graph[sti].append(extends)
+                msg = None
+            seen.add(extends.stn)
+            if msg is not None:
+                errors.append(ValidationError(range=extends.range, msg=msg))
+    errors.extend(_cycle_errors(graph))
+    return errors
+
+
+def _cycle_errors(graph: dict[Stn, list[Extends]]) -> list[ValidationError]:
+    """Report each `@extends` that closes a cycle in the extends graph."""
+    errors: list[ValidationError] = []
     visited: set[Stn] = set()
     stack: set[Stn] = set()
 
-    def dfs(sti: Stn) -> bool:
+    def dfs(sti: Stn) -> None:
         visited.add(sti)
         stack.add(sti)
-
-        for extends in subtasks[sti].extends:
-            if extends.stn not in visited:
-                if dfs(extends.stn):
-                    return True
-            elif extends.stn in stack:
-                return True
-
+        for extends in graph[sti]:
+            if extends.stn in stack:
+                errors.append(
+                    ValidationError(
+                        range=extends.range,
+                        msg=f"`{extends}` creates a cycle in the extends graph",
+                    ),
+                )
+            elif extends.stn not in visited:
+                dfs(extends.stn)
         stack.remove(sti)
-        return False
 
-    return any(dfs(node) for node in subtasks)
+    for sti in graph:
+        if sti not in visited:
+            dfs(sti)
+    return errors

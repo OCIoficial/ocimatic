@@ -338,6 +338,8 @@ class Contest:
                 )
                 _add_blank_page(merger, sideness, Evenness.ODD)
 
+            # Intentionally adds a blank last sheet as a back cover, so students can't turn the
+            # printed problemset over and read the last statement before the contest starts.
             _add_blank_page(merger, sideness, Evenness.EVEN)
             merger.write(self._directory / f"{sideness}.pdf")
             merger.close()
@@ -363,8 +365,9 @@ class Contest:
             if self._archive_problemset(tmpdir) == Status.fail:
                 return Status.fail
 
-            Path("archive.zip").unlink(missing_ok=True)
-            shutil.make_archive("archive", "zip", tmpdir)
+            archive = self._directory / "archive"
+            archive.with_suffix(".zip").unlink(missing_ok=True)
+            shutil.make_archive(str(archive), "zip", tmpdir)
 
             return Status.success
 
@@ -642,6 +645,9 @@ class Task:
         ]
         return completions
 
+    def subtasks(self) -> set[Stn]:
+        return self._dataset.subtasks()
+
     @ui.hd1("{0}", "Validating input files", COLOR)
     def validate_input(self, stn: Stn | None) -> Status:
         return self._dataset.validate_input(stn)
@@ -670,7 +676,14 @@ class Task:
     @ui.hd1("{0}", "Score Params", COLOR)
     def score_params(self) -> Status:
         counts = self._dataset.counts()
+        if not counts:
+            ui.show_message("error", "the task has no subtasks.", ui.ERROR)
+            return Status.fail
+
         scores = self._statement.get_scores()
+        if isinstance(scores, Error):
+            ui.show_message("error", scores.msg, ui.ERROR)
+            return Status.fail
         regexes = self._dataset.regexes()
         assert regexes.keys() == counts.keys()
         if scores.keys() != counts.keys():
@@ -678,6 +691,14 @@ class Task:
                 "error",
                 "the number of subtasks in the statement doesn't match the number of "
                 "subtasks in the dataset.",
+                ui.ERROR,
+            )
+            return Status.fail
+
+        if empty := [str(stn) for stn, count in counts.items() if count == 0]:
+            ui.show_message(
+                "error",
+                f"subtasks without tests: {', '.join(empty)}.",
                 ui.ERROR,
             )
             return Status.fail
@@ -1067,7 +1088,8 @@ class Statement(ABC):
     def _get_io_samples_from_source(self) -> set[str]: ...
 
     @abstractmethod
-    def _get_scores_from_source(self) -> SortedDict[Stn, int]: ...
+    def _get_scores_from_source(self) -> list[str]:
+        """Return the argument of each subtask macro in the statement, in order."""
 
     def get_io_samples(self) -> list[Test]:
         """Find sample input data in the statement."""
@@ -1080,9 +1102,17 @@ class Statement(ABC):
         title = self._get_title_from_source() or self._codename or self._directory.name
         return f"Problema {_number_to_letter(self._num)} - {title}"
 
-    def get_scores(self) -> SortedDict[Stn, int]:
+    def get_scores(self) -> SortedDict[Stn, int] | Error:
         """Find the scores for each subtask."""
-        scores: SortedDict[Stn, int] = self._get_scores_from_source()
+        scores: SortedDict[Stn, int] = SortedDict()
+        for sti, arg in enumerate(self._get_scores_from_source(), start=1):
+            try:
+                scores[Stn(sti)] = int(arg)
+            except ValueError:
+                return Error(
+                    f"couldn't read the score of subtask {sti} from the statement: "
+                    f"`{arg.strip()}` isn't an integer",
+                )
         if not scores:
             ui.show_message(
                 "warning",
@@ -1139,14 +1169,11 @@ class TypstStatement(Statement):
             for m in _match_lines(self._source.iter_lines(), self._SAMPLE_IO_RE)
         }
 
-    def _get_scores_from_source(self) -> SortedDict[Stn, int]:
-        """Find the scores for each subtask."""
-        scores: SortedDict[Stn, int] = SortedDict()
-        sti = 1
-        for m in _match_lines(self._source.iter_lines(), self._SUBTASK_RE):
-            scores[Stn(sti)] = int(m.group(1))
-            sti += 1
-        return scores
+    def _get_scores_from_source(self) -> list[str]:
+        return [
+            m.group(1)
+            for m in _match_lines(self._source.iter_lines(), self._SUBTASK_RE)
+        ]
 
 
 class LatexStatement(Statement):
@@ -1185,13 +1212,11 @@ class LatexStatement(Statement):
             for m in _match_lines(self._source.iter_lines(), self._SAMPLE_IO_RE)
         }
 
-    def _get_scores_from_source(self) -> SortedDict[Stn, int]:
-        scores: SortedDict[Stn, int] = SortedDict()
-        sti = 1
-        for m in _match_lines(self._source.iter_lines(), self._SUBTASK_RE):
-            scores[Stn(sti)] = int(m.group(1))
-            sti += 1
-        return scores
+    def _get_scores_from_source(self) -> list[str]:
+        return [
+            m.group(1)
+            for m in _match_lines(self._source.iter_lines(), self._SUBTASK_RE)
+        ]
 
 
 def _match_lines(

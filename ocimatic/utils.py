@@ -78,7 +78,7 @@ class Stn:
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Stn):
-            raise ValueError(f"Cannot compare Stn with {type(other)}")
+            return NotImplemented
         return self._idx == other._idx
 
     def __str__(self) -> str:

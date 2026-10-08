@@ -67,7 +67,7 @@ class Config(msgspec.Struct, kw_only=True, frozen=True):
         # We keep the default values in the definition of the structs,
         # but the template contains comments, so we merge defaults values
         # into the template.
-        doc = tomlkit.load(Config.TEMPLATE_PATH.open("r"))
+        doc = tomlkit.parse(Config.TEMPLATE_PATH.read_text())
         _merge_toml(doc, msgspec.to_builtins(Config()))
         return doc
 

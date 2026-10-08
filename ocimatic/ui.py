@@ -92,7 +92,8 @@ def work[T: IntoWorkResult, **P](
 def _start_work(action: str, msg: str, length: int = 80) -> None:
     if Env.get().verbosity is Verbosity.quiet:
         return
-    msg = "...." + msg[-length - 4 :] if len(msg) - 4 > length else msg
+    # Keep the end of a long message, which is the most specific part, within `length` characters.
+    msg = "...." + msg[-(length - 4) :] if len(msg) > length else msg
     msg = " * [" + action + "] " + msg + "  "
     write(colorize(msg, CYAN), flush=True)
 
