@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import re
 import shutil
+import string
 import typing
 from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import Literal
 
 from ocimatic import ui, utils
 from ocimatic.errors import OcimaticError
@@ -125,6 +126,7 @@ class TokenKind(IntEnum):
     Num = 5
     Eol = 6
     Error = 7
+    Semicolon = 8
 
     def describe(self) -> str:
         """Describe the kind for error messages.
@@ -148,61 +150,152 @@ class TokenKind(IntEnum):
                 return "end of line"
             case TokenKind.Error:
                 return "an error"
+            case TokenKind.Semicolon:
+                return "`;`"
 
 
 @dataclass(kw_only=True, frozen=True, slots=True)
 class Token:
     range: Range
     lexeme: str
+    """The exact source text of the token."""
     kind: TokenKind
+    value: str | None = None
+    """The content of a `String` token, with its escape sequences decoded."""
 
 
 type _Peek = TokenKind | list[TokenKind] | str
 
 
-class _Scanner:
-    COMMENT_RE = re.compile(r"\s*(#.*)?")
-    STRING_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
-    DIRECTIVE_RE = re.compile(r"@[a-z]+")
-    WORD_RE = re.compile(r"[a-zA-Z0-9_\./*-]+")
+# Token patterns, tried in order at each position of a line.
+_TOKEN_RE = re.compile(
+    "|".join(
+        f"(?P<{name}>{pattern})"
+        for name, pattern in [
+            ("Skip", r"\s+|\#.*"),  # whitespace and comments
+            ("OpenBracket", r"\["),
+            ("CloseBracket", r"\]"),
+            ("Semicolon", r";"),
+            ("Directive", r"@[a-z]+"),
+            ("Word", r"[a-zA-Z0-9_./*-]+"),
+            ("String", r'"(?:[^"\\]|\\.)*"'),
+            # A string missing its closing quote, e.g. `"abc`, `"abc\"` or `"abc\`.
+            ("Unterminated", r'"(?:[^"\\]|\\.)*\\?$'),
+            ("Error", r"."),  # any other character
+        ]
+    ),
+)
 
-    def __init__(self, lineno: int, line: str) -> None:
-        self._lineno = lineno
-        self._pos = 0
-        self._line = line
-        self._hi: Position = Position(line=lineno, column=0)
-        self._advance()
+# Escape sequences allowed inside strings and the characters they stand for. In addition, `\xHH`
+# stands for the character with code point HH (two hex digits).
+_ESCAPES = {'"': '"', "\\": "\\", "n": "\n", "t": "\t"}
 
-    def _advance(self) -> None:
-        if m := _Scanner.COMMENT_RE.match(self._line, pos=self._pos):
-            self._pos = m.end(0)
 
-        if self._pos == len(self._line):
-            kind, span = (TokenKind.Eol, (self._pos, self._pos + 1))
-        elif self._line[self._pos] == "[":
-            kind, span = (TokenKind.OpenBracket, (self._pos, self._pos + 1))
-        elif self._line[self._pos] == "]":
-            kind, span = (TokenKind.CloseBracket, (self._pos, self._pos + 1))
-        elif m := _Scanner.DIRECTIVE_RE.match(self._line, pos=self._pos):
-            kind, span = (TokenKind.Directive, m.span(0))
-        elif m := _Scanner.WORD_RE.match(self._line, pos=self._pos):
-            if m.group(0).isnumeric():
-                kind, span = (TokenKind.Num, m.span(0))
-            else:
-                kind, span = (TokenKind.Word, m.span(0))
-        elif m := _Scanner.STRING_RE.match(self._line, pos=self._pos):
-            kind, span = (TokenKind.String, m.span(0))
-        else:
-            kind, span = (TokenKind.Error, (self._pos, self._pos + 1))
-        self._pos = span[1]
-        self._next_token = Token(
-            kind=kind,
-            lexeme=self._line[span[0] : span[1]],
+def tokenize(lineno: int, line: str) -> list[Token] | ParseError:
+    """Split a line of a testplan into tokens, ending with an `Eol` token.
+
+    Returns an error for an unterminated string or an invalid escape sequence.
+    """
+    tokens: list[Token] = []
+    for m in _TOKEN_RE.finditer(line):
+        kind_name = m.lastgroup
+        lexeme = m.group()
+        range = Range(
+            start=Position(line=lineno, column=m.start()),
+            end=Position(line=lineno, column=m.end()),
+        )
+        match kind_name:
+            case "Skip":
+                continue
+            case "Unterminated":
+                return ParseError(msg="unterminated string", range=range)
+            case "String":
+                value = _decode_string(lexeme[1:-1], lineno, m.start() + 1)
+                if isinstance(value, ParseError):
+                    return value
+                tokens.append(
+                    Token(
+                        range=range,
+                        lexeme=lexeme,
+                        kind=TokenKind.String,
+                        value=value,
+                    ),
+                )
+            case "Word":
+                kind = TokenKind.Num if lexeme.isdecimal() else TokenKind.Word
+                tokens.append(Token(range=range, lexeme=lexeme, kind=kind))
+            case _:
+                assert kind_name is not None
+                tokens.append(
+                    Token(range=range, lexeme=lexeme, kind=TokenKind[kind_name]),
+                )
+    eol = len(line)
+    tokens.append(
+        Token(
             range=Range(
-                start=Position(line=self._lineno, column=span[0]),
-                end=Position(line=self._lineno, column=span[1]),
+                start=Position(line=lineno, column=eol),
+                end=Position(line=lineno, column=eol + 1),
+            ),
+            lexeme="",
+            kind=TokenKind.Eol,
+        ),
+    )
+    return tokens
+
+
+def _decode_string(content: str, lineno: int, column: int) -> str | ParseError:
+    """Decode the escape sequences in `content`, the text of a string between its quotes.
+
+    `column` is the column where `content` starts, used to point errors at an escape sequence.
+    """
+
+    def error(msg: str, start: int, length: int) -> ParseError:
+        return ParseError(
+            msg=msg,
+            range=Range(
+                start=Position(line=lineno, column=column + start),
+                end=Position(line=lineno, column=column + start + length),
             ),
         )
+
+    decoded: list[str] = []
+    i = 0
+    while i < len(content):
+        if content[i] != "\\":
+            decoded.append(content[i])
+            i += 1
+            continue
+        if i + 1 == len(content):
+            return error("incomplete escape sequence `\\`", i, 1)
+        c = content[i + 1]
+        if c == "x":
+            digits = content[i + 2 : i + 4]
+            if len(digits) != 2 or any(d not in string.hexdigits for d in digits):
+                return error("expected two hex digits after `\\x`", i, 2)
+            decoded.append(chr(int(digits, 16)))
+            i += 4
+        elif c in _ESCAPES:
+            decoded.append(_ESCAPES[c])
+            i += 2
+        else:
+            return error(f"invalid escape sequence `\\{c}`", i, 2)
+    return "".join(decoded)
+
+
+class _TokenStream:
+    """A cursor over the tokens of a line, used by the parser."""
+
+    def __init__(self, lineno: int, line: str) -> None:
+        tokens = tokenize(lineno, line)
+        if isinstance(tokens, ParseError):
+            raise tokens
+        self._tokens = tokens
+        self._idx = 0
+        self._hi: Position = Position(line=lineno, column=0)
+
+    @property
+    def _next_token(self) -> Token:
+        return self._tokens[self._idx]
 
     def is_eol(self) -> bool:
         return self._next_token.kind == TokenKind.Eol
@@ -222,9 +315,11 @@ class _Scanner:
             return None
 
     def next(self) -> Token:
+        """Consume and return the next token. The `Eol` token is never consumed."""
         token = self._next_token
         self._hi = token.range.end
-        self._advance()
+        if token.kind != TokenKind.Eol:
+            self._idx += 1
         return token
 
     def expect(self, peek: _Peek, expected: list[str] | None = None) -> Token:
@@ -269,26 +364,21 @@ class _Scanner:
 
 
 class Parser:
-    # Escape sequences allowed inside strings and the characters they stand for. In
-    # addition, `\xHH` stands for the character with code point HH (two hex digits).
-    _ESCAPES: ClassVar[dict[str, str]] = {'"': '"', "\\": "\\", "n": "\n", "t": "\t"}
-    _ESCAPE_RE = re.compile(r"\\(?:x([0-9a-fA-F]{2})|(.))")
-
     def __init__(self) -> None:
         self.subtasks: list[tuple[SubtaskHeader, list[Item]]] = []
         self.errors: list[ParseError] = []
 
     def parse(self, content: str) -> None:
         for lineno, line in enumerate(content.splitlines()):
-            scanner = _Scanner(lineno, line)
-
-            # Skip empty lines
-            if scanner.is_eol():
-                continue
-
             try:
-                parsed = self._parse_line(scanner)
-                scanner.expect(TokenKind.Eol)
+                tokens = _TokenStream(lineno, line)
+
+                # Skip empty lines
+                if tokens.is_eol():
+                    continue
+
+                parsed = self._parse_line(tokens)
+                tokens.expect(TokenKind.Eol)
             except ParseError as err:
                 self.errors.append(err)
                 continue
@@ -307,40 +397,40 @@ class Parser:
                             ),
                         )
 
-    def _parse_line(self, scanner: _Scanner) -> SubtaskHeader | Item:
-        if scanner.peek(TokenKind.OpenBracket):
-            return self._parse_header(scanner)
-        elif scanner.peek(TokenKind.Directive):
-            return self._parse_directive(scanner)
-        elif scanner.peek(TokenKind.Word):
-            return self._parse_command(scanner)
+    def _parse_line(self, tokens: _TokenStream) -> SubtaskHeader | Item:
+        if tokens.peek(TokenKind.OpenBracket):
+            return self._parse_header(tokens)
+        elif tokens.peek(TokenKind.Directive):
+            return self._parse_directive(tokens)
+        elif tokens.peek(TokenKind.Word):
+            return self._parse_command(tokens)
         else:
-            raise scanner.unexpected_token()
+            raise tokens.unexpected_token()
 
-    def _parse_header(self, scanner: _Scanner) -> SubtaskHeader:
-        start = scanner.pos()
-        scanner.expect(TokenKind.OpenBracket)
-        scanner.expect("Subtask")
-        num = scanner.expect(TokenKind.Num)
-        scanner.expect(TokenKind.CloseBracket)
-        end = scanner.last_pos()
+    def _parse_header(self, tokens: _TokenStream) -> SubtaskHeader:
+        start = tokens.pos()
+        tokens.expect(TokenKind.OpenBracket)
+        tokens.expect("Subtask")
+        num = tokens.expect(TokenKind.Num)
+        tokens.expect(TokenKind.CloseBracket)
+        end = tokens.last_pos()
 
         return SubtaskHeader(number=int(num.lexeme), range=Range(start=start, end=end))
 
-    def _parse_directive(self, scanner: _Scanner) -> Extends | Validator:
-        if scanner.peek("@extends"):
-            return self._parse_extends(scanner)
-        elif scanner.peek("@validator"):
-            return self._parse_validator(scanner)
+    def _parse_directive(self, tokens: _TokenStream) -> Extends | Validator:
+        if tokens.peek("@extends"):
+            return self._parse_extends(tokens)
+        elif tokens.peek("@validator"):
+            return self._parse_validator(tokens)
         else:
-            raise scanner.unexpected_token(["`@extends`", "`@validator`"])
+            raise tokens.unexpected_token(["`@extends`", "`@validator`"])
 
-    def _parse_extends(self, scanner: _Scanner) -> Extends:
-        start = scanner.pos()
-        scanner.expect("@extends")
-        scanner.expect("subtask")
-        num = scanner.expect(TokenKind.Num)
-        end = scanner.last_pos()
+    def _parse_extends(self, tokens: _TokenStream) -> Extends:
+        start = tokens.pos()
+        tokens.expect("@extends")
+        tokens.expect("subtask")
+        num = tokens.expect(TokenKind.Num)
+        end = tokens.last_pos()
         n = int(num.lexeme)
         if n < 1:
             raise ParseError(
@@ -349,25 +439,25 @@ class Parser:
             )
         return Extends(stn=Stn(n), range=Range(start=start, end=end))
 
-    def _parse_validator(self, scanner: _Scanner) -> Validator:
-        start = scanner.pos()
-        scanner.expect("@validator")
-        path = scanner.expect(TokenKind.Word, ["a path"])
-        end = scanner.last_pos()
+    def _parse_validator(self, tokens: _TokenStream) -> Validator:
+        start = tokens.pos()
+        tokens.expect("@validator")
+        path = tokens.expect(TokenKind.Word, ["a path"])
+        end = tokens.last_pos()
 
         return Validator(path=path, range=Range(start=start, end=end))
 
-    def _parse_command(self, scanner: _Scanner) -> Command:
-        start = scanner.pos()
-        group = self._validate_group_name(scanner.next())
-        scanner.expect(";")
-        cmd_start = scanner.pos()
-        cmd = scanner.expect(
+    def _parse_command(self, tokens: _TokenStream) -> Command:
+        start = tokens.pos()
+        group = self._validate_group_name(tokens.next())
+        tokens.expect(";")
+        cmd_start = tokens.pos()
+        cmd = tokens.expect(
             TokenKind.Word,
             ["`copy`", "`echo`", "a generator script"],
         )
-        args = self._parse_args(scanner)
-        end = scanner.last_pos()
+        args = self._parse_args(tokens)
+        end = tokens.last_pos()
 
         range = Range(start=start, end=end)
         if cmd.lexeme == "copy":
@@ -392,44 +482,17 @@ class Parser:
             )
         return GroupName(group.lexeme)
 
-    def _parse_args(self, scanner: _Scanner) -> list[str]:
+    def _parse_args(self, tokens: _TokenStream) -> list[str]:
         args: list[str] = []
-        while not scanner.is_eol():
-            if t := scanner.next_if(TokenKind.String):
-                args.append(self._parse_string(t))
-            elif t := scanner.next_if([TokenKind.Word, TokenKind.Num]):
+        while not tokens.is_eol():
+            if t := tokens.next_if(TokenKind.String):
+                assert t.value is not None
+                args.append(t.value)
+            elif t := tokens.next_if([TokenKind.Word, TokenKind.Num]):
                 args.append(t.lexeme)
             else:
-                raise scanner.unexpected_token()
+                raise tokens.unexpected_token()
         return args
-
-    def _parse_string(self, token: Token) -> str:
-        """Return the content of a string token with its escape sequences decoded."""
-        # The scanner guarantees the lexeme is delimited by quotes and that every
-        # backslash inside is followed by another character.
-        content = token.lexeme[1:-1]
-        line = token.range.start.line
-        offset = token.range.start.column + 1  # skip the opening quote
-
-        def unescape(m: re.Match[str]) -> str:
-            if (digits := m.group(1)) is not None:
-                return chr(int(digits, 16))
-            if (c := m.group(2)) in self._ESCAPES:
-                return self._ESCAPES[c]
-            col = offset + m.start()
-            if c == "x":
-                msg = "expected two hex digits after `\\x`"
-            else:
-                msg = f"invalid escape sequence `\\{c}`"
-            raise ParseError(
-                msg=msg,
-                range=Range(
-                    start=Position(line=line, column=col),
-                    end=Position(line=line, column=col + 2),
-                ),
-            )
-
-        return self._ESCAPE_RE.sub(unescape, content)
 
 
 @dataclass(kw_only=True, frozen=True)
