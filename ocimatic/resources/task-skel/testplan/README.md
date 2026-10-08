@@ -37,6 +37,23 @@ A command can be either `copy`, `echo`, or a file containing a generator script.
   the generator with the provided arguments (`sys.argv` or `**argv`). The generator should then
   write to the standard output to produce the test case.
 
+## Arguments
+
+Arguments are separated by whitespace. To pass an argument containing whitespace or `#`, or an
+empty argument, wrap it in double quotes, e.g. `echo "1 2" ""`. A quoted argument always stands on
+its own: `ab"c d"` is two arguments, `ab` and `c d`. Inside quotes, the following escape sequences
+are supported:
+
+| Escape | Meaning                                                            |
+|--------|--------------------------------------------------------------------|
+| `\"`   | a double quote                                                     |
+| `\\`   | a backslash                                                        |
+| `\n`   | a newline                                                          |
+| `\t`   | a tab                                                              |
+| `\xHH` | the character with code `HH` (two hex digits), e.g. `\x41` is `A` |
+
+Any other backslash inside quotes is an error, and so is a backslash outside quotes.
+
 ## Randomness in Generator Scripts
 
 A script must be deterministic and generate the same result every time it's executed. This is in

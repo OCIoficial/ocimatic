@@ -141,9 +141,9 @@ def test_copy_expects_exactly_one_argument() -> None:
     assert_parse_errors(r"""
         [Subtask 1]
           small ; copy
-        #~        ^^^^ the `copy` command expects exactly one argument.
+        #~        ^^^^ the `copy` command expects exactly one argument
           small ; copy a b
-        #~        ^^^^^^^^ the `copy` command expects exactly one argument.
+        #~        ^^^^^^^^ the `copy` command expects exactly one argument
     """)
 
 

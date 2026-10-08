@@ -373,7 +373,7 @@ class Parser:
         if cmd.lexeme == "copy":
             if len(args) != 1:
                 raise ParseError(
-                    msg="the `copy` command expects exactly one argument.",
+                    msg="the `copy` command expects exactly one argument",
                     range=Range(start=cmd_start, end=end),
                 )
             return Copy(group, range, args[0])
