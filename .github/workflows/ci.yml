@@ -38,6 +38,10 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    env:
+      # Fail, instead of skip, tests whose compiler is missing from the runner.
+      OCIMATIC_REQUIRE_TOOLCHAINS: "1"
+
     steps:
       - uses: actions/checkout@v4.1.1
 

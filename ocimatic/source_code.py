@@ -15,6 +15,13 @@ from typing import Any
 import typst
 
 from ocimatic import ui, utils
+from ocimatic.build_cache import (
+    BuildError,
+    BuildRecipe,
+    CommandDeps,
+    DepfileDeps,
+    ensure_built,
+)
 from ocimatic.config import Config
 from ocimatic.result import Error, Status, Result
 from ocimatic.runnable import (
@@ -25,11 +32,6 @@ from ocimatic.runnable import (
     Runnable,
     RunSuccess,
 )
-
-
-@dataclass
-class BuildError:
-    msg: str
 
 
 class SourceCode(ABC):
@@ -64,37 +66,23 @@ class SourceCode(ABC):
 
 class CompiledSource(SourceCode):
     @abstractmethod
-    def _build_cmd(self) -> list[str]: ...
+    def _recipe(self) -> BuildRecipe: ...
 
     @abstractmethod
     def _runnable(self) -> Runnable: ...
-
-    @abstractmethod
-    def _should_build(self) -> bool: ...
-
-    @abstractmethod
-    def _ensure_out_dir(self) -> None: ...
 
     def build(
         self,
         *,
         force: bool = False,
     ) -> Runnable | BuildError:
-        if force or self._should_build():
-            self._ensure_out_dir()
-            try:
-                complete = subprocess.run(
-                    self._build_cmd(),
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    check=False,
-                )
-                if complete.returncode != 0:
-                    return BuildError(msg=complete.stderr)
-            except Exception as e:
-                return BuildError(msg=str(e))
+        if isinstance(err := ensure_built(self._recipe(), force=force), BuildError):
+            return err
         return self._runnable()
+
+    def _build_meta_path(self, out: Path, suffix: str) -> Path:
+        """Path for build metadata (stamps, depfiles) about `out`, kept out of the source tree."""
+        return Path(self._file.parent, ".build", f"{out.name}{suffix}")
 
 
 class CppSource(CompiledSource):
@@ -106,7 +94,7 @@ class CppSource(CompiledSource):
     def test(resources: Path, tmp: Path) -> Status:
         file = _copy_test(resources / "test.cpp", tmp)
         cpp = CppSource(file)
-        ui.writeln(f"$ {_fmt_cmd(cpp._build_cmd())}")
+        ui.writeln(f"$ {_fmt_cmd(cpp._recipe().cmd)}")
 
         bin = cpp.build()
         if isinstance(bin, BuildError):
@@ -130,27 +118,24 @@ class CppSource(CompiledSource):
         self._out = out or Path(file.parent, ".build", f"{file.stem}-cpp")
         self._cov_dir = out or Path(file.parent, ".cov", f"{file.stem}-cpp")
 
-    def _ensure_out_dir(self) -> None:
-        self._out.parent.mkdir(parents=True, exist_ok=True)
-
     def _runnable(self) -> Runnable:
         return Binary(self._out)
 
-    def _should_build(self) -> bool:
-        return _should_build(self.files, self._out)
-
-    def _build_cmd(self) -> list[str]:
+    def _recipe(self) -> BuildRecipe:
         conf = Config.get().cpp
-        cmd = [
-            conf.command,
-            *conf.get_flags(),
-            "-o",
-            str(self._out),
-        ]
+        args = conf.get_flags()
         if self._include:
-            cmd.extend(["-I", str(self._include)])
-        cmd.extend(str(s) for s in self.files)
-        return cmd
+            args = [*args, "-I", str(self._include)]
+        files = [str(s) for s in self.files]
+        return BuildRecipe(
+            cmd=[conf.command, *args, "-o", str(self._out), *files],
+            out=self._out,
+            stamp=self._build_meta_path(self._out, ".stamp.json"),
+            inputs=self.files,
+            # A single depfile written during the build would only cover the last input file, so
+            # ask the preprocessor for the headers of all of them.
+            deps=CommandDeps([conf.command, *args, "-MM", *files]),
+        )
 
     def build_for_coverage(self) -> Runnable | BuildError:
         shutil.rmtree(self._cov_dir, ignore_errors=True)
@@ -262,7 +247,7 @@ class RustSource(CompiledSource):
     def test(resources: Path, tmp: Path) -> Status:
         file = _copy_test(resources / "test.rs", tmp)
         rs = RustSource(file)
-        ui.writeln(f"$ {_fmt_cmd(rs._build_cmd())}")
+        ui.writeln(f"$ {_fmt_cmd(rs._recipe().cmd)}")
 
         bin = rs.build()
         if isinstance(bin, BuildError):
@@ -276,24 +261,26 @@ class RustSource(CompiledSource):
         super().__init__(file)
         self._out = out or Path(file.parent, ".build", f"{file.stem}-rs")
 
-    def _ensure_out_dir(self) -> None:
-        self._out.parent.mkdir(parents=True, exist_ok=True)
-
     def _runnable(self) -> Runnable:
         return Binary(self._out)
 
-    def _should_build(self) -> bool:
-        return _should_build([self._file], self._out)
-
-    def _build_cmd(self) -> list[str]:
-        cmd = [
-            Config.get().rust.command,
-            *Config.get().rust.flags,
-            "-o",
-            str(self._out),
-            str(self._file),
-        ]
-        return cmd
+    def _recipe(self) -> BuildRecipe:
+        conf = Config.get().rust
+        depfile = self._build_meta_path(self._out, ".d")
+        return BuildRecipe(
+            cmd=[
+                conf.command,
+                *conf.flags,
+                f"--emit=link,dep-info={depfile}",
+                "-o",
+                str(self._out),
+                str(self._file),
+            ],
+            out=self._out,
+            stamp=self._build_meta_path(self._out, ".stamp.json"),
+            inputs=[self._file],
+            deps=DepfileDeps(depfile),
+        )
 
 
 class JavaSource(CompiledSource):
@@ -306,7 +293,7 @@ class JavaSource(CompiledSource):
         file = _copy_test(resources / "test.java", tmp)
 
         java = JavaSource("Test", file)
-        ui.writeln(f"$ {_fmt_cmd(java._build_cmd())}")
+        ui.writeln(f"$ {_fmt_cmd(java._recipe().cmd)}")
 
         classes = java.build()
         if isinstance(classes, BuildError):
@@ -327,17 +314,17 @@ class JavaSource(CompiledSource):
         self._source = source
         self._outdir = outdir or Path(source.parent, ".build", f"{source.stem}-java")
 
-    def _ensure_out_dir(self) -> None:
-        self._outdir.mkdir(parents=True, exist_ok=True)
-
     def _runnable(self) -> Runnable:
         return JavaClasses(self._classname, self._outdir)
 
-    def _should_build(self) -> bool:
-        return _should_build([self._source], self._outdir)
-
-    def _build_cmd(self) -> list[str]:
-        return [Config.get().java.javac, "-d", str(self._outdir), str(self._source)]
+    def _recipe(self) -> BuildRecipe:
+        return BuildRecipe(
+            cmd=[Config.get().java.javac, "-d", str(self._outdir), str(self._source)],
+            out=self._outdir,
+            stamp=self._build_meta_path(self._outdir, ".stamp.json"),
+            inputs=[self._source],
+            out_is_dir=True,
+        )
 
 
 class PythonSource(SourceCode):
@@ -475,20 +462,3 @@ def _check_run_status(r: RunSuccess | RunError) -> Status:
 def _copy_test(file: Path, tmp: Path) -> Path:
     ui.writeln(f"$ cp {shlex.quote(str(file))} {shlex.quote(str(tmp))}")
     return Path(shutil.copy2(file, tmp))
-
-
-def _should_build(sources: list[Path], out: Path) -> bool:
-    mtime = max(
-        (s.stat().st_mtime for s in sources if s.exists()),
-        default=float("inf"),
-    )
-    if out.is_dir():
-        btime = min(
-            (s.stat().st_mtime for s in out.iterdir() if s.exists()),
-            default=float("-inf"),
-        )
-    elif out.is_file():
-        btime = out.stat().st_mtime
-    else:
-        btime = float("-inf")
-    return btime < mtime
