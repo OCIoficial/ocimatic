@@ -376,7 +376,8 @@ class PDFSource(ABC):
             return Result.fail("FAILED", long_msg=result.msg)
 
     def iter_lines(self) -> Iterable[str]:
-        yield from self._source.open()
+        # Read the whole file so it's closed right away, even if the caller stops iterating early.
+        return self._source.read_text().splitlines(keepends=True)
 
     def pdf(self) -> Path | None:
         pdf = self._source.with_suffix(".pdf")
