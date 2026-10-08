@@ -9,6 +9,7 @@ from ansi2html import Ansi2HTMLConverter
 from flask import Flask, Response, render_template, request
 
 from ocimatic import core
+from ocimatic.source_code import CppSource, JavaSource, PythonSource, RustSource
 
 
 def ansi2html(ansi: str) -> str:
@@ -17,6 +18,12 @@ def ansi2html(ansi: str) -> str:
         full=False,
     )
 
+
+# Languages a submitted solution can be written in, as the extension of its file.
+LANGUAGES = {
+    source.SUFFIX.removeprefix(".")
+    for source in (CppSource, JavaSource, PythonSource, RustSource)
+}
 
 contest: core.Contest | None = None
 ocimatic_script_path = Path("ocimatic")
@@ -43,7 +50,10 @@ def submit() -> Response | str:
     if not task:
         return "Task not found"
 
-    ext = data["lang"]
+    # The extension becomes part of a file name, so only accept known languages.
+    ext = data.get("lang")
+    if ext not in LANGUAGES:
+        return "Unsupported language"
     content = data.get("solution", "")
 
     def stream() -> Iterator[str]:
@@ -60,10 +70,11 @@ def submit() -> Response | str:
                 filepath,
             ]
 
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
-            assert proc.stdout
-            for line in proc.stdout:
-                yield ansi2html(line)
+            # Exiting the `with` waits for the process, also if the client disconnects early.
+            with subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True) as proc:
+                assert proc.stdout
+                for line in proc.stdout:
+                    yield ansi2html(line)
 
     return Response(stream())
 
@@ -73,4 +84,4 @@ def run(ocimatic_script_path_: Path, contest_: core.Contest, port: int = 9999) -
     global ocimatic_script_path
     contest = contest_
     ocimatic_script_path = ocimatic_script_path_
-    app.run(port=port, debug=True)
+    app.run(port=port)
