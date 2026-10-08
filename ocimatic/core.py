@@ -642,6 +642,9 @@ class Task:
         ]
         return completions
 
+    def subtasks(self) -> set[Stn]:
+        return self._dataset.subtasks()
+
     @ui.hd1("{0}", "Validating input files", COLOR)
     def validate_input(self, stn: Stn | None) -> Status:
         return self._dataset.validate_input(stn)

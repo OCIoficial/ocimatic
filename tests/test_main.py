@@ -182,3 +182,47 @@ def test_subtask_must_be_positive(
     result = run_cli(*args, value, cwd=tmp_path)
     assert result.exit_code == 2
     assert "x>=1" in result.output
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["run", "sum.py", "--subtask"],
+        ["run-testplan", "--subtask"],
+        ["validate-input", "--subtask"],
+        ["validate-output", "--subtask"],
+    ],
+    ids=lambda args: args[0],
+)
+def test_subtask_above_number_of_subtasks_is_an_error(
+    tmp_path: Path,
+    run_cli: RunCli,
+    args: list[str],
+) -> None:
+    # The task has a single subtask.
+    contest = make_contest(tmp_path, TaskSpec(codename="sum"))
+    result = run_cli(*args, "2", cwd=contest / "sum")
+    assert result.exit_code == 1, result.output
+    assert "Subtask 2 doesn't exist: `sum` has 1 subtask." in result.output
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "run-testplan",
+        "validate-input",
+        "validate-output",
+    ],
+)
+def test_subtask_with_several_tasks_is_an_error(
+    tmp_path: Path,
+    run_cli: RunCli,
+    command: str,
+) -> None:
+    contest = make_contest(tmp_path, TaskSpec(codename="a"), TaskSpec(codename="b"))
+    result = run_cli(command, "--subtask", "1", cwd=contest)
+    assert result.exit_code == 1, result.output
+    assert (
+        "A subtask can only be specified when there's a single target task."
+        in result.output
+    )

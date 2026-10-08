@@ -14,7 +14,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from cloup.typing import Decorator
+    from ocimatic.core import Task
     from ocimatic.result import Status
+    from ocimatic.utils import Stn
 
 
 _SOLUTION_HELP = (
@@ -92,6 +94,28 @@ def _subtask_option(*, help: str) -> Decorator:
         type=cloup.IntRange(min=1),
         help=help,
     )
+
+
+def _check_subtask(tasks: list[Task], subtask: int | None) -> Stn | None:
+    """Check the `--subtask` option against the target tasks and return it as a `Stn`."""
+    from ocimatic.errors import OcimaticError
+    from ocimatic.utils import Stn
+
+    if subtask is None:
+        return None
+    if len(tasks) > 1:
+        raise OcimaticError(
+            "A subtask can only be specified when there's a single target task.",
+        )
+    [task] = tasks
+    stn = Stn(subtask)
+    if stn not in task.subtasks():
+        count = len(task.subtasks())
+        raise OcimaticError(
+            f"Subtask {subtask} doesn't exist: `{task}` has {count} "
+            f"{'subtask' if count == 1 else 'subtasks'}.",
+        )
+    return stn
 
 
 @cloup.command(help="Initialize a contest in a new directory.")
@@ -400,20 +424,13 @@ def run_testplan(
 ) -> Status:
     from ocimatic import core, ui
     from ocimatic.env import Env, Verbosity
-    from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
-    from ocimatic.utils import Stn
 
     tasks = core.select_tasks(core.Contest.load())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
-        if subtask is not None and len(tasks) > 1:
-            raise OcimaticError(
-                "A subtask can only be specified when there's a single target task.",
-            )
-
-        stn = Stn(subtask) if subtask is not None else None
+        stn = _check_subtask(tasks, subtask)
         failed = [task for task in tasks if task.run_testplan(stn=stn) == Status.fail]
         if len(failed) == 0 and gen_expected:
             failed = [
@@ -449,24 +466,16 @@ detailed information about the failures.
 def validate_input(subtask: int | None) -> Status:
     from ocimatic import core
     from ocimatic.env import Env, Verbosity
-    from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
-    from ocimatic.utils import Stn
 
     tasks = core.select_tasks(core.Contest.load())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
-        if subtask is not None and len(tasks) > 1:
-            raise OcimaticError(
-                "A subtask can only be specified when there's a single target task.",
-            )
-
+        stn = _check_subtask(tasks, subtask)
         status = Status.success
         for task in tasks:
-            status &= task.validate_input(
-                stn=Stn(subtask) if subtask is not None else None,
-            )
+            status &= task.validate_input(stn=stn)
 
         return status
 
@@ -478,17 +487,15 @@ def validate_output(subtask: int | None) -> Status:
     from ocimatic import core
     from ocimatic.env import Env, Verbosity
     from ocimatic.result import Status
-    from ocimatic.utils import Stn
 
     tasks = core.select_tasks(core.Contest.load())
     with Env.override(
         verbosity=Verbosity.quiet if len(tasks) > 1 else Verbosity.verbose,
     ):
+        stn = _check_subtask(tasks, subtask)
         status = Status.success
         for task in tasks:
-            status &= task.validate_output(
-                stn=Stn(subtask) if subtask is not None else None,
-            )
+            status &= task.validate_output(stn=stn)
 
         return status
 
@@ -574,11 +581,11 @@ def run_solution(
     from ocimatic import core, ui
     from ocimatic.errors import OcimaticError
     from ocimatic.result import Status
-    from ocimatic.utils import Stn
 
     task = core.select_task(core.Contest.load(), task_name)
     if not task:
         raise OcimaticError("You have to be inside a task to run this command.")
+    stn = _check_subtask([task], subtask)
     if file is not None:
         sol = task.load_solution_from_path(Path(solution))
         if not sol:
@@ -588,7 +595,7 @@ def run_solution(
     return task.run_solution(
         Path(solution),
         timeout=timeout or 3.0,
-        stn=Stn(subtask) if subtask is not None else None,
+        stn=stn,
     )
 
 
