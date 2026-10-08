@@ -626,7 +626,8 @@ class Echo(Command):
 
     @ui.work("echo", "{0}")
     def run(self, cx: _CommandCtxt) -> Result:
-        with cx.next_file(self.group).open("w") as test_file:
+        # `newline=""` writes `\n` as is, so tests match `ocimatic normalize` on every platform.
+        with cx.next_file(self.group).open("w", newline="") as test_file:
             test_file.write(" ".join(self.args) + "\n")
             return _success_with_count_result(1)
 
@@ -673,7 +674,8 @@ class Script(Command):
         if not tests:
             return Result.fail(short_msg="generator didn't produce any output")
         for test in tests:
-            cx.next_file(self.group).write_text(test)
+            # `newline=""` writes `\n` as is, so tests match `ocimatic normalize` on every platform.
+            cx.next_file(self.group).write_text(test, newline="")
 
         return _success_with_count_result(len(tests))
 
