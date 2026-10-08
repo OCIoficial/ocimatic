@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import signal
 import sys
 import subprocess
 import tempfile
@@ -14,38 +15,13 @@ from typing import TextIO, overload
 from ocimatic.config import Config
 from ocimatic.result import Error
 
-SIGNALS = {
-    1: "SIGHUP",
-    2: "SIGINT",
-    3: "SIGQUIT",
-    4: "SIGILL",
-    5: "SIGTRAP",
-    6: "SIGABRT",
-    7: "SIGEMT",
-    8: "SIGFPE",
-    9: "SIGKILL",
-    10: "SIGBUS",
-    11: "SIGSEGV",
-    12: "SIGSYS",
-    13: "SIGPIPE",
-    14: "SIGALRM",
-    15: "SIGTERM",
-    16: "SIGURG",
-    17: "SIGSTOP",
-    18: "SIGTSTP",
-    19: "SIGCONT",
-    20: "SIGCHLD",
-    21: "SIGTTIN",
-    22: "SIGTTOU",
-    23: "SIGIO",
-    24: "SIGXCPU",
-    25: "SIGXFSZ",
-    26: "SIGVTALRM",
-    27: "SIGPROF",
-    28: "SIGWINCH",
-    29: "SIGINFO",
-    30: "SIGUSR1",
-    31: "SIGUSR2",
+# Windows exception codes a contest program typically crashes with.
+_WINDOWS_EXCEPTIONS = {
+    0xC0000005: "access violation",
+    0xC00000FD: "stack overflow",
+    0xC0000094: "integer division by zero",
+    0xC000001D: "illegal instruction",
+    0xC0000409: "stack buffer overrun",
 }
 
 
@@ -196,13 +172,27 @@ class Runnable(ABC):
 
 def ret_code_to_str(ret: int) -> str:
     if ret < 0:
-        sig = -ret
-        msg = f"Execution killed with signal {sig}"
-        if sig in SIGNALS:
-            msg += f": {SIGNALS[sig]}"
-        return msg
-    else:
-        return f"Execution ended with error (return code {ret})"
+        return f"Execution killed by {_describe_signal(-ret)}"
+    # Processes on Windows aren't killed by signals; a crash exits with an exception code instead.
+    if sys.platform == "win32" and ret >= 0xC0000000:
+        name = _WINDOWS_EXCEPTIONS.get(ret)
+        suffix = f" ({name})" if name else ""
+        return f"Execution crashed with exception {ret:#010X}{suffix}"
+    return f"Execution ended with error (return code {ret})"
+
+
+def _describe_signal(sig: int) -> str:
+    # Signal numbers differ between platforms, so names come from the platform the process ran on.
+    try:
+        name = signal.Signals(sig).name
+    except ValueError:
+        return f"signal {sig}"
+    description = signal.strsignal(sig)
+    return (
+        f"signal {sig} ({name}: {description})"
+        if description
+        else f"signal {sig} ({name})"
+    )
 
 
 class Binary(Runnable):
