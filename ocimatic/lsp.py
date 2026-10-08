@@ -54,7 +54,7 @@ class Testplan:
                 range=range,
                 message="file not found",
                 severity=types.DiagnosticSeverity.Error,
-                data=path,  # we recover the data in the quick fix
+                data=str(path),  # we recover the data in the quick fix
             )
             for path, ranges in self.paths.items()
             if not path.exists()
@@ -129,14 +129,14 @@ def did_open(ls: OcimaticServer, params: types.DidOpenTextDocumentParams) -> Non
 
 
 @server.feature(types.TEXT_DOCUMENT_DID_CHANGE)
-def did_change(ls: OcimaticServer, params: types.DidOpenTextDocumentParams) -> None:
+def did_change(ls: OcimaticServer, params: types.DidChangeTextDocumentParams) -> None:
     doc = ls.workspace.get_text_document(params.text_document.uri)
     ls.parse(params.text_document.version, doc)
 
 
 @server.feature(types.TEXT_DOCUMENT_DID_CLOSE)
 def did_close(ls: OcimaticServer, params: types.DidCloseTextDocumentParams) -> None:
-    ls.testplans.pop(params.text_document.uri)
+    ls.testplans.pop(params.text_document.uri, None)
 
 
 WATCHERS = [
