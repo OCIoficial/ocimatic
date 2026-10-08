@@ -44,7 +44,9 @@ def test_generator_writing_a_lot_to_stderr_does_not_deadlock(tmp_path: Path) -> 
     complete = _run_testplan(contest / "sum", tmp_path)
 
     assert complete.returncode == 0, complete.stdout
-    assert read_tree(contest / "sum" / "dataset") == {"st1": {"rand-1.in": "1 2\n"}}
+    assert read_tree(contest / "sum" / "dataset") == {
+        "st1": {"rand-1.in": _native("1 2\n")},
+    }
 
 
 def test_generator_output_is_split_on_fs(tmp_path: Path) -> None:
@@ -54,7 +56,11 @@ def test_generator_output_is_split_on_fs(tmp_path: Path) -> None:
 
     assert complete.returncode == 0, complete.stdout
     assert read_tree(contest / "sum" / "dataset") == {
-        "st1": {"rand-1.in": "a\n", "rand-2.in": "b\n", "rand-3.in": "c\n"},
+        "st1": {
+            "rand-1.in": _native("a\n"),
+            "rand-2.in": _native("b\n"),
+            "rand-3.in": _native("c\n"),
+        },
     }
 
 
@@ -65,6 +71,12 @@ def test_failed_generator_writes_no_tests(tmp_path: Path) -> None:
 
     assert complete.returncode == 2, complete.stdout
     assert read_tree(contest / "sum" / "dataset") == {"st1": {}}
+
+
+def _native(text: str) -> str:
+    # Generated tests use the platform's line endings, which testlib validators built on Windows
+    # require.
+    return text.replace("\n", os.linesep)
 
 
 def _make_contest_with_generator(root: Path, generator: str) -> Path:
