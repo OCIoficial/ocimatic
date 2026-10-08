@@ -4,6 +4,7 @@ from pathlib import Path
 
 from lsprotocol import types
 from pygls.uris import from_fs_path
+from pygls.workspace import TextDocument
 
 from ocimatic import lsp
 
@@ -28,7 +29,7 @@ def test_missing_file_has_create_file_quick_fix(tmp_path: Path) -> None:
         version=1,
         paths={missing: [range_]},
         subtasks=[],
-        syntax_errors=[],
+        errors=[],
     )
     [diagnostic] = testplan.file_not_founds()
 
@@ -47,3 +48,17 @@ def test_missing_file_has_create_file_quick_fix(tmp_path: Path) -> None:
     uri = from_fs_path(str(missing))
     assert uri is not None
     assert action.edit.document_changes == [types.CreateFile(uri=uri)]
+
+
+def test_validation_errors_are_reported() -> None:
+    ls = lsp.OcimaticServer("test", "v1")
+    uri = "file:///task/testplan/testplan.txt"
+    ls.parse(1, TextDocument(uri, source="[Subtask 1]\n[Subtask 3]\n"))
+
+    [diagnostic] = ls.testplans[uri].errors
+    assert diagnostic.code == lsp.VALIDATION_ERROR
+    assert diagnostic.message == "found [Subtask 3], but [Subtask 2] was expected"
+    assert diagnostic.range == types.Range(
+        start=types.Position(line=1, character=0),
+        end=types.Position(line=1, character=11),
+    )

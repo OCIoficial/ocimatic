@@ -46,6 +46,25 @@ def test_run_testplan_succeeds(tmp_path: Path, run_cli: RunCli) -> None:
     assert run_cli("run-testplan", cwd=contest / "sum").exit_code == 0
 
 
+def test_run_testplan_reports_validation_errors(
+    tmp_path: Path,
+    run_cli: RunCli,
+) -> None:
+    contest = make_contest(
+        tmp_path,
+        TaskSpec(
+            codename="sum",
+            testplan=block("""
+                [Subtask 2]
+                  small ; echo 1 2
+            """),
+        ),
+    )
+    result = run_cli("run-testplan", cwd=contest / "sum")
+    assert result.exit_code == 1
+    assert "found [Subtask 2], but [Subtask 1] was expected" in result.output
+
+
 def test_run_testplan_fails_on_single_task(tmp_path: Path, run_cli: RunCli) -> None:
     contest = make_contest(tmp_path, FAILING_GENERATOR)
     assert run_cli("run-testplan", cwd=contest / "sum").exit_code == 2

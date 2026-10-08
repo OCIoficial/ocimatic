@@ -12,11 +12,14 @@ from pygls.workspace import TextDocument
 from ocimatic.testplan import (
     Item,
     Parser,
+    ParseError,
     Position,
     Range,
     Script,
+    SourceError,
     SubtaskHeader,
     Validator,
+    validate,
 )
 
 type URI = str
@@ -26,6 +29,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 FILE_NOT_FOUND = 0
 SYNTAX_ERROR = 1
+VALIDATION_ERROR = 2
 
 
 @dataclass
@@ -35,7 +39,8 @@ class Testplan:
     """All paths (i.e. files) in a testplan and the list of ranges they appear in."""
 
     subtasks: list[tuple[SubtaskHeader, list[Item]]]
-    syntax_errors: list[types.Diagnostic]
+    errors: list[types.Diagnostic]
+    """Syntax errors, or validation errors if the testplan parses."""
 
     def path_at_position(self, pos: types.Position) -> Path | None:
         for path, ranges in self.paths.items():
@@ -45,7 +50,7 @@ class Testplan:
         return None
 
     def all_diagnostics(self) -> list[types.Diagnostic]:
-        return [*self.syntax_errors, *self.file_not_founds()]
+        return [*self.errors, *self.file_not_founds()]
 
     def file_not_founds(self) -> list[types.Diagnostic]:
         return [
@@ -76,18 +81,23 @@ class OcimaticServer(LanguageServer):
         else:
             paths = {}
 
+        # Validate only a testplan that parses, as the CLI does. Lines with syntax errors are missing
+        # from the parsed subtasks, which would make validation report misleading errors.
+        errors: list[SourceError] = [*parser.errors] or [*validate(parser.subtasks)]
         self.testplans[doc.uri] = Testplan(
             version=version,
             paths=paths,
             subtasks=parser.subtasks,
-            syntax_errors=[
+            errors=[
                 types.Diagnostic(
-                    code=SYNTAX_ERROR,
+                    code=SYNTAX_ERROR
+                    if isinstance(error, ParseError)
+                    else VALIDATION_ERROR,
                     range=_map_range(error.range),
                     message=error.msg,
                     severity=types.DiagnosticSeverity.Error,
                 )
-                for error in parser.errors
+                for error in errors
                 if error.range is not None
             ],
         )

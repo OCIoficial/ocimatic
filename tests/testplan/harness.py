@@ -1,4 +1,4 @@
-"""Helpers for writing declarative testplan parser tests.
+"""Helpers for writing declarative testplan parser and validation tests.
 
 A test input is a testplan written inline as a raw triple-quoted string, which is passed through
 `block` to remove its indentation. Expected errors are annotated below the offending line with
@@ -10,6 +10,9 @@ message:
           @extends subtask 0
         #~                 ^ subtask number must be greater than or equal to 1
     ''')
+
+`assert_validation_errors` works the same way for the errors `validate` reports on a testplan
+that parses.
 
 Annotations are ordinary comments for the parser, so they don't change how the input parses.
 Because `#~` occupies columns 0 and 1, an error must start at column 2 or later to be annotated;
@@ -24,7 +27,15 @@ from collections.abc import Iterable
 
 import pytest
 
-from ocimatic.testplan import Item, Parser, ParseError, Position, Range, SubtaskHeader
+from ocimatic.testplan import (
+    Item,
+    Parser,
+    Position,
+    Range,
+    SourceError,
+    SubtaskHeader,
+    validate,
+)
 
 from ..text import block
 
@@ -93,13 +104,30 @@ def assert_parse_errors(src: str) -> None:
     `src` must contain at least one annotation.
     """
     src = block(src)
+    expected = _expect_annotations(src, "assert_parse_errors", "assert_parses_ok")
+    parser = _parse(src)
+    check_errors(expected, parser.errors)
+
+
+def assert_validation_errors(src: str) -> None:
+    """Assert that `src` parses and validating it produces exactly the errors annotated in it.
+
+    `src` must contain at least one annotation.
+    """
+    src = block(src)
+    expected = _expect_annotations(src, "assert_validation_errors", "assert_parses_ok")
+    parser = _parse(src)
+    check_errors([], parser.errors)
+    check_errors(expected, validate(parser.subtasks))
+
+
+def _expect_annotations(src: str, name: str, alternative: str) -> list[Annotation]:
     expected = parse_annotations(src)
     if not expected:
         raise AnnotationError(
-            "`assert_parse_errors` expects at least one annotation, use `assert_parses_ok` instead",
+            f"`{name}` expects at least one annotation, use `{alternative}` instead",
         )
-    parser = _parse(src)
-    check_errors(expected, parser.errors)
+    return expected
 
 
 def _parse(src: str) -> Parser:
@@ -108,7 +136,7 @@ def _parse(src: str) -> Parser:
     return parser
 
 
-def check_errors(expected: Iterable[Annotation], errors: Iterable[ParseError]) -> None:
+def check_errors(expected: Iterable[Annotation], errors: Iterable[SourceError]) -> None:
     """Fail the test with a diff unless `errors` match the `expected` annotations exactly.
 
     Only the first line of each error message is compared.
@@ -125,7 +153,7 @@ def check_errors(expected: Iterable[Annotation], errors: Iterable[ParseError]) -
             lineterm="",
         )
         pytest.fail(
-            "parse errors don't match the annotations\n" + "\n".join(diff),
+            "errors don't match the annotations\n" + "\n".join(diff),
             pytrace=False,
         )
 
