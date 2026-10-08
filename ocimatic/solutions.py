@@ -312,7 +312,7 @@ class ExpectedComment:
 
         subtasks: SortedDict[Stn, Outcome] = SortedDict()
         for item in s.split(","):
-            m = ExpectedComment.ITEM_RE.match(item)
+            m = ExpectedComment.ITEM_RE.fullmatch(item)
             if not m:
                 return Error(
                     f"Items must be specified in the format `st{{n}}=VAL`, got `{item.strip()}`",
