@@ -338,6 +338,8 @@ class Contest:
                 )
                 _add_blank_page(merger, sideness, Evenness.ODD)
 
+            # Intentionally adds a blank last sheet as a back cover, so students can't turn the
+            # printed problemset over and read the last statement before the contest starts.
             _add_blank_page(merger, sideness, Evenness.EVEN)
             merger.write(self._directory / f"{sideness}.pdf")
             merger.close()
