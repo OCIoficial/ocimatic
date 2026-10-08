@@ -255,20 +255,22 @@ def goto_definition(
     types.CodeActionOptions(code_action_kinds=[types.CodeActionKind.QuickFix]),
 )
 def code_actions(params: types.CodeActionParams) -> list[types.CodeAction] | None:
+    # One action per missing file, fixing every diagnostic for that file in the range.
+    missing: dict[URI, tuple[Path, list[types.Diagnostic]]] = {}
     for diagnostic in params.context.diagnostics:
         if (
             diagnostic.code == FILE_NOT_FOUND
             and isinstance(diagnostic.data, str)
             and (uri := from_fs_path(diagnostic.data))
         ):
-            return [
-                types.CodeAction(
-                    title="Create File",
-                    kind=types.CodeActionKind.QuickFix,
-                    edit=types.WorkspaceEdit(
-                        document_changes=[types.CreateFile(uri=uri)],
-                    ),
-                    diagnostics=[diagnostic],
-                ),
-            ]
-    return None
+            missing.setdefault(uri, (Path(diagnostic.data), []))[1].append(diagnostic)
+
+    return [
+        types.CodeAction(
+            title=f"Create File `{path.name}`",
+            kind=types.CodeActionKind.QuickFix,
+            edit=types.WorkspaceEdit(document_changes=[types.CreateFile(uri=uri)]),
+            diagnostics=diagnostics,
+        )
+        for uri, (path, diagnostics) in missing.items()
+    ] or None

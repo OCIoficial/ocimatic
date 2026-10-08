@@ -43,11 +43,46 @@ def test_missing_file_has_create_file_quick_fix(tmp_path: Path) -> None:
 
     assert actions is not None
     [action] = actions
-    assert action.title == "Create File"
+    assert action.title == "Create File `gen.py`"
     assert action.edit is not None
     uri = from_fs_path(str(missing))
     assert uri is not None
     assert action.edit.document_changes == [types.CreateFile(uri=uri)]
+
+
+def test_every_missing_file_in_range_has_a_quick_fix(tmp_path: Path) -> None:
+    gen = tmp_path / "gen.py"
+    validator = tmp_path / "validator.cpp"
+    gen_ranges = [_line_range(1), _line_range(4)]
+    testplan = lsp.Testplan(
+        version=1,
+        paths={gen: gen_ranges, validator: [_line_range(2)]},
+        subtasks=[],
+        errors=[],
+    )
+    diagnostics = testplan.file_not_founds()
+
+    actions = lsp.code_actions(
+        types.CodeActionParams(
+            text_document=types.TextDocumentIdentifier(uri="file:///testplan.txt"),
+            range=types.Range(start=_line_range(0).start, end=_line_range(5).end),
+            context=types.CodeActionContext(diagnostics=diagnostics),
+        ),
+    )
+
+    # One action per file, fixing every diagnostic for that file.
+    assert actions is not None
+    assert [(action.title, len(action.diagnostics or [])) for action in actions] == [
+        ("Create File `gen.py`", 2),
+        ("Create File `validator.cpp`", 1),
+    ]
+
+
+def _line_range(line: int) -> types.Range:
+    return types.Range(
+        start=types.Position(line=line, character=2),
+        end=types.Position(line=line, character=8),
+    )
 
 
 def test_validation_errors_are_reported() -> None:
