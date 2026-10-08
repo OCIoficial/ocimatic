@@ -175,6 +175,41 @@ def test_score_params_fails_without_subtasks(tmp_path: Path, run_cli: RunCli) ->
     assert "the task has no subtasks." in result.output
 
 
+def test_score_params_fails_on_non_integer_score(
+    tmp_path: Path,
+    run_cli: RunCli,
+) -> None:
+    contest = make_contest(
+        tmp_path,
+        TaskSpec(
+            codename="sum",
+            statement=block("""
+                #let subtask(points) = [Subtask (#points points)]
+                #subtask(50 + 50)
+            """),
+        ),
+    )
+    assert run_cli("run-testplan", cwd=contest / "sum").exit_code == 0
+    result = run_cli("score-params", cwd=contest / "sum")
+    assert result.exit_code == 2, result.output
+    assert (
+        "couldn't read the score of subtask 1 from the statement: `50 + 50` isn't an integer"
+        in result.output
+    )
+
+
+def test_archive_is_written_to_contest_root(tmp_path: Path, run_cli: RunCli) -> None:
+    contest = make_contest(tmp_path, TaskSpec(codename="sum"))
+    assert run_cli("run-testplan", cwd=contest / "sum").exit_code == 0
+    assert run_cli("gen-expected", cwd=contest / "sum").exit_code == 0
+
+    result = run_cli("archive", cwd=contest / "sum")
+
+    assert result.exit_code == 0, result.output
+    assert (contest / "archive.zip").exists()
+    assert not (contest / "sum" / "archive.zip").exists()
+
+
 def test_outside_contest_is_an_error(tmp_path: Path, run_cli: RunCli) -> None:
     result = run_cli("run-testplan", cwd=tmp_path)
     assert result.exit_code == 1
