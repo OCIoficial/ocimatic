@@ -133,7 +133,7 @@ def test_command_errors() -> None:
           small ; foo.sh
         #~        ^^^^^^ invalid command `foo.sh`
           small ; echo "abc
-        #~             ^ unexpected token `"`
+        #~             ^^^^ unterminated string
     """)
 
 
