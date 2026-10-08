@@ -282,7 +282,7 @@ def _decode_string(content: str, lineno: int, column: int) -> str | ParseError:
     return "".join(decoded)
 
 
-class _Scanner:
+class _TokenStream:
     """A cursor over the tokens of a line, used by the parser."""
 
     def __init__(self, lineno: int, line: str) -> None:
@@ -371,14 +371,14 @@ class Parser:
     def parse(self, content: str) -> None:
         for lineno, line in enumerate(content.splitlines()):
             try:
-                scanner = _Scanner(lineno, line)
+                tokens = _TokenStream(lineno, line)
 
                 # Skip empty lines
-                if scanner.is_eol():
+                if tokens.is_eol():
                     continue
 
-                parsed = self._parse_line(scanner)
-                scanner.expect(TokenKind.Eol)
+                parsed = self._parse_line(tokens)
+                tokens.expect(TokenKind.Eol)
             except ParseError as err:
                 self.errors.append(err)
                 continue
@@ -397,40 +397,40 @@ class Parser:
                             ),
                         )
 
-    def _parse_line(self, scanner: _Scanner) -> SubtaskHeader | Item:
-        if scanner.peek(TokenKind.OpenBracket):
-            return self._parse_header(scanner)
-        elif scanner.peek(TokenKind.Directive):
-            return self._parse_directive(scanner)
-        elif scanner.peek(TokenKind.Word):
-            return self._parse_command(scanner)
+    def _parse_line(self, tokens: _TokenStream) -> SubtaskHeader | Item:
+        if tokens.peek(TokenKind.OpenBracket):
+            return self._parse_header(tokens)
+        elif tokens.peek(TokenKind.Directive):
+            return self._parse_directive(tokens)
+        elif tokens.peek(TokenKind.Word):
+            return self._parse_command(tokens)
         else:
-            raise scanner.unexpected_token()
+            raise tokens.unexpected_token()
 
-    def _parse_header(self, scanner: _Scanner) -> SubtaskHeader:
-        start = scanner.pos()
-        scanner.expect(TokenKind.OpenBracket)
-        scanner.expect("Subtask")
-        num = scanner.expect(TokenKind.Num)
-        scanner.expect(TokenKind.CloseBracket)
-        end = scanner.last_pos()
+    def _parse_header(self, tokens: _TokenStream) -> SubtaskHeader:
+        start = tokens.pos()
+        tokens.expect(TokenKind.OpenBracket)
+        tokens.expect("Subtask")
+        num = tokens.expect(TokenKind.Num)
+        tokens.expect(TokenKind.CloseBracket)
+        end = tokens.last_pos()
 
         return SubtaskHeader(number=int(num.lexeme), range=Range(start=start, end=end))
 
-    def _parse_directive(self, scanner: _Scanner) -> Extends | Validator:
-        if scanner.peek("@extends"):
-            return self._parse_extends(scanner)
-        elif scanner.peek("@validator"):
-            return self._parse_validator(scanner)
+    def _parse_directive(self, tokens: _TokenStream) -> Extends | Validator:
+        if tokens.peek("@extends"):
+            return self._parse_extends(tokens)
+        elif tokens.peek("@validator"):
+            return self._parse_validator(tokens)
         else:
-            raise scanner.unexpected_token(["`@extends`", "`@validator`"])
+            raise tokens.unexpected_token(["`@extends`", "`@validator`"])
 
-    def _parse_extends(self, scanner: _Scanner) -> Extends:
-        start = scanner.pos()
-        scanner.expect("@extends")
-        scanner.expect("subtask")
-        num = scanner.expect(TokenKind.Num)
-        end = scanner.last_pos()
+    def _parse_extends(self, tokens: _TokenStream) -> Extends:
+        start = tokens.pos()
+        tokens.expect("@extends")
+        tokens.expect("subtask")
+        num = tokens.expect(TokenKind.Num)
+        end = tokens.last_pos()
         n = int(num.lexeme)
         if n < 1:
             raise ParseError(
@@ -439,25 +439,25 @@ class Parser:
             )
         return Extends(stn=Stn(n), range=Range(start=start, end=end))
 
-    def _parse_validator(self, scanner: _Scanner) -> Validator:
-        start = scanner.pos()
-        scanner.expect("@validator")
-        path = scanner.expect(TokenKind.Word, ["a path"])
-        end = scanner.last_pos()
+    def _parse_validator(self, tokens: _TokenStream) -> Validator:
+        start = tokens.pos()
+        tokens.expect("@validator")
+        path = tokens.expect(TokenKind.Word, ["a path"])
+        end = tokens.last_pos()
 
         return Validator(path=path, range=Range(start=start, end=end))
 
-    def _parse_command(self, scanner: _Scanner) -> Command:
-        start = scanner.pos()
-        group = self._validate_group_name(scanner.next())
-        scanner.expect(";")
-        cmd_start = scanner.pos()
-        cmd = scanner.expect(
+    def _parse_command(self, tokens: _TokenStream) -> Command:
+        start = tokens.pos()
+        group = self._validate_group_name(tokens.next())
+        tokens.expect(";")
+        cmd_start = tokens.pos()
+        cmd = tokens.expect(
             TokenKind.Word,
             ["`copy`", "`echo`", "a generator script"],
         )
-        args = self._parse_args(scanner)
-        end = scanner.last_pos()
+        args = self._parse_args(tokens)
+        end = tokens.last_pos()
 
         range = Range(start=start, end=end)
         if cmd.lexeme == "copy":
@@ -482,16 +482,16 @@ class Parser:
             )
         return GroupName(group.lexeme)
 
-    def _parse_args(self, scanner: _Scanner) -> list[str]:
+    def _parse_args(self, tokens: _TokenStream) -> list[str]:
         args: list[str] = []
-        while not scanner.is_eol():
-            if t := scanner.next_if(TokenKind.String):
+        while not tokens.is_eol():
+            if t := tokens.next_if(TokenKind.String):
                 assert t.value is not None
                 args.append(t.value)
-            elif t := scanner.next_if([TokenKind.Word, TokenKind.Num]):
+            elif t := tokens.next_if([TokenKind.Word, TokenKind.Num]):
                 args.append(t.lexeme)
             else:
-                raise scanner.unexpected_token()
+                raise tokens.unexpected_token()
         return args
 
 

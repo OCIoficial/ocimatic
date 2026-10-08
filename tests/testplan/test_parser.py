@@ -7,6 +7,8 @@ from ocimatic.testplan import (
     Echo,
     Extends,
     GroupName,
+    Position,
+    Range,
     Script,
     SubtaskHeader,
     Token,
@@ -29,37 +31,49 @@ def test_valid_testplan() -> None:
           @extends subtask 1
     """)
 
+    # Exact ranges: the LSP uses them for go-to-definition and "file not found" diagnostics.
     assert subtasks == [
         (
-            SubtaskHeader(number=1, range=ANY),
+            SubtaskHeader(number=1, range=_range(0, 0, 11)),
             [
                 Validator(
                     path=Token(
                         lexeme="validation/validator.cpp",
                         kind=TokenKind.Word,
-                        range=ANY,
+                        range=_range(1, 13, 37),
                     ),
-                    range=ANY,
+                    range=_range(1, 2, 37),
                 ),
                 Copy(
                     group=GroupName("sample"),
                     pattern="statement/sample-*.in",
-                    range=ANY,
+                    range=_range(2, 2, 37),
                 ),
-                Echo(group=GroupName("small"), args=["1", "2"], range=ANY),
+                Echo(group=GroupName("small"), args=["1", "2"], range=_range(3, 2, 18)),
                 Script(
                     group=GroupName("rand"),
-                    cmd=Token(lexeme="gen_random.py", kind=TokenKind.Word, range=ANY),
+                    cmd=Token(
+                        lexeme="gen_random.py",
+                        kind=TokenKind.Word,
+                        range=_range(4, 9, 22),
+                    ),
                     args=["10", "100"],
-                    range=ANY,
+                    range=_range(4, 2, 29),
                 ),
             ],
         ),
         (
-            SubtaskHeader(number=2, range=ANY),
-            [Extends(stn=Stn(1), range=ANY)],
+            SubtaskHeader(number=2, range=_range(5, 0, 11)),
+            [Extends(stn=Stn(1), range=_range(6, 2, 20))],
         ),
     ]
+
+
+def _range(line: int, start: int, end: int) -> Range:
+    return Range(
+        start=Position(line=line, column=start),
+        end=Position(line=line, column=end),
+    )
 
 
 def test_extends_subtask_zero() -> None:
